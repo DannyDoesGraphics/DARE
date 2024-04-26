@@ -1,0 +1,8 @@
+[package]
+name = "dare"
+version = "0.1.0"
+edition = "2021"
+authors = ["Danny Le <git@dannydoes.graphics>"]
+
+[dependencies]
+common_lib = {path = "../common_lib"}

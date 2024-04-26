@@ -1,0 +1,6 @@
+[workspace]
+members = [ "common_lib",
+    "dagal",
+    "dare"
+]
+resolver = "2"
