@@ -1,6 +1,8 @@
 [workspace]
-members = [ "common_lib",
+members = [
     "dagal",
-    "dare"
+    "dare",
+    "macros",
 ]
+
 resolver = "2"

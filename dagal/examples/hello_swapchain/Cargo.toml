@@ -1,0 +1,7 @@
+[package]
+name = "dagal_hello_swapchain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dagal = { path = "../..", features = ["winit", "vk-mem-rs"] }
