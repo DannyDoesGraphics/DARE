@@ -13,6 +13,8 @@ pub mod util;
 pub mod wsi;
 
 pub mod traits;
+pub mod shader;
+pub mod descriptor;
 
 pub use error::DagalError;
 

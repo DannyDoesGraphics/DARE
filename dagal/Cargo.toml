@@ -16,12 +16,14 @@ anyhow = "1.0.82"
 thiserror = "1.0.59"
 tracing = "0.1.40"
 
+# Shader dependencies
+shaderc = { version = "0.8.3", optional = true   }
 
 [dev-dependencies]
 winit = {version = "0.30.0", optional = false}
 
 [features]
-default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "log-lifetimes", "log-memory-allocations"]
+default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc"]
 # Adds support for winit into dagal
 winit = ["dep:winit"]
 # Adds support for gpu-allocator for the primary allocation
@@ -32,6 +34,8 @@ vk-mem-rs = ["dep:vk-mem"]
 log-lifetimes = []
 # Whether to log memory allocation lifetimes
 log-memory-allocations = []
+# Adds support for shaderc
+shaderc = ["dep:shaderc"]
 # Whether the bootstrap module should be enabled
 bootstrap = []
 # Whether resources should be automatically cleaned up

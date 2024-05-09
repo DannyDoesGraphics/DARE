@@ -50,12 +50,19 @@ impl CommandPool {
     /// Allocate command buffers from a command pool
     pub fn allocate(
         &self,
-        allocation_info: &vk::CommandBufferAllocateInfo,
+        count: u32,
     ) -> Result<Vec<crate::command::CommandBuffer>> {
         Ok(unsafe {
             self.device
                 .get_handle()
-                .allocate_command_buffers(allocation_info)
+                .allocate_command_buffers(&vk::CommandBufferAllocateInfo {
+                    s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
+                    p_next: ptr::null(),
+                    command_pool: self.handle,
+                    level: vk::CommandBufferLevel::PRIMARY,
+                    command_buffer_count: count,
+                    _marker: Default::default(),
+                })
         }?
         .into_iter()
         .map(|buffer| crate::command::CommandBuffer::new(buffer, self.device.clone()))

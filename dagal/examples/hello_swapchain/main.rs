@@ -113,14 +113,7 @@ impl<'a> RenderContext<'a> {
 				deletion_stack.push_resource(&command_pool);
 
 				let command_buffer = command_pool
-					.allocate(&vk::CommandBufferAllocateInfo {
-						s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
-						p_next: ptr::null(),
-						command_pool: command_pool.handle(),
-						level: vk::CommandBufferLevel::PRIMARY,
-						command_buffer_count: 1,
-						_marker: Default::default(),
-					})
+					.allocate(1)
 					.unwrap()
 					.pop()
 					.unwrap();
