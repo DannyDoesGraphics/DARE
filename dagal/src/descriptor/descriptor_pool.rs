@@ -4,14 +4,16 @@ use crate::traits::Destructible;
 use anyhow::Result;
 
 /// Allocates descriptor set layouts
+#[derive(Debug, Clone)]
 pub struct DescriptorPool {
 	handle: vk::DescriptorPool,
 	device: crate::device::LogicalDevice,
 }
 
-struct PoolSizeRatio {
-	descriptor_type: vk::DescriptorType,
-	ratio: f32,
+#[derive(Copy, Clone, PartialOrd, PartialEq)]
+pub struct PoolSizeRatio {
+	pub descriptor_type: vk::DescriptorType,
+	pub ratio: f32,
 }
 
 impl DescriptorPool {

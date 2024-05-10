@@ -3,13 +3,14 @@ use std::ptr;
 use ash::vk;
 use anyhow::Result;
 
+#[derive(Clone, Debug, Default)]
 pub struct DescriptorLayoutBuilder<'a> {
 	bindings: Vec<vk::DescriptorSetLayoutBinding<'a>>,
 }
 
 impl<'a> DescriptorLayoutBuilder<'a> {
 	/// Adds a binding to be built
-	pub fn add_binding(&mut self, binding: u32, ty: vk::DescriptorType) {
+	pub fn add_binding(mut self, binding: u32, ty: vk::DescriptorType) -> Self {
 		self.bindings.push(vk::DescriptorSetLayoutBinding {
 			binding,
 			descriptor_type: ty,
@@ -17,7 +18,8 @@ impl<'a> DescriptorLayoutBuilder<'a> {
 			stage_flags: Default::default(),
 			p_immutable_samplers: ptr::null(),
 			_marker: Default::default(),
-		})
+		});
+		self
 	}
 	
 	/// Clear of all bindings

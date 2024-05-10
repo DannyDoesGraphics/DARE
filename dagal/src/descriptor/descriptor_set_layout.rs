@@ -3,6 +3,7 @@ use ash::vk::DescriptorSetLayoutCreateInfo;
 use tracing::trace;
 use crate::traits::Destructible;
 
+#[derive(Debug, Clone)]
 pub struct DescriptorSetLayout {
 	handle: vk::DescriptorSetLayout,
 	device: crate::device::LogicalDevice,
