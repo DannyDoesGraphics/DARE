@@ -46,7 +46,7 @@ impl Fence {
     /// use dagal::util::tests::TestSettings;
     /// let (instance, physical_device, device, _, mut stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
     /// // purposely make a fence that waits for a whole second
-    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty()).unwrap();
+    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap();
     /// stack.push_resource(&fence);
     /// unsafe {
     ///     fence.wait(1_000_000_000).unwrap_unchecked(); // wait 1 second (in ns)
@@ -70,11 +70,12 @@ impl Fence {
     /// use dagal::util::tests::TestSettings;
     /// let (instance, physical_device, device, _, mut stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
     /// // purposely make a fence that waits for a whole second
-    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty()).unwrap();
+    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap();
     /// stack.push_resource(&fence);
     /// unsafe {
     ///     fence.wait(1_000_000_000).unwrap_unchecked(); // wait 1 second (in ns)
     /// }
+    /// fence.reset().unwrap();
     /// stack.flush();
     /// ```
     pub fn reset(&self) -> Result<()> {
