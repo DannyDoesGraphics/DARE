@@ -1,3 +1,4 @@
+use std::ffi::c_char;
 use std::ptr;
 use std::time::Instant;
 
@@ -6,10 +7,10 @@ use tracing_subscriber::FmtSubscriber;
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::raw_window_handle::HasDisplayHandle;
+use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
 use dagal::winit;
 use dagal::wsi::WindowDimensions;
-pub mod slot_map;
 const FRAME_OVERLAP: usize = 2;
 
 #[derive(Default)]
@@ -25,7 +26,7 @@ struct RenderContext<'a> {
     deletion_stack: dagal::util::DeletionStack<'a>,
     wsi_deletion_stack: dagal::util::DeletionStack<'a>,
     graphics_queue: dagal::device::Queue,
-    allocator: dagal::allocators::VkMemAllocator,
+    allocator: dagal::allocators::SlotMapMemoryAllocator<dagal::allocators::VkMemAllocator>,
 
     surface: Option<dagal::wsi::Surface>,
     swapchain: Option<dagal::wsi::Swapchain>,
@@ -38,6 +39,13 @@ struct RenderContext<'a> {
 
     draw_image: Option<dagal::resource::Image<dagal::allocators::VkMemAllocator>>,
     draw_image_view: Option<dagal::resource::ImageView>,
+    draw_image_descriptors: Option<vk::DescriptorSet>,
+
+    global_descriptor_pool: dagal::descriptor::DescriptorPool,
+    draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
+
+    gradient_pipeline: vk::Pipeline,
+    gradient_pipeline_layout: vk::PipelineLayout,
 }
 
 struct Frame<'a> {
@@ -106,6 +114,7 @@ impl<'a> RenderContext<'a> {
             )
             .unwrap();
         deletion_stack.push_resource(&allocator);
+        let allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
         let graphics_queue = graphics_queue.borrow().get_queues()[0];
@@ -161,6 +170,65 @@ impl<'a> RenderContext<'a> {
             })
             .collect();
 
+        let global_descriptor_pool = dagal::descriptor::DescriptorPool::new(device.clone(), 10, &[dagal::descriptor::PoolSizeRatio {
+                descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+                ratio: 1.0,
+            }]).unwrap();
+        deletion_stack.push_resource(&global_descriptor_pool);
+        let draw_image_set_layout = dagal::descriptor::DescriptorLayoutBuilder::default()
+            .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
+            .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
+            .unwrap();
+        deletion_stack.push_resource(&draw_image_set_layout);
+
+        let gradient_pipeline_layout_ci = vk::PipelineLayoutCreateInfo {
+            s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: vk::PipelineLayoutCreateFlags::empty(),
+            set_layout_count: 1,
+            p_set_layouts: &draw_image_set_layout.handle(),
+            push_constant_range_count: 0,
+            p_push_constant_ranges: ptr::null(),
+            _marker: Default::default(),
+        };
+        let gradient_pipeline_layout = unsafe {
+            device.get_handle().create_pipeline_layout(&gradient_pipeline_layout_ci, None).unwrap()
+        };
+        let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv")).unwrap();
+        let stage_info = vk::PipelineShaderStageCreateInfo {
+            s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: vk::PipelineShaderStageCreateFlags::empty(),
+            stage: vk::ShaderStageFlags::COMPUTE,
+            module: compute_draw_shader.handle(),
+            p_name: "main".as_ptr() as *const c_char,
+            p_specialization_info: ptr::null(),
+            _marker: Default::default(),
+        };
+        let compute_pipeline_ci = vk::ComputePipelineCreateInfo {
+            s_type: vk::StructureType::COMPUTE_PIPELINE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: vk::PipelineCreateFlags::empty(),
+            stage: stage_info,
+            layout: gradient_pipeline_layout.clone(),
+            base_pipeline_handle: Default::default(),
+            base_pipeline_index: 0,
+            _marker: Default::default(),
+        };
+        let gradient_pipeline = unsafe {
+            device.get_handle().create_compute_pipelines(vk::PipelineCache::null(), &[compute_pipeline_ci], None).unwrap().pop().unwrap()
+        };
+        {
+            let device = device.clone();
+            deletion_stack.push(move || {
+                unsafe {
+                    device.get_handle().destroy_pipeline_layout(gradient_pipeline_layout, None);
+                    device.get_handle().destroy_pipeline(gradient_pipeline, None);
+                }
+            })
+        }
+
+        compute_draw_shader.destroy();
         Self {
             instance,
             physical_device,
@@ -181,6 +249,13 @@ impl<'a> RenderContext<'a> {
 
             draw_image: None,
             draw_image_view: None,
+            draw_image_descriptors: None,
+
+            global_descriptor_pool,
+            draw_image_descriptor_set_layout: draw_image_set_layout,
+
+            gradient_pipeline,
+            gradient_pipeline_layout,
         }
     }
 
@@ -292,10 +367,36 @@ impl<'a> RenderContext<'a> {
         self.draw_image = Some(image);
         self.wsi_deletion_stack.push_resource(&image_view);
         self.draw_image_view = Some(image_view);
+        // update descriptors
+        self.global_descriptor_pool.reset(vk::DescriptorPoolResetFlags::empty()).unwrap();
+        self.draw_image_descriptors =
+            Some(self.global_descriptor_pool.allocate(self.draw_image_descriptor_set_layout.handle()).unwrap());
+        let img_info = vk::DescriptorImageInfo {
+            sampler: Default::default(),
+            image_view: self.draw_image_view.as_ref().unwrap().handle(),
+            image_layout: vk::ImageLayout::GENERAL,
+        };
+        let write_descriptor_set = vk::WriteDescriptorSet {
+            s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+            p_next: ptr::null(),
+            dst_set: self.draw_image_descriptors.unwrap(),
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            p_image_info: &img_info,
+            p_buffer_info: ptr::null(),
+            p_texel_buffer_view: ptr::null(),
+            _marker: Default::default(),
+        };
+        unsafe {
+            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set], &[]);
+        }
     }
 
     /// Resize swapchain
     fn resize_swapchain(&mut self, window: &winit::window::Window) {
+        println!("Resize requested with extents: {} x {}", window.width(), window.height());
         self.resize_requested = false;
         // wait until fences are signaled
         {
@@ -329,6 +430,9 @@ impl<'a> RenderContext<'a> {
         cmd: &dagal::command::CommandBufferRecording,
         draw_image: &dagal::resource::Image,
         frame_number: usize,
+        gradient_pipeline: vk::Pipeline,
+        gradient_pipeline_layout: vk::PipelineLayout,
+        gradient_descriptor_set: vk::DescriptorSet,
     ) {
         let flash = (frame_number as f64 / 120.0).sin().abs();
         let clear_value = vk::ClearColorValue {
@@ -337,6 +441,7 @@ impl<'a> RenderContext<'a> {
         let clear_range =
             dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
         unsafe {
+            /*
             device.get_handle().cmd_clear_color_image(
                 cmd.handle(),
                 draw_image.handle(),
@@ -344,6 +449,14 @@ impl<'a> RenderContext<'a> {
                 &clear_value,
                 &[clear_range],
             );
+             */
+            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline);
+            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline_layout, 0, &[gradient_descriptor_set], &[]);
+            device.get_handle().cmd_dispatch(cmd.handle(),
+                                             (draw_image.extent().width as f32 / 16.0).ceil() as u32,
+                                             (draw_image.extent().height as f32 / 16.0).ceil() as u32, 
+                                             1
+            )
         }
     }
 
@@ -414,6 +527,9 @@ impl<'a> RenderContext<'a> {
             &cmd,
             self.draw_image.as_ref().unwrap(),
             self.frame_number,
+            self.gradient_pipeline,
+            self.gradient_pipeline_layout,
+            self.draw_image_descriptors.unwrap()
         );
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -585,6 +701,14 @@ fn main() {
         .with_max_level(Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    // Shader compilation
+    let shader_compiler = dagal::shader::ShaderCCompiler::new();
+    shader_compiler.compile_file(
+        std::path::PathBuf::from("./dare/shaders/gradient.comp"),
+        std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
+        dagal::shader::ShaderKind::Compute
+    ).unwrap();
 
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);

@@ -51,6 +51,7 @@ impl VkMemAllocator {
         match allocation.handle.take() {
             None => {}
             Some(mut allocation) => unsafe {
+                #[cfg(feature = "log-lifetimes")]
                 trace!("Destroying VkDeviceMemory");
                 allocator.as_ref().unwrap().free_memory(&mut allocation);
             },
@@ -124,7 +125,6 @@ impl super::Allocator for VkMemAllocator {
         trace!("Creating memory allocation {:p}", ai.device_memory);
 
         Ok(VkMemAllocation {
-            allocator: Some(self.clone()),
             handle: Some(allocation),
             allocation_info: Some(ai),
             memory_requirements: *requirements,
@@ -143,8 +143,6 @@ impl super::Allocator for VkMemAllocator {
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
 pub struct VkMemAllocation {
-    #[derivative(Debug = "ignore")]
-    allocator: Option<VkMemAllocator>,
     handle: Option<vk_mem::Allocation>,
     allocation_info: Option<vk_mem::AllocationInfo>,
     memory_requirements: vk::MemoryRequirements,
@@ -168,7 +166,6 @@ impl VkMemAllocation {
             ai = allocator_guard.get_allocation_info(&allocation);
         }
         Ok(Self {
-            allocator: Some(allocator),
             handle: Some(allocation),
             allocation_info: Some(ai),
             memory_requirements: Default::default(),
@@ -177,25 +174,8 @@ impl VkMemAllocation {
     }
 }
 
-impl Destructible for VkMemAllocation {
-    fn destroy(&mut self) {
-        #[cfg(feature = "log-memory-allocations")]
-        trace!(
-            "Destroying memory allocation {:p}",
-            self.allocation_info.as_ref().unwrap().device_memory
-        );
-
-        let allocator = self.allocator.clone().unwrap();
-        allocator.free_impl(self).unwrap();
-    }
-}
-
-#[cfg(feature = "raii")]
-impl Drop for VkMemAllocation {
-    fn drop(&mut self) {
-        self.destroy();
-    }
-}
+unsafe impl Send for VkMemAllocation {}
+unsafe impl Sync for VkMemAllocation {}
 
 impl super::Allocation for VkMemAllocation {
     fn memory(&self) -> vk::DeviceMemory {

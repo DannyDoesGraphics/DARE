@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::slice::IterMut;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Result;
@@ -7,23 +8,32 @@ use anyhow::Result;
 ///
 ///
 /// A slot map effectively hands out keys which map to internal keys which themselves map to the
-/// underlying data the map slot represents. In other words, a map slot maps keys to data.
+/// underlying data the map slot represents. In other words, a map slot maps handles to data.
 ///
+/// For more information, see this [talk](https://www.youtube.com/watch?v=SHaAR7XPtNU).
 ///
+/// # Performance
 /// It's performance characteristic are such that get/erase/insert are O(1) operations. **Unless**
 /// inserting must allocate room for a new slot which then it becomes O(n).
+#[derive(Debug)]
 pub struct SlotMap<T: Send + Sync> {
     /// Internal slots that act as a "pointer" between data and external keys
-    indices: Vec<Slot>,
+    indices: Vec<Slot<T>>,
 
     /// Holds the underlying data
     data: Vec<RwLock<T>>,
 
-    /// References indices that map to the data
+    /// References indices to handles that map to the data
     erase: Vec<usize>,
 
     /// A queue containing free indices
     free_queue: Vec<usize>,
+}
+
+impl<T: Send + Sync> Default for SlotMap<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Send + Sync> SlotMap<T> {
@@ -50,7 +60,7 @@ impl<T: Send + Sync> SlotMap<T> {
     }
 
     /// Returns [`Ok`] if the slot is valid
-    pub fn validate_slot(&self, slot: &Slot) -> Result<()> {
+    pub fn validate_slot(&self, slot: &Slot<T>) -> Result<()> {
         if let Some(index) = self.indices.get(slot.index) {
             if index.generation != slot.generation {
                 return Err(anyhow::Error::from(errors::Errors::InvalidSlot));
@@ -62,18 +72,19 @@ impl<T: Send + Sync> SlotMap<T> {
     }
 
     /// Insert new data into the slot map
-    pub fn insert(&mut self, data: T) -> Slot {
-        if self.free_queue.len() == 0 {
+    pub fn insert(&mut self, data: T) -> Slot<T> {
+        if self.free_queue.is_empty() {
             // no room, allocate more
             self.indices.push(Slot {
                 index: self.data.len(),
                 generation: 0,
+                _marker: Default::default(),
             });
             self.free_queue.push(self.indices.len() - 1);
         }
         let next_free_indices = self.free_queue.remove(0);
         // generate a key to return back
-        let mut key: Slot = self.indices.get(next_free_indices).unwrap().clone();
+        let key: &mut Slot<T> = self.indices.get_mut(next_free_indices).unwrap();
         key.index = next_free_indices;
 
         // create the data and update the indices index to point to it
@@ -81,12 +92,12 @@ impl<T: Send + Sync> SlotMap<T> {
         self.indices.get_mut(next_free_indices).unwrap().index = self.data.len() - 1;
         self.erase.push(next_free_indices);
 
-        key
+        self.indices.get_mut(next_free_indices).unwrap().clone()
     }
 
     /// Attempts to do a mutable lock the data prior to invoking [`erase`](Self::erase). If it
     /// fails, it returns an Err.
-    pub fn try_lock_erase(&mut self, slot: Slot) -> Result<T> {
+    pub fn try_lock_erase(&mut self, slot: Slot<T>) -> Result<T> {
         self.validate_slot(&slot)?;
 
         let _unused = self
@@ -94,7 +105,7 @@ impl<T: Send + Sync> SlotMap<T> {
             .get(self.indices.get(slot.index).unwrap().index)
             .unwrap()
             .try_write()
-            .map_err(|_| anyhow::Error::from(dagal::DagalError::PoisonError))?;
+            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
         drop(_unused);
         let handle = self.erase(slot)?;
         Ok(handle.into_inner().unwrap())
@@ -105,9 +116,9 @@ impl<T: Send + Sync> SlotMap<T> {
     /// **This only ensures that no new references are made to the data, but does not make
     /// checks regarding existing ones.**
     ///
-    /// See [`try_lock_erase`](Self::try_lock_erase) for an erase one that does a check prior to
-    /// erasure.
-    pub fn erase(&mut self, slot: Slot) -> Result<RwLock<T>> {
+    /// See [`try_lock_erase`](Self::try_lock_erase) to check if a handle is not currently being
+    /// borrowed before erasing.
+    pub fn erase(&mut self, slot: Slot<T>) -> Result<RwLock<T>> {
         // validate generation
         self.validate_slot(&slot)?;
         // update generation
@@ -137,7 +148,7 @@ impl<T: Send + Sync> SlotMap<T> {
     }
 
     /// Retrieve the underlying read write lock to the data the slot is mapped to
-    pub fn get_rw(&self, slot: &Slot) -> Result<&RwLock<T>> {
+    pub fn get_rw(&self, slot: &Slot<T>) -> Result<&RwLock<T>> {
         self.validate_slot(slot)?;
 
         let indices_slot = self.indices.get(slot.index).unwrap();
@@ -145,24 +156,46 @@ impl<T: Send + Sync> SlotMap<T> {
     }
 
     /// Retrieve the data that maps to the slot directly
-    pub fn get(&self, slot: &Slot) -> Result<RwLockReadGuard<T>> {
+    pub fn get(&self, slot: &Slot<T>) -> Result<RwLockReadGuard<T>> {
         self.get_rw(slot)?
             .read()
-            .map_err(|_| return anyhow::Error::from(errors::Errors::Poisoned))
+            .map_err(|_| anyhow::Error::from(errors::Errors::Poisoned))
     }
 
     /// Retrieve the data that maps to the slot directly as a mutable rw access
-    pub fn get_mut(&self, slot: &Slot) -> Result<RwLockWriteGuard<T>> {
+    pub fn get_mut(&self, slot: &Slot<T>) -> Result<RwLockWriteGuard<T>> {
         self.get_rw(slot)?
             .write()
-            .map_err(|_| return anyhow::Error::from(errors::Errors::Poisoned))
+            .map_err(|_| anyhow::Error::from(errors::Errors::Poisoned))
+    }
+
+    /// Get a mutable iterator over all the data stored by the slot map.
+    pub fn mut_iter_data(&mut self) -> IterMut<'_, RwLock<T>> {
+        self.data.iter_mut()
     }
 }
 
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct Slot {
+#[derive(Debug, Eq)]
+pub struct Slot<T> {
     index: usize,
     generation: usize,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> PartialEq for Slot<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && self.generation == other.generation
+    }
+}
+
+impl<T> Clone for Slot<T> {
+    fn clone(&self) -> Self {
+        Self {
+            index: self.index,
+            generation: self.generation,
+            _marker: self._marker,
+        }
+    }
 }
 
 pub mod errors {
@@ -183,7 +216,7 @@ mod tests {
     #[test]
     fn create_retrieve_single() {
         // Test creating and retrieving a single item from a slot map
-        let mut slot_map = crate::slot_map::SlotMap::new();
+        let mut slot_map = crate::util::slot_map::SlotMap::new();
         let handle = slot_map.insert(1);
         assert_eq!(1, *slot_map.get(&handle).unwrap());
     }
@@ -191,8 +224,9 @@ mod tests {
     #[test]
     fn create_retrieve_multiple() {
         // Test creating and retrieving a multiple items from a slot map
-        let mut slot_map: crate::slot_map::SlotMap<u32> = crate::slot_map::SlotMap::new();
-        let mut handles: Vec<crate::slot_map::Slot> = Vec::with_capacity(10);
+        let mut slot_map: crate::util::slot_map::SlotMap<u32> =
+            crate::util::slot_map::SlotMap::new();
+        let mut handles: Vec<crate::util::slot_map::Slot<u32>> = Vec::with_capacity(10);
         for i in 0u32..10u32 {
             handles.push(slot_map.insert(i));
         }
@@ -205,8 +239,9 @@ mod tests {
     #[test]
     fn create_retrieve_and_remove_multiple() {
         // Test creating and retrieving a multiple items from a slot map
-        let mut slot_map: crate::slot_map::SlotMap<u32> = crate::slot_map::SlotMap::new();
-        let mut handles: Vec<crate::slot_map::Slot> = Vec::with_capacity(10);
+        let mut slot_map: crate::util::slot_map::SlotMap<u32> =
+            crate::util::slot_map::SlotMap::new();
+        let mut handles: Vec<crate::util::slot_map::Slot<u32>> = Vec::with_capacity(10);
         for i in 0u32..10u32 {
             handles.push(slot_map.insert(i));
         }

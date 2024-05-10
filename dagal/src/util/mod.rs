@@ -3,6 +3,7 @@ use std::ffi::{c_char, CStr, CString};
 /// Utility functions commonly used
 pub mod deletion_stack;
 pub use deletion_stack::DeletionStack;
+pub mod slot_map;
 pub mod tests;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {

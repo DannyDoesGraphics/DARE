@@ -4,18 +4,21 @@ use ash::vk;
 ///
 /// Provides traits for implementing allocators
 use std::ffi::c_void;
+use std::fmt::Debug;
 use std::ptr::NonNull;
 
 #[cfg(feature = "gpu-allocator")]
 pub mod gpu_allocator_impl;
-#[cfg(feature = "gpu-allocator")]
-pub use gpu_allocator_impl::*;
+
 #[cfg(feature = "vk-mem-rs")]
 pub mod vk_mem_impl;
 #[cfg(feature = "vk-mem-rs")]
 pub use vk_mem_impl::*;
 
 pub mod memory_type;
+pub mod slot_map_allocator;
+
+pub use slot_map_allocator::SlotMapMemoryAllocator;
 
 pub use memory_type::*;
 
@@ -37,7 +40,7 @@ pub trait Allocator: Clone + Send + Sync {
     fn free(&mut self, allocation: Self::Allocation) -> Result<()>;
 }
 
-pub trait Allocation: Default {
+pub trait Allocation: Default + Send + Sync + Debug {
     /// Get the underlying [`vk::DeviceMemory`]
     fn memory(&self) -> vk::DeviceMemory;
 
