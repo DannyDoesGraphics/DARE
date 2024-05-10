@@ -7,7 +7,7 @@ authors = ["Danny Le <git@dannydoes.graphics>"]
 [dependencies]
 anyhow = "1.0.82"
 thiserror = "1.0.59"
-dagal = { path = "../dagal", features = ["winit", "bootstrap", "vk-mem-rs", "log-lifetimes", "log-memory-allocations"] }
+dagal = { path = "../dagal", features = ["winit", "bootstrap", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc"] }
 vk-mem = "0.4.0"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"

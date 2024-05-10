@@ -21,6 +21,9 @@ pub enum DagalError {
 
     #[error("No capabilities were provided")]
     NoCapabilities,
+
+    #[error("shaderc encountered an error")]
+    ShadercError,
 }
 
 impl<T> From<PoisonError<T>> for DagalError {

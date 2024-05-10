@@ -23,7 +23,10 @@ pub trait ShaderCompiler {
 }
 
 /// Checks if path_in is newer than path_out
-pub(super) fn is_file_newer(path_in: std::path::PathBuf, path_out: std::path::PathBuf) -> Result<bool> {
+pub(super) fn is_file_newer(
+    path_in: std::path::PathBuf,
+    path_out: std::path::PathBuf,
+) -> Result<bool> {
     let metadata_in = std::fs::metadata(path_in)?.modified()?;
     match std::fs::metadata(path_out) {
         Ok(metadata_out) => Ok(metadata_in > metadata_out.modified()?),

@@ -82,10 +82,7 @@ impl SwapchainBuilder {
                 .map(|format| format.format)
                 .collect(),
             preferred_image_formats: Vec::new(),
-            present_modes: surface
-                .get_present_modes()
-                .as_ref()
-                .unwrap().to_vec(),
+            present_modes: surface.get_present_modes().as_ref().unwrap().to_vec(),
             family_indices: HashSet::new(),
             image_usage: vk::ImageUsageFlags::empty(),
             image_extent: vk::Extent2D::default(),

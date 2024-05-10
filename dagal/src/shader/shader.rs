@@ -1,9 +1,8 @@
-use std::io::Read;
 use crate::traits::Destructible;
-use ash::vk;
-use tracing::trace;
 use anyhow::Result;
-
+use ash::vk;
+use std::io::Read;
+use tracing::trace;
 
 pub struct Shader {
     handle: vk::ShaderModule,
@@ -12,26 +11,24 @@ pub struct Shader {
 
 impl Shader {
     /// Creates a shader from a file
-    pub fn from_file(device: crate::device::LogicalDevice, path: std::path::PathBuf) -> Result<Self> {
+    pub fn from_file(
+        device: crate::device::LogicalDevice,
+        path: std::path::PathBuf,
+    ) -> Result<Self> {
         let mut buf: Vec<u8> = Vec::new();
         let mut file = std::fs::File::open(path)?;
         file.read_to_end(&mut buf)?;
         let content = ash::util::read_spv(&mut std::io::Cursor::new(buf))?;
 
         let shader_ci = vk::ShaderModuleCreateInfo::default().code(content.as_slice());
-        let handle = unsafe {
-            device.get_handle().create_shader_module(&shader_ci, None)?
-        };
+        let handle = unsafe { device.get_handle().create_shader_module(&shader_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkShaderModule {:p}", handle);
 
-        Ok(Self {
-            handle,
-            device,
-        })
+        Ok(Self { handle, device })
     }
-    
+
     pub fn handle(&self) -> vk::ShaderModule {
         self.handle
     }

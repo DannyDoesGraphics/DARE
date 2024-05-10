@@ -48,10 +48,7 @@ impl CommandPool {
     }
 
     /// Allocate command buffers from a command pool
-    pub fn allocate(
-        &self,
-        count: u32,
-    ) -> Result<Vec<crate::command::CommandBuffer>> {
+    pub fn allocate(&self, count: u32) -> Result<Vec<crate::command::CommandBuffer>> {
         Ok(unsafe {
             self.device
                 .get_handle()

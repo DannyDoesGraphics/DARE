@@ -1,5 +1,3 @@
-
-
 pub trait Semaphore<'a> {
     type Handle: Copy + Clone;
     /// Get a reference to the underlying [`VkSemaphore`](vk::Semaphore)

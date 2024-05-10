@@ -47,7 +47,7 @@ impl Drop for LogicalDeviceInner {
 }
 
 /// Effectively the same as [`ash::Device`], but will automatically clean itself up if raii is enabled
-/// 
+///
 /// LogicalDevice encloses [`LogicalDeviceInner`] as it reference counts it using [`Arc`]. This
 /// makes lifetime management easier. However, those who opt into deletion stack, may still be
 /// able to manually delete the [`LogicalDevice`] using the [`Destructible`] trait.
@@ -125,7 +125,7 @@ impl Destructible for LogicalDevice {
     /// **Safety:** there are zero safety guarantees if the Device is valid. This is realistically
     /// meant to be used to only clean up the logical device and would never be referenced to
     /// after clean up.
-    /// 
+    ///
     /// Possible todo: Replace inner: `Arc<ash::Device>` -> `Arc<Option<ash::Device>>` to enable
     /// safety checking
     fn destroy(&mut self) {

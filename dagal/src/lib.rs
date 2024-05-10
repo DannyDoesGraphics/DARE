@@ -12,9 +12,10 @@ pub mod sync;
 pub mod util;
 pub mod wsi;
 
-pub mod traits;
-pub mod shader;
 pub mod descriptor;
+mod pipelines;
+pub mod shader;
+pub mod traits;
 
 pub use error::DagalError;
 
@@ -28,3 +29,8 @@ pub use raw_window_handle;
 pub use vk_mem;
 #[cfg(feature = "winit")]
 pub use winit;
+
+#[cfg(all(feature = "gpu-allocator", not(feature = "vk-mem-rs")))]
+type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
+#[cfg(all(feature = "vk-mem-rs", not(feature = "gpu-allocator")))]
+type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
