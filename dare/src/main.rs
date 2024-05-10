@@ -98,7 +98,7 @@ impl<'a> RenderContext<'a> {
                 unsafe { device.get_handle().destroy_device(None) }
             });
         }
-        
+
         let allocator = dagal::allocators::VkMemAllocator::new(
                 instance.get_instance(),
                 device.get_handle(),
@@ -106,11 +106,11 @@ impl<'a> RenderContext<'a> {
             )
             .unwrap();
         deletion_stack.push_resource(&allocator);
-        
+
         assert!(!graphics_queue.borrow().get_queues().is_empty());
         let graphics_queue = graphics_queue.borrow().get_queues()[0];
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
-        
+
         let frames: Vec<Frame<'a>> = (0..FRAME_OVERLAP)
             .map(|_| {
                 let command_pool = dagal::command::CommandPool::new(
@@ -160,7 +160,7 @@ impl<'a> RenderContext<'a> {
                 }
             })
             .collect();
-        
+
         Self {
             instance,
             physical_device,
