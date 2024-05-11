@@ -19,7 +19,7 @@ impl PipelineLayoutBuilder {
 	/// Adds a push constant range using a passed type.
 	///
 	/// **It is recommended you only use types which have `#[repr(C)]`**.
-	pub fn push_push_constant_struct<T: Sized >(mut self, stage_flags: vk::ShaderStageFlags) -> Self {
+	pub fn push_push_constant_struct<T: Sized >(self, stage_flags: vk::ShaderStageFlags) -> Self {
 		self.push_push_constant_ranges(vec![
 			vk::PushConstantRange {
 				stage_flags,

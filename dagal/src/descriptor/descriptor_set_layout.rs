@@ -1,7 +1,5 @@
-use std::ptr;
 use crate::traits::Destructible;
 use ash::vk;
-use anyhow::Result;
 
 use tracing::trace;
 

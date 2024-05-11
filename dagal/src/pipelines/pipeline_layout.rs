@@ -1,4 +1,3 @@
-use std::sync::atomic::fence;
 use ash::vk;
 use tracing::trace;
 use crate::traits::Destructible;
