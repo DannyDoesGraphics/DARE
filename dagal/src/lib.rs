@@ -13,7 +13,7 @@ pub mod util;
 pub mod wsi;
 
 pub mod descriptor;
-mod pipelines;
+pub mod pipelines;
 pub mod shader;
 pub mod traits;
 

@@ -4,8 +4,10 @@ use std::time::Instant;
 
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
+use glam;
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
+use dagal::pipelines::PipelineBuilder;
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
@@ -56,6 +58,15 @@ struct Frame<'a> {
     swapchain_semaphore: dagal::sync::BinarySemaphore,
     render_semaphore: dagal::sync::BinarySemaphore,
     render_fence: dagal::sync::Fence,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+struct PushConstants {
+    data1: glam::Vec4,
+    data2: glam::Vec4,
+    data3: glam::Vec4,
+    data4: glam::Vec4,
 }
 
 impl<'a> RenderContext<'a> {
@@ -180,53 +191,17 @@ impl<'a> RenderContext<'a> {
             .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
             .unwrap();
         deletion_stack.push_resource(&draw_image_set_layout);
-
-        let gradient_pipeline_layout_ci = vk::PipelineLayoutCreateInfo {
-            s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::PipelineLayoutCreateFlags::empty(),
-            set_layout_count: 1,
-            p_set_layouts: &draw_image_set_layout.handle(),
-            push_constant_range_count: 0,
-            p_push_constant_ranges: ptr::null(),
-            _marker: Default::default(),
-        };
-        let gradient_pipeline_layout = unsafe {
-            device.get_handle().create_pipeline_layout(&gradient_pipeline_layout_ci, None).unwrap()
-        };
+        let gradient_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+            .push_descriptor_sets(vec![draw_image_set_layout.handle()])
+            .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
+            .unwrap();
+        deletion_stack.push_resource(&gradient_pipeline_layout);
         let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv")).unwrap();
-        let stage_info = vk::PipelineShaderStageCreateInfo {
-            s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::PipelineShaderStageCreateFlags::empty(),
-            stage: vk::ShaderStageFlags::COMPUTE,
-            module: compute_draw_shader.handle(),
-            p_name: "main".as_ptr() as *const c_char,
-            p_specialization_info: ptr::null(),
-            _marker: Default::default(),
-        };
-        let compute_pipeline_ci = vk::ComputePipelineCreateInfo {
-            s_type: vk::StructureType::COMPUTE_PIPELINE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::PipelineCreateFlags::empty(),
-            stage: stage_info,
-            layout: gradient_pipeline_layout.clone(),
-            base_pipeline_handle: Default::default(),
-            base_pipeline_index: 0,
-            _marker: Default::default(),
-        };
-        let gradient_pipeline = unsafe {
-            device.get_handle().create_compute_pipelines(vk::PipelineCache::null(), &[compute_pipeline_ci], None).unwrap().pop().unwrap()
-        };
-        {
-            let device = device.clone();
-            deletion_stack.push(move || {
-                unsafe {
-                    device.get_handle().destroy_pipeline_layout(gradient_pipeline_layout, None);
-                    device.get_handle().destroy_pipeline(gradient_pipeline, None);
-                }
-            })
-        }
+        let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
+            .replace_layout(gradient_pipeline_layout)
+            .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
+            .build(device.clone()).unwrap();
+        deletion_stack.push_resource(&gradient_pipeline);
 
         compute_draw_shader.destroy();
         Self {

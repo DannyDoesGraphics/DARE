@@ -1,2 +1,9 @@
-mod compute;
-mod traits;
+pub mod compute;
+pub use compute::ComputePipeline;
+pub use compute::ComputePipelineBuilder;
+pub mod traits;
+pub use traits::*;
+pub mod pipeline_layout;
+pub use pipeline_layout::PipelineLayout;
+pub mod pipeline_layout_builder;
+pub use pipeline_layout_builder::PipelineLayoutBuilder;

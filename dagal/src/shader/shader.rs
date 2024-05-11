@@ -4,6 +4,7 @@ use ash::vk;
 use std::io::Read;
 use tracing::trace;
 
+#[derive(Debug, Clone)]
 pub struct Shader {
     handle: vk::ShaderModule,
     device: crate::device::LogicalDevice,
