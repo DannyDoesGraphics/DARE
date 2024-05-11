@@ -186,7 +186,7 @@ impl<'a> RenderContext<'a> {
                 ratio: 1.0,
             }]).unwrap();
         deletion_stack.push_resource(&global_descriptor_pool);
-        let draw_image_set_layout = dagal::descriptor::DescriptorLayoutBuilder::default()
+        let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
             .unwrap();

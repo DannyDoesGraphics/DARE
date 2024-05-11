@@ -4,11 +4,11 @@ use std::ffi::c_void;
 use std::ptr;
 
 #[derive(Clone, Debug, Default)]
-pub struct DescriptorLayoutBuilder<'a> {
+pub struct DescriptorSetLayoutBuilder<'a> {
     bindings: Vec<vk::DescriptorSetLayoutBinding<'a>>,
 }
 
-impl<'a> DescriptorLayoutBuilder<'a> {
+impl<'a> DescriptorSetLayoutBuilder<'a> {
     /// Adds a binding to be built
     pub fn add_binding(mut self, binding: u32, ty: vk::DescriptorType) -> Self {
         self.bindings.push(vk::DescriptorSetLayoutBinding {
