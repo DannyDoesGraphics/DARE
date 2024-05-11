@@ -16,6 +16,19 @@ impl PipelineLayoutBuilder {
 		self
 	}
 
+	/// Adds a push constant range using a passed type.
+	///
+	/// **It is recommended you only use types which have `#[repr(C)]`**.
+	pub fn push_push_constant_struct<T: Sized >(mut self, stage_flags: vk::ShaderStageFlags) -> Self {
+		self.push_push_constant_ranges(vec![
+			vk::PushConstantRange {
+				stage_flags,
+				offset: 0,
+				size: std::mem::size_of::<T>() as u32,
+			}
+		])
+	}
+
 	/// Add descriptor sets to the pipeline layout
 	pub fn push_descriptor_sets(mut self, mut descriptor_sets: Vec<vk::DescriptorSetLayout>) -> Self {
 		self.descriptor_sets.append(&mut descriptor_sets);

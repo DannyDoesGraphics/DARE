@@ -7,7 +7,7 @@ use tracing_subscriber::FmtSubscriber;
 use glam;
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
-use dagal::pipelines::PipelineBuilder;
+use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
@@ -46,8 +46,8 @@ struct RenderContext<'a> {
     global_descriptor_pool: dagal::descriptor::DescriptorPool,
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
 
-    gradient_pipeline: vk::Pipeline,
-    gradient_pipeline_layout: vk::PipelineLayout,
+    gradient_pipeline: dagal::pipelines::ComputePipeline,
+    gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
 }
 
 struct Frame<'a> {
@@ -61,7 +61,7 @@ struct Frame<'a> {
 }
 
 #[derive(Debug, Clone)]
-#[repr(C)]
+#[repr(C, align(16))]
 struct PushConstants {
     data1: glam::Vec4,
     data2: glam::Vec4,
@@ -193,13 +193,14 @@ impl<'a> RenderContext<'a> {
         deletion_stack.push_resource(&draw_image_set_layout);
         let gradient_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .push_descriptor_sets(vec![draw_image_set_layout.handle()])
+            .push_push_constant_struct::<PushConstants>(vk::ShaderStageFlags::COMPUTE)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
         deletion_stack.push_resource(&gradient_pipeline_layout);
         let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv")).unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(gradient_pipeline_layout)
-            .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
+            .replace_layout(gradient_pipeline_layout.clone())
+            .replace_shader(compute_draw_shader.clone(), vk::ShaderStageFlags::COMPUTE)
             .build(device.clone()).unwrap();
         deletion_stack.push_resource(&gradient_pipeline);
 
@@ -405,8 +406,8 @@ impl<'a> RenderContext<'a> {
         cmd: &dagal::command::CommandBufferRecording,
         draw_image: &dagal::resource::Image,
         frame_number: usize,
-        gradient_pipeline: vk::Pipeline,
-        gradient_pipeline_layout: vk::PipelineLayout,
+        mut gradient_pipeline: dagal::pipelines::ComputePipeline,
+        gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
         gradient_descriptor_set: vk::DescriptorSet,
     ) {
         let flash = (frame_number as f64 / 120.0).sin().abs();
@@ -425,8 +426,20 @@ impl<'a> RenderContext<'a> {
                 &[clear_range],
             );
              */
-            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline);
-            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline_layout, 0, &[gradient_descriptor_set], &[]);
+            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline.handle());
+            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline_layout.handle(), 0, &[gradient_descriptor_set], &[]);
+            let pc = PushConstants {
+                data1: glam::Vec4::new((((frame_number as f64 % f32::MAX as f64) / 240.0).sin().abs() as f32) + 1.0, 0.0, 0.0, 1.0),
+                data2: glam::Vec4::new(0.0,0.0,(((frame_number as f64 % f32::MAX as f64) / 240.0).cos().abs() as f32) + 1.0,1.0),
+                data3: glam::Vec4::splat(0.0),
+                data4: glam::Vec4::splat(0.0),
+            };
+            device.get_handle().cmd_push_constants(cmd.handle(), gradient_pipeline_layout.handle(), vk::ShaderStageFlags::COMPUTE, 0, unsafe {
+                std::slice::from_raw_parts(
+                    &pc as *const PushConstants as *const u8,
+                    std::mem::size_of::<PushConstants>()
+                )
+            });
             device.get_handle().cmd_dispatch(cmd.handle(),
                                              (draw_image.extent().width as f32 / 16.0).ceil() as u32,
                                              (draw_image.extent().height as f32 / 16.0).ceil() as u32, 
@@ -502,8 +515,8 @@ impl<'a> RenderContext<'a> {
             &cmd,
             self.draw_image.as_ref().unwrap(),
             self.frame_number,
-            self.gradient_pipeline,
-            self.gradient_pipeline_layout,
+            self.gradient_pipeline.clone(),
+            self.gradient_pipeline_layout.clone(),
             self.draw_image_descriptors.unwrap()
         );
         self.draw_image.as_ref().unwrap().transition(
