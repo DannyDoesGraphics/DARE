@@ -1,10 +1,9 @@
-use std::ffi::c_char;
 use std::ptr;
 use std::time::Instant;
 
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
-use glam;
+
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
@@ -13,6 +12,7 @@ use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
 use dagal::winit;
 use dagal::wsi::WindowDimensions;
+
 const FRAME_OVERLAP: usize = 2;
 
 #[derive(Default)]
