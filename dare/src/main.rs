@@ -48,6 +48,11 @@ struct RenderContext<'a> {
 
     gradient_pipeline: dagal::pipelines::ComputePipeline,
     gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
+
+    inversion_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
+    inversion_descriptor_set: Option<vk::DescriptorSet>,
+    inversion_pipeline: dagal::pipelines::ComputePipeline,
+    inversion_pipeline_layout: dagal::pipelines::PipelineLayout,
 }
 
 struct Frame<'a> {
@@ -69,12 +74,15 @@ struct PushConstants {
     data4: glam::Vec4,
 }
 
+/// Whether to enable validation layers or not
+const VALIDATION: bool = false;
+
 impl<'a> RenderContext<'a> {
     fn new(rdh: dagal::raw_window_handle::RawDisplayHandle) -> Self {
         let mut deletion_stack = dagal::util::DeletionStack::new();
         let mut instance = dagal::bootstrap::InstanceBuilder::new()
             .set_vulkan_version((1, 3, 0))
-            .set_validation(true);
+            .set_validation(VALIDATION);
         for layer in dagal::ash_window::enumerate_required_extensions(rdh)
             .unwrap()
             .iter()
@@ -83,12 +91,14 @@ impl<'a> RenderContext<'a> {
         }
         let instance = instance.build().unwrap();
         deletion_stack.push_resource(&instance);
-        let mut debug_messenger =
-            dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
-                .unwrap();
-        deletion_stack.push(move || {
-            debug_messenger.destroy();
-        });
+        if VALIDATION == true {
+            let mut debug_messenger =
+                dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
+                    .unwrap();
+            deletion_stack.push(move || {
+                debug_messenger.destroy();
+            });
+        }
 
         let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true);
         let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
@@ -197,13 +207,30 @@ impl<'a> RenderContext<'a> {
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
         deletion_stack.push_resource(&gradient_pipeline_layout);
-        let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv")).unwrap();
+        let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv")).unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
             .replace_layout(gradient_pipeline_layout.clone())
             .replace_shader(compute_draw_shader.clone(), vk::ShaderStageFlags::COMPUTE)
             .build(device.clone()).unwrap();
         deletion_stack.push_resource(&gradient_pipeline);
-
+        let inversion_descriptor_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
+            .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
+            .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
+            .unwrap();
+        deletion_stack.push_resource(&inversion_descriptor_set_layout);
+        let inversion_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+            .push_descriptor_sets(vec![inversion_descriptor_set_layout.handle()])
+            .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
+            .unwrap();
+        deletion_stack.push_resource(&inversion_pipeline_layout);
+        let mut inversion_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./shaders/compiled/inversion.comp.spv")).unwrap();
+        let inversion_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
+            .replace_layout(inversion_pipeline_layout.clone())
+            .replace_shader(inversion_shader.clone(), vk::ShaderStageFlags::COMPUTE)
+            .build(device.clone())
+            .unwrap();
+        deletion_stack.push_resource(&inversion_pipeline);
+        inversion_shader.destroy();
         compute_draw_shader.destroy();
         Self {
             instance,
@@ -232,6 +259,12 @@ impl<'a> RenderContext<'a> {
 
             gradient_pipeline,
             gradient_pipeline_layout,
+
+
+            inversion_descriptor_set_layout,
+            inversion_descriptor_set: None,
+            inversion_pipeline,
+            inversion_pipeline_layout,
         }
     }
 
@@ -365,8 +398,24 @@ impl<'a> RenderContext<'a> {
             p_texel_buffer_view: ptr::null(),
             _marker: Default::default(),
         };
+        self.inversion_descriptor_set = Some(
+            self.global_descriptor_pool.allocate(self.inversion_descriptor_set_layout.handle()).unwrap()
+        );
+        let inversion_descriptor_set = vk::WriteDescriptorSet {
+            s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+            p_next: ptr::null(),
+            dst_set: self.inversion_descriptor_set.unwrap(),
+            dst_binding: 0,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+            p_image_info: &img_info,
+            p_buffer_info: ptr::null(),
+            p_texel_buffer_view: ptr::null(),
+            _marker: Default::default(),
+        };
         unsafe {
-            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set], &[]);
+            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set, inversion_descriptor_set], &[]);
         }
     }
 
@@ -417,15 +466,6 @@ impl<'a> RenderContext<'a> {
         let clear_range =
             dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
         unsafe {
-            /*
-            device.get_handle().cmd_clear_color_image(
-                cmd.handle(),
-                draw_image.handle(),
-                vk::ImageLayout::GENERAL,
-                &clear_value,
-                &[clear_range],
-            );
-             */
             device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline.handle());
             device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline_layout.handle(), 0, &[gradient_descriptor_set], &[]);
             let pc = PushConstants {
@@ -445,6 +485,23 @@ impl<'a> RenderContext<'a> {
                                              (draw_image.extent().height as f32 / 16.0).ceil() as u32, 
                                              1
             )
+        }
+    }
+
+    fn draw_inversion(
+        device: &dagal::device::LogicalDevice,
+        cmd: &dagal::command::CommandBufferRecording,
+        draw_image: &dagal::resource::Image,
+        mut inversion_pipeline: dagal::pipelines::ComputePipeline,
+        inversion_pipeline_layout: dagal::pipelines::PipelineLayout,
+        inversion_pipeline_descriptor_set: vk::DescriptorSet
+    ) {
+        unsafe {
+            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, inversion_pipeline.handle());
+            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, inversion_pipeline_layout.handle(), 0, &[inversion_pipeline_descriptor_set], &[]);
+            device.get_handle().cmd_dispatch(cmd.handle(), (draw_image.extent().width as f32 / 16.0).ceil() as u32,
+                                             (draw_image.extent().height as f32 / 16.0).ceil() as u32,
+                                             1);
         }
     }
 
@@ -519,6 +576,38 @@ impl<'a> RenderContext<'a> {
             self.gradient_pipeline_layout.clone(),
             self.draw_image_descriptors.unwrap()
         );
+        // add a sync point
+        let dependency_info = vk::DependencyInfo {
+            s_type: vk::StructureType::DEPENDENCY_INFO,
+            p_next: ptr::null(),
+            dependency_flags: vk::DependencyFlags::empty(),
+            memory_barrier_count: 0,
+            p_memory_barriers: ptr::null(),
+            buffer_memory_barrier_count: 0,
+            p_buffer_memory_barriers: ptr::null(),
+            image_memory_barrier_count: 1,
+            p_image_memory_barriers: &vk::ImageMemoryBarrier2 {
+                s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                p_next: ptr::null(),
+                src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                src_access_mask: vk::AccessFlags2::empty(),
+                dst_stage_mask: vk::PipelineStageFlags2::empty(),
+                dst_access_mask: vk::AccessFlags2::empty(),
+                old_layout: vk::ImageLayout::GENERAL,
+                new_layout: vk::ImageLayout::GENERAL,
+                src_queue_family_index: self.graphics_queue.get_family_index(),
+                dst_queue_family_index: self.graphics_queue.get_family_index(),
+                image: self.draw_image.as_ref().unwrap().handle(),
+                subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR),
+                _marker: Default::default(),
+            },
+            _marker: Default::default(),
+        };
+        unsafe {
+            self.device.get_handle().cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
+        }
+        Self::draw_inversion(&self.device, &cmd, self.draw_image.as_ref().unwrap(), self.inversion_pipeline.clone(), self.inversion_pipeline_layout.clone(), self.inversion_descriptor_set.unwrap());
+
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
             &self.graphics_queue,
@@ -693,8 +782,16 @@ fn main() {
     // Shader compilation
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
     shader_compiler.compile_file(
-        std::path::PathBuf::from("./dare/shaders/gradient.comp"),
-        std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
+        std::path::PathBuf::from("./shaders/gradient.comp"),
+        std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
+        dagal::shader::ShaderKind::Compute
+    ).unwrap();
+
+    // Shader compilation
+    let shader_compiler = dagal::shader::ShaderCCompiler::new();
+    shader_compiler.compile_file(
+        std::path::PathBuf::from("./shaders/inversion.comp"),
+        std::path::PathBuf::from("./shaders/compiled/inversion.comp.spv"),
         dagal::shader::ShaderKind::Compute
     ).unwrap();
 
