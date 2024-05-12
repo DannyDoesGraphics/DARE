@@ -1,6 +1,6 @@
-use std::env;
 use crate::shader::ShaderKind;
 use anyhow::Result;
+use std::env;
 
 /// Responsible for compiling the shader
 pub trait ShaderCompiler {

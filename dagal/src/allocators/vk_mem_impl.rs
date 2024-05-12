@@ -36,9 +36,11 @@ impl VkMemAllocator {
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         Ok(Self {
-            handle: unsafe {Arc::new(Mutex::new(Some(vk_mem::Allocator::new(
-                vk_mem::AllocatorCreateInfo::new(instance, device, physical_device),
-            )?))) },
+            handle: unsafe {
+                Arc::new(Mutex::new(Some(vk_mem::Allocator::new(
+                    vk_mem::AllocatorCreateInfo::new(instance, device, physical_device),
+                )?)))
+            },
             memory_properties,
         })
     }

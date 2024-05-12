@@ -95,7 +95,7 @@ impl<'a> RenderContext<'a> {
             device.get_handle(),
             physical_device.handle(),
         )
-            .unwrap();
+        .unwrap();
         deletion_stack.push_resource(&allocator);
         let allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 
@@ -110,22 +110,25 @@ impl<'a> RenderContext<'a> {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                    .unwrap();
+                .unwrap();
                 deletion_stack.push_resource(&command_pool);
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
-                ).unwrap();
+                )
+                .unwrap();
                 deletion_stack.push_resource(&swapchain_semaphore);
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
-                ).unwrap();
+                )
+                .unwrap();
                 deletion_stack.push_resource(&render_semaphore);
                 let render_fence =
-                    dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap();
+                    dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
+                        .unwrap();
                 deletion_stack.push_resource(&render_fence);
 
                 Frame {
@@ -169,7 +172,7 @@ impl<'a> RenderContext<'a> {
             self.instance.get_instance(),
             window,
         )
-            .unwrap();
+        .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -245,7 +248,7 @@ impl<'a> RenderContext<'a> {
             dagal::allocators::MemoryType::GpuOnly,
             format!("Draw image - {:?}", Instant::now()).as_str(),
         )
-            .unwrap();
+        .unwrap();
         let image_view = dagal::resource::ImageView::new(
             &vk::ImageViewCreateInfo {
                 s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
@@ -266,7 +269,7 @@ impl<'a> RenderContext<'a> {
             },
             self.device.clone(),
         )
-            .unwrap();
+        .unwrap();
         self.draw_image = Some(image);
         self.wsi_deletion_stack.push_resource(&image_view);
         self.draw_image_view = Some(image_view);

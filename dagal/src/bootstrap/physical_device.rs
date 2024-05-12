@@ -412,8 +412,12 @@ impl PhysicalDeviceSelector {
                     preferred = false
                 }
             }
-            bs_physical_device.extensions_enabled.clone_from(&self.required_extension); // no fucking clue why i need to clone
-            bs_physical_device.queue_requests.clone_from(&self.required_queues);
+            bs_physical_device
+                .extensions_enabled
+                .clone_from(&self.required_extension); // no fucking clue why i need to clone
+            bs_physical_device
+                .queue_requests
+                .clone_from(&self.required_queues);
             // put physical device into suitable devices
             if preferred {
                 suitable_devices.push_front(bs_physical_device);

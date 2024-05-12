@@ -47,9 +47,6 @@ struct RenderContext<'a> {
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
 
     gradient_pipeline: dagal::pipelines::ComputePipeline,
-    gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
-
-    triangle_pipeline_layout: dagal::pipelines::PipelineLayout,
     triangle_pipeline: dagal::pipelines::GraphicsPipeline,
 }
 
@@ -121,17 +118,15 @@ impl<'a> RenderContext<'a> {
         // clean up
         {
             let device = device.clone();
-            deletion_stack.push(move || {
-                unsafe { device.get_handle().destroy_device(None) }
-            });
+            deletion_stack.push(move || unsafe { device.get_handle().destroy_device(None) });
         }
 
         let allocator = dagal::allocators::VkMemAllocator::new(
-                instance.get_instance(),
-                device.get_handle(),
-                physical_device.handle(),
-            )
-            .unwrap();
+            instance.get_instance(),
+            device.get_handle(),
+            physical_device.handle(),
+        )
+        .unwrap();
         deletion_stack.push_resource(&allocator);
         let allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 
@@ -149,11 +144,7 @@ impl<'a> RenderContext<'a> {
                 .unwrap();
                 deletion_stack.push_resource(&command_pool);
 
-                let command_buffer = command_pool
-                    .allocate(1)
-                    .unwrap()
-                    .pop()
-                    .unwrap();
+                let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
@@ -189,14 +180,24 @@ impl<'a> RenderContext<'a> {
             })
             .collect();
 
-        let global_descriptor_pool = dagal::descriptor::DescriptorPool::new(device.clone(), 10, &[dagal::descriptor::PoolSizeRatio {
+        let global_descriptor_pool = dagal::descriptor::DescriptorPool::new(
+            device.clone(),
+            10,
+            &[dagal::descriptor::PoolSizeRatio {
                 descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
                 ratio: 1.0,
-            }]).unwrap();
+            }],
+        )
+        .unwrap();
         deletion_stack.push_resource(&global_descriptor_pool);
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
-            .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
+            .build(
+                device.clone(),
+                vk::ShaderStageFlags::COMPUTE,
+                ptr::null(),
+                vk::DescriptorSetLayoutCreateFlags::empty(),
+            )
             .unwrap();
         deletion_stack.push_resource(&draw_image_set_layout);
         let gradient_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
@@ -204,33 +205,37 @@ impl<'a> RenderContext<'a> {
             .push_push_constant_struct::<PushConstants>(vk::ShaderStageFlags::COMPUTE)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
-        deletion_stack.push_resource(&gradient_pipeline_layout);
-        let mut compute_draw_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv")).unwrap();
+        let compute_draw_shader = dagal::shader::Shader::from_file(
+            device.clone(),
+            std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
+        )
+        .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(gradient_pipeline_layout.clone())
-            .replace_shader(compute_draw_shader.clone(), vk::ShaderStageFlags::COMPUTE)
-            .build(device.clone()).unwrap();
+            .replace_layout(gradient_pipeline_layout)
+            .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
+            .build(device.clone())
+            .unwrap();
         deletion_stack.push_resource(&gradient_pipeline);
-        compute_draw_shader.destroy();
 
         // triangle pipeline
         let mut triangle_frag_shader = dagal::shader::Shader::from_file(
             device.clone(),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv")
-        ).unwrap();
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
+        )
+        .unwrap();
         let mut triangle_vert_shader = dagal::shader::Shader::from_file(
             device.clone(),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv")
-        ).unwrap();
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
+        )
+        .unwrap();
         let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
-        deletion_stack.push_resource(&triangle_pipeline_layout);
         let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
             .clear()
-            .replace_layout(triangle_pipeline_layout.clone())
-            .set_shader(triangle_vert_shader.clone(), vk::ShaderStageFlags::VERTEX)
-            .set_shader(triangle_frag_shader.clone(), vk::ShaderStageFlags::FRAGMENT)
+            .replace_layout(triangle_pipeline_layout)
+            .replace_shader(triangle_vert_shader, vk::ShaderStageFlags::VERTEX)
+            .replace_shader(triangle_frag_shader, vk::ShaderStageFlags::FRAGMENT)
             .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
             .set_polygon_mode(vk::PolygonMode::FILL)
             .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
@@ -239,11 +244,10 @@ impl<'a> RenderContext<'a> {
             .disable_depth_test()
             .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
             .set_depth_format(vk::Format::UNDEFINED)
-            .build(device.clone()).unwrap();
+            .build(device.clone())
+            .unwrap();
         deletion_stack.push_resource(&triangle_pipeline);
 
-        triangle_frag_shader.destroy();
-        triangle_vert_shader.destroy();
         Self {
             instance,
             physical_device,
@@ -270,9 +274,7 @@ impl<'a> RenderContext<'a> {
             draw_image_descriptor_set_layout: draw_image_set_layout,
 
             gradient_pipeline,
-            gradient_pipeline_layout,
 
-            triangle_pipeline_layout,
             triangle_pipeline,
         }
     }
@@ -386,9 +388,14 @@ impl<'a> RenderContext<'a> {
         self.wsi_deletion_stack.push_resource(&image_view);
         self.draw_image_view = Some(image_view);
         // update descriptors
-        self.global_descriptor_pool.reset(vk::DescriptorPoolResetFlags::empty()).unwrap();
-        self.draw_image_descriptors =
-            Some(self.global_descriptor_pool.allocate(self.draw_image_descriptor_set_layout.handle()).unwrap());
+        self.global_descriptor_pool
+            .reset(vk::DescriptorPoolResetFlags::empty())
+            .unwrap();
+        self.draw_image_descriptors = Some(
+            self.global_descriptor_pool
+                .allocate(self.draw_image_descriptor_set_layout.handle())
+                .unwrap(),
+        );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
             image_view: self.draw_image_view.as_ref().unwrap().handle(),
@@ -408,13 +415,19 @@ impl<'a> RenderContext<'a> {
             _marker: Default::default(),
         };
         unsafe {
-            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set], &[]);
+            self.device
+                .get_handle()
+                .update_descriptor_sets(&[write_descriptor_set], &[]);
         }
     }
 
     /// Resize swapchain
     fn resize_swapchain(&mut self, window: &winit::window::Window) {
-        println!("Resize requested with extents: {} x {}", window.width(), window.height());
+        println!(
+            "Resize requested with extents: {} x {}",
+            window.width(),
+            window.height()
+        );
         self.resize_requested = false;
         // wait until fences are signaled
         {
@@ -449,7 +462,6 @@ impl<'a> RenderContext<'a> {
         draw_image: &dagal::resource::Image,
         frame_number: usize,
         mut gradient_pipeline: dagal::pipelines::ComputePipeline,
-        gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
         gradient_descriptor_set: vk::DescriptorSet,
     ) {
         let flash = (frame_number as f64 / 120.0).sin().abs();
@@ -459,24 +471,58 @@ impl<'a> RenderContext<'a> {
         let clear_range =
             dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
         unsafe {
-            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline.handle());
-            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, gradient_pipeline_layout.handle(), 0, &[gradient_descriptor_set], &[]);
+            device.get_handle().cmd_bind_pipeline(
+                cmd.handle(),
+                vk::PipelineBindPoint::COMPUTE,
+                gradient_pipeline.handle(),
+            );
+            device.get_handle().cmd_bind_descriptor_sets(
+                cmd.handle(),
+                vk::PipelineBindPoint::COMPUTE,
+                gradient_pipeline.layout(),
+                0,
+                &[gradient_descriptor_set],
+                &[],
+            );
             let pc = PushConstants {
-                data1: glam::Vec4::new((((frame_number as f64 % f32::MAX as f64) / 240.0).sin().abs() as f32) + 1.0, 0.0, 0.0, 1.0),
-                data2: glam::Vec4::new(0.0,0.0,(((frame_number as f64 % f32::MAX as f64) / 240.0).cos().abs() as f32) + 1.0,1.0),
+                data1: glam::Vec4::new(
+                    (((frame_number as f64 % f32::MAX as f64) / 240.0)
+                        .sin()
+                        .abs() as f32)
+                        + 1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                ),
+                data2: glam::Vec4::new(
+                    0.0,
+                    0.0,
+                    (((frame_number as f64 % f32::MAX as f64) / 240.0)
+                        .cos()
+                        .abs() as f32)
+                        + 1.0,
+                    1.0,
+                ),
                 data3: glam::Vec4::splat(0.0),
                 data4: glam::Vec4::splat(0.0),
             };
-            device.get_handle().cmd_push_constants(cmd.handle(), gradient_pipeline_layout.handle(), vk::ShaderStageFlags::COMPUTE, 0, unsafe {
-                std::slice::from_raw_parts(
-                    &pc as *const PushConstants as *const u8,
-                    std::mem::size_of::<PushConstants>()
-                )
-            });
-            device.get_handle().cmd_dispatch(cmd.handle(),
-                                             (draw_image.extent().width as f32 / 16.0).ceil() as u32,
-                                             (draw_image.extent().height as f32 / 16.0).ceil() as u32, 
-                                             1
+            device.get_handle().cmd_push_constants(
+                cmd.handle(),
+                gradient_pipeline.layout(),
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                unsafe {
+                    std::slice::from_raw_parts(
+                        &pc as *const PushConstants as *const u8,
+                        std::mem::size_of::<PushConstants>(),
+                    )
+                },
+            );
+            device.get_handle().cmd_dispatch(
+                cmd.handle(),
+                (draw_image.extent().width as f32 / 16.0).ceil() as u32,
+                (draw_image.extent().height as f32 / 16.0).ceil() as u32,
+                1,
             )
         }
     }
@@ -506,11 +552,17 @@ impl<'a> RenderContext<'a> {
                 height: draw_image.extent().height,
             },
             color_attachments,
-            None
+            None,
         );
         unsafe {
-            device.get_handle().cmd_begin_rendering(cmd.handle(), &render_info);
-            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::GRAPHICS, triangle_pipeline.handle());
+            device
+                .get_handle()
+                .cmd_begin_rendering(cmd.handle(), &render_info);
+            device.get_handle().cmd_bind_pipeline(
+                cmd.handle(),
+                vk::PipelineBindPoint::GRAPHICS,
+                triangle_pipeline.handle(),
+            );
             let viewport = vk::Viewport {
                 x: 0.0,
                 y: 0.0,
@@ -519,20 +571,21 @@ impl<'a> RenderContext<'a> {
                 min_depth: 0.0,
                 max_depth: 1.0,
             };
-            device.get_handle().cmd_set_viewport(cmd.handle(), 0, &[viewport]);
+            device
+                .get_handle()
+                .cmd_set_viewport(cmd.handle(), 0, &[viewport]);
             let scissor = vk::Rect2D {
-                offset: vk::Offset2D {
-                    x: 0,
-                    y: 0,
-                },
+                offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D {
                     width: draw_image.extent().width,
                     height: draw_image.extent().height,
                 },
             };
-            device.get_handle().cmd_set_scissor(cmd.handle(), 0, &[scissor]);
+            device
+                .get_handle()
+                .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
 
-            device.get_handle().cmd_draw(cmd.handle(), 3, 1, 0 ,0);
+            device.get_handle().cmd_draw(cmd.handle(), 3, 1, 0, 0);
             device.get_handle().cmd_end_rendering(cmd.handle());
         }
     }
@@ -605,8 +658,7 @@ impl<'a> RenderContext<'a> {
             self.draw_image.as_ref().unwrap(),
             self.frame_number,
             self.gradient_pipeline.clone(),
-            self.gradient_pipeline_layout.clone(),
-            self.draw_image_descriptors.unwrap()
+            self.draw_image_descriptors.unwrap(),
         );
         // add a sync point
         self.draw_image.as_ref().unwrap().transition(
@@ -795,27 +847,33 @@ fn main() {
 
     // Shader compilation
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler.compile_file(
-        std::path::PathBuf::from("./shaders/gradient.comp"),
-        std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
-        dagal::shader::ShaderKind::Compute
-    ).unwrap();
+    shader_compiler
+        .compile_file(
+            std::path::PathBuf::from("./shaders/gradient.comp"),
+            std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
+            dagal::shader::ShaderKind::Compute,
+        )
+        .unwrap();
 
     // Shader compilation
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler.compile_file(
-        std::path::PathBuf::from("./shaders/colored_triangle.frag"),
-        std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
-        dagal::shader::ShaderKind::Fragment
-    ).unwrap();
+    shader_compiler
+        .compile_file(
+            std::path::PathBuf::from("./shaders/colored_triangle.frag"),
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
+            dagal::shader::ShaderKind::Fragment,
+        )
+        .unwrap();
 
     // Shader compilation
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler.compile_file(
-        std::path::PathBuf::from("./shaders/colored_triangle.vert"),
-        std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
-        dagal::shader::ShaderKind::Vertex
-    ).unwrap();
+    shader_compiler
+        .compile_file(
+            std::path::PathBuf::from("./shaders/colored_triangle.vert"),
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
+            dagal::shader::ShaderKind::Vertex,
+        )
+        .unwrap();
 
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
