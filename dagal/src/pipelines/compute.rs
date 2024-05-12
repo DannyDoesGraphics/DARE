@@ -73,7 +73,7 @@ impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
             flags: vk::PipelineShaderStageCreateFlags::empty(),
             stage: vk::ShaderStageFlags::COMPUTE,
             module: self.compute_shader.as_ref().unwrap().handle(),
-            p_name: "main".as_ptr() as *const c_char,
+            p_name: "main\0".as_ptr() as *const c_char,
             p_specialization_info: ptr::null(),
             _marker: Default::default(),
         };

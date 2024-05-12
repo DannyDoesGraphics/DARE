@@ -49,10 +49,8 @@ struct RenderContext<'a> {
     gradient_pipeline: dagal::pipelines::ComputePipeline,
     gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
 
-    inversion_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
-    inversion_descriptor_set: Option<vk::DescriptorSet>,
-    inversion_pipeline: dagal::pipelines::ComputePipeline,
-    inversion_pipeline_layout: dagal::pipelines::PipelineLayout,
+    triangle_pipeline_layout: dagal::pipelines::PipelineLayout,
+    triangle_pipeline: dagal::pipelines::GraphicsPipeline,
 }
 
 struct Frame<'a> {
@@ -213,25 +211,39 @@ impl<'a> RenderContext<'a> {
             .replace_shader(compute_draw_shader.clone(), vk::ShaderStageFlags::COMPUTE)
             .build(device.clone()).unwrap();
         deletion_stack.push_resource(&gradient_pipeline);
-        let inversion_descriptor_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
-            .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
-            .build(device.clone(), vk::ShaderStageFlags::COMPUTE, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty())
-            .unwrap();
-        deletion_stack.push_resource(&inversion_descriptor_set_layout);
-        let inversion_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
-            .push_descriptor_sets(vec![inversion_descriptor_set_layout.handle()])
+        compute_draw_shader.destroy();
+
+        // triangle pipeline
+        let mut triangle_frag_shader = dagal::shader::Shader::from_file(
+            device.clone(),
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv")
+        ).unwrap();
+        let mut triangle_vert_shader = dagal::shader::Shader::from_file(
+            device.clone(),
+            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv")
+        ).unwrap();
+        let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
-        deletion_stack.push_resource(&inversion_pipeline_layout);
-        let mut inversion_shader = dagal::shader::Shader::from_file(device.clone(), std::path::PathBuf::from("./shaders/compiled/inversion.comp.spv")).unwrap();
-        let inversion_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(inversion_pipeline_layout.clone())
-            .replace_shader(inversion_shader.clone(), vk::ShaderStageFlags::COMPUTE)
-            .build(device.clone())
-            .unwrap();
-        deletion_stack.push_resource(&inversion_pipeline);
-        inversion_shader.destroy();
-        compute_draw_shader.destroy();
+        deletion_stack.push_resource(&triangle_pipeline_layout);
+        let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
+            .clear()
+            .replace_layout(triangle_pipeline_layout.clone())
+            .set_shader(triangle_vert_shader.clone(), vk::ShaderStageFlags::VERTEX)
+            .set_shader(triangle_frag_shader.clone(), vk::ShaderStageFlags::FRAGMENT)
+            .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .set_polygon_mode(vk::PolygonMode::FILL)
+            .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
+            .set_multisampling_none()
+            .disable_blending()
+            .disable_depth_test()
+            .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
+            .set_depth_format(vk::Format::UNDEFINED)
+            .build(device.clone()).unwrap();
+        deletion_stack.push_resource(&triangle_pipeline);
+
+        triangle_frag_shader.destroy();
+        triangle_vert_shader.destroy();
         Self {
             instance,
             physical_device,
@@ -260,11 +272,8 @@ impl<'a> RenderContext<'a> {
             gradient_pipeline,
             gradient_pipeline_layout,
 
-
-            inversion_descriptor_set_layout,
-            inversion_descriptor_set: None,
-            inversion_pipeline,
-            inversion_pipeline_layout,
+            triangle_pipeline_layout,
+            triangle_pipeline,
         }
     }
 
@@ -398,24 +407,8 @@ impl<'a> RenderContext<'a> {
             p_texel_buffer_view: ptr::null(),
             _marker: Default::default(),
         };
-        self.inversion_descriptor_set = Some(
-            self.global_descriptor_pool.allocate(self.inversion_descriptor_set_layout.handle()).unwrap()
-        );
-        let inversion_descriptor_set = vk::WriteDescriptorSet {
-            s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-            p_next: ptr::null(),
-            dst_set: self.inversion_descriptor_set.unwrap(),
-            dst_binding: 0,
-            dst_array_element: 0,
-            descriptor_count: 1,
-            descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-            p_image_info: &img_info,
-            p_buffer_info: ptr::null(),
-            p_texel_buffer_view: ptr::null(),
-            _marker: Default::default(),
-        };
         unsafe {
-            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set, inversion_descriptor_set], &[]);
+            self.device.get_handle().update_descriptor_sets(&[write_descriptor_set], &[]);
         }
     }
 
@@ -488,20 +481,59 @@ impl<'a> RenderContext<'a> {
         }
     }
 
-    fn draw_inversion(
+    fn draw_geometry(
         device: &dagal::device::LogicalDevice,
         cmd: &dagal::command::CommandBufferRecording,
         draw_image: &dagal::resource::Image,
-        mut inversion_pipeline: dagal::pipelines::ComputePipeline,
-        inversion_pipeline_layout: dagal::pipelines::PipelineLayout,
-        inversion_pipeline_descriptor_set: vk::DescriptorSet
+        draw_image_view: &dagal::resource::ImageView,
+        mut triangle_pipeline: dagal::pipelines::GraphicsPipeline,
     ) {
+        let color_attachment = vk::RenderingAttachmentInfo {
+            s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
+            p_next: ptr::null(),
+            image_view: draw_image_view.handle(),
+            image_layout: vk::ImageLayout::GENERAL,
+            load_op: vk::AttachmentLoadOp::LOAD,
+            store_op: vk::AttachmentStoreOp::STORE,
+            clear_value: vk::ClearValue::default(),
+            _marker: Default::default(),
+            ..Default::default()
+        };
+        let color_attachments = &[color_attachment];
+        let render_info = dagal::pipelines::dynamic_rendering::rendering_info(
+            vk::Extent2D {
+                width: draw_image.extent().width,
+                height: draw_image.extent().height,
+            },
+            color_attachments,
+            None
+        );
         unsafe {
-            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::COMPUTE, inversion_pipeline.handle());
-            device.get_handle().cmd_bind_descriptor_sets(cmd.handle(), vk::PipelineBindPoint::COMPUTE, inversion_pipeline_layout.handle(), 0, &[inversion_pipeline_descriptor_set], &[]);
-            device.get_handle().cmd_dispatch(cmd.handle(), (draw_image.extent().width as f32 / 16.0).ceil() as u32,
-                                             (draw_image.extent().height as f32 / 16.0).ceil() as u32,
-                                             1);
+            device.get_handle().cmd_begin_rendering(cmd.handle(), &render_info);
+            device.get_handle().cmd_bind_pipeline(cmd.handle(), vk::PipelineBindPoint::GRAPHICS, triangle_pipeline.handle());
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: draw_image.extent().width as f32,
+                height: draw_image.extent().height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+            device.get_handle().cmd_set_viewport(cmd.handle(), 0, &[viewport]);
+            let scissor = vk::Rect2D {
+                offset: vk::Offset2D {
+                    x: 0,
+                    y: 0,
+                },
+                extent: vk::Extent2D {
+                    width: draw_image.extent().width,
+                    height: draw_image.extent().height,
+                },
+            };
+            device.get_handle().cmd_set_scissor(cmd.handle(), 0, &[scissor]);
+
+            device.get_handle().cmd_draw(cmd.handle(), 3, 1, 0 ,0);
+            device.get_handle().cmd_end_rendering(cmd.handle());
         }
     }
 
@@ -577,41 +609,23 @@ impl<'a> RenderContext<'a> {
             self.draw_image_descriptors.unwrap()
         );
         // add a sync point
-        let dependency_info = vk::DependencyInfo {
-            s_type: vk::StructureType::DEPENDENCY_INFO,
-            p_next: ptr::null(),
-            dependency_flags: vk::DependencyFlags::empty(),
-            memory_barrier_count: 0,
-            p_memory_barriers: ptr::null(),
-            buffer_memory_barrier_count: 0,
-            p_buffer_memory_barriers: ptr::null(),
-            image_memory_barrier_count: 1,
-            p_image_memory_barriers: &vk::ImageMemoryBarrier2 {
-                s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
-                p_next: ptr::null(),
-                src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                src_access_mask: vk::AccessFlags2::empty(),
-                dst_stage_mask: vk::PipelineStageFlags2::empty(),
-                dst_access_mask: vk::AccessFlags2::empty(),
-                old_layout: vk::ImageLayout::GENERAL,
-                new_layout: vk::ImageLayout::GENERAL,
-                src_queue_family_index: self.graphics_queue.get_family_index(),
-                dst_queue_family_index: self.graphics_queue.get_family_index(),
-                image: self.draw_image.as_ref().unwrap().handle(),
-                subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR),
-                _marker: Default::default(),
-            },
-            _marker: Default::default(),
-        };
-        unsafe {
-            self.device.get_handle().cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
-        }
-        Self::draw_inversion(&self.device, &cmd, self.draw_image.as_ref().unwrap(), self.inversion_pipeline.clone(), self.inversion_pipeline_layout.clone(), self.inversion_descriptor_set.unwrap());
-
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
             &self.graphics_queue,
             vk::ImageLayout::GENERAL,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+        Self::draw_geometry(
+            &self.device,
+            &cmd,
+            self.draw_image.as_ref().unwrap(),
+            self.draw_image_view.as_ref().unwrap(),
+            self.triangle_pipeline.clone(),
+        );
+        self.draw_image.as_ref().unwrap().transition(
+            &cmd,
+            &self.graphics_queue,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         );
         swapchain_image.transition(
@@ -790,9 +804,17 @@ fn main() {
     // Shader compilation
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
     shader_compiler.compile_file(
-        std::path::PathBuf::from("./shaders/inversion.comp"),
-        std::path::PathBuf::from("./shaders/compiled/inversion.comp.spv"),
-        dagal::shader::ShaderKind::Compute
+        std::path::PathBuf::from("./shaders/colored_triangle.frag"),
+        std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
+        dagal::shader::ShaderKind::Fragment
+    ).unwrap();
+
+    // Shader compilation
+    let shader_compiler = dagal::shader::ShaderCCompiler::new();
+    shader_compiler.compile_file(
+        std::path::PathBuf::from("./shaders/colored_triangle.vert"),
+        std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
+        dagal::shader::ShaderKind::Vertex
     ).unwrap();
 
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
