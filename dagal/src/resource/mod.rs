@@ -8,3 +8,4 @@ pub mod traits;
 pub use buffer::Buffer;
 pub use buffer::BufferCreateInfo;
 pub use image_view::ImageView;
+pub use image_view::ImageViewCreateInfo;

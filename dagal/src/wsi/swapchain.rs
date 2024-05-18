@@ -85,24 +85,26 @@ impl Swapchain {
             .iter()
             .map(|image| {
                 crate::resource::ImageView::new(
-                    &vk::ImageViewCreateInfo {
-                        s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                        p_next: ptr::null(),
-                        flags: vk::ImageViewCreateFlags::empty(),
-                        image: *image,
-                        view_type: vk::ImageViewType::TYPE_2D,
-                        format: self.format,
-                        components: Default::default(),
-                        subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: vk::ImageAspectFlags::COLOR,
-                            base_mip_level: 0,
-                            level_count: 1,
-                            base_array_layer: 0,
-                            layer_count: 1,
+                    crate::resource::ImageViewCreateInfo::FromCreateInfo {
+                        create_info: vk::ImageViewCreateInfo {
+                            s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                            p_next: ptr::null(),
+                            flags: vk::ImageViewCreateFlags::empty(),
+                            image: *image,
+                            view_type: vk::ImageViewType::TYPE_2D,
+                            format: self.format,
+                            components: Default::default(),
+                            subresource_range: vk::ImageSubresourceRange {
+                                aspect_mask: vk::ImageAspectFlags::COLOR,
+                                base_mip_level: 0,
+                                level_count: 1,
+                                base_array_layer: 0,
+                                layer_count: 1,
+                            },
+                            _marker: Default::default(),
                         },
-                        _marker: Default::default(),
+                        device: self.device.clone(),
                     },
-                    self.device.clone(),
                 )
             })
             .collect::<Result<Vec<_>, _>>()

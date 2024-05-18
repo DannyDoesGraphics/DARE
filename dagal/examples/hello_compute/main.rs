@@ -117,7 +117,7 @@ impl<'a> RenderContext<'a> {
             instance.get_instance(),
             device.get_handle(),
             physical_device.handle(),
-            true
+            true,
         )
         .unwrap();
         deletion_stack.push_resource(&allocator);
@@ -315,27 +315,28 @@ impl<'a> RenderContext<'a> {
             location: dagal::allocators::MemoryLocation::GpuOnly,
         })
         .unwrap();
-        let image_view = dagal::resource::ImageView::new(
-            &vk::ImageViewCreateInfo {
-                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                p_next: ptr::null(),
-                flags: vk::ImageViewCreateFlags::empty(),
-                image: image.handle(),
-                view_type: vk::ImageViewType::TYPE_2D,
-                format: image.format(),
-                components: Default::default(),
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
+        let image_view =
+            dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+                create_info: vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageViewCreateFlags::empty(),
+                    image: image.handle(),
+                    view_type: vk::ImageViewType::TYPE_2D,
+                    format: image.format(),
+                    components: Default::default(),
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    _marker: Default::default(),
                 },
-                _marker: Default::default(),
-            },
-            self.device.clone(),
-        )
-        .unwrap();
+                device: self.device.clone(),
+            })
+            .unwrap();
         self.draw_image = Some(image);
         self.wsi_deletion_stack.push_resource(&image_view);
         self.draw_image_view = Some(image_view);

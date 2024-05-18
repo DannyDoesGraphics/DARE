@@ -1,4 +1,5 @@
 use crate::command::command_buffer::CmdBuffer;
+use crate::resource::traits::Resource;
 use ash::vk;
 use std::ops::Deref;
 use std::ptr;
