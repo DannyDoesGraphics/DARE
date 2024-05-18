@@ -1,11 +1,12 @@
 use std::ffi::c_char;
-use std::ptr;
+use std::path::PathBuf;
+use std::{fs, ptr};
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use ash::vk;
 use tracing::trace;
-
 use crate::pipelines::traits::PipelineBuilder;
+use crate::shader::ShaderCompiler;
 use crate::traits::Destructible;
 
 #[derive(Debug, Clone)]

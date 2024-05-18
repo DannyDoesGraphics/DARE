@@ -1,6 +1,6 @@
 mod primitives;
 
-use std::{mem, ptr, slice};
+use std::{mem, path, ptr, slice};
 use std::time::Instant;
 use gltf::Primitive;
 
@@ -197,6 +197,8 @@ impl<'a> RenderContext<'a> {
         )
         .unwrap();
         deletion_stack.push_resource(&global_descriptor_pool);
+
+        let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(
@@ -212,29 +214,13 @@ impl<'a> RenderContext<'a> {
             .push_push_constant_struct::<PushConstants>(vk::ShaderStageFlags::COMPUTE)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
-        let compute_draw_shader = dagal::shader::Shader::from_file(
-            device.clone(),
-            std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
-        )
-        .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
             .replace_layout(gradient_pipeline_layout)
-            .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
+            .replace_shader_from_source_file(device.clone(), &compiler, path::PathBuf::from("./dare/shaders/gradient.comp"), vk::ShaderStageFlags::COMPUTE).unwrap()
             .build(device.clone())
             .unwrap();
         deletion_stack.push_resource(&gradient_pipeline);
 
-        // triangle pipeline
-        let triangle_frag_shader = dagal::shader::Shader::from_file(
-            device.clone(),
-            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle.frag.spv"),
-        )
-        .unwrap();
-        let triangle_vert_shader = dagal::shader::Shader::from_file(
-            device.clone(),
-            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle_mesh.vert.spv"),
-        )
-        .unwrap();
         let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .push_push_constant_struct::<primitives::GPUDrawPushConstants>(vk::ShaderStageFlags::VERTEX)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
@@ -242,8 +228,8 @@ impl<'a> RenderContext<'a> {
         let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
             .clear()
             .replace_layout(triangle_pipeline_layout)
-            .replace_shader(triangle_vert_shader, vk::ShaderStageFlags::VERTEX)
-            .replace_shader(triangle_frag_shader, vk::ShaderStageFlags::FRAGMENT)
+            .replace_shader_from_source_file(device.clone(), &compiler, std::path::PathBuf::from("./dare/shaders/colored_triangle_mesh.vert"), vk::ShaderStageFlags::VERTEX).unwrap()
+            .replace_shader_from_source_file(device.clone(), &compiler, std::path::PathBuf::from("./dare/shaders/colored_triangle.frag"), vk::ShaderStageFlags::FRAGMENT).unwrap()
             .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
             .set_polygon_mode(vk::PolygonMode::FILL)
             .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
@@ -886,36 +872,6 @@ fn main() {
         .with_max_level(Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
-
-    // Shader compilation
-    let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler
-        .compile_file(
-            std::path::PathBuf::from("./dare/shaders/gradient.comp"),
-            std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
-            dagal::shader::ShaderKind::Compute,
-        )
-        .unwrap();
-
-    // Shader compilation
-    let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler
-        .compile_file(
-            std::path::PathBuf::from("./dare/shaders/colored_triangle.frag"),
-            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle.frag.spv"),
-            dagal::shader::ShaderKind::Fragment,
-        )
-        .unwrap();
-
-    // Shader compilation
-    let shader_compiler = dagal::shader::ShaderCCompiler::new();
-    shader_compiler
-        .compile_file(
-            std::path::PathBuf::from("./dare/shaders/colored_triangle_mesh.vert"),
-            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle_mesh.vert.spv"),
-            dagal::shader::ShaderKind::Vertex,
-        )
-        .unwrap();
 
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);

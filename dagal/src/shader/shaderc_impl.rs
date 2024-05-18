@@ -18,7 +18,7 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
         out_path: std::path::PathBuf,
         shader_kind: super::ShaderKind,
     ) -> Result<()> {
-        if !super::traits::is_file_newer(in_path.clone(), out_path.clone())? {
+        if !super::is_file_newer(in_path.clone(), out_path.clone())? {
             Ok(())
         } else {
             let in_content = std::fs::read_to_string(in_path.clone())?;
@@ -27,6 +27,9 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
                 shader_kind,
                 in_path.file_name().unwrap().to_str().unwrap(),
             )?;
+            let output: Vec<u8> = output.iter().map(|data| {
+                data.to_le_bytes()
+            }).flatten().collect();
             std::fs::write(out_path, output.as_slice())?;
             Ok(())
         }
@@ -37,7 +40,7 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
         content: &str,
         shader_kind: super::ShaderKind,
         shader_name: &str,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Vec<u32>> {
         let options = shaderc::CompileOptions::new();
         if options.is_none() {
             return Err(anyhow::Error::from(crate::DagalError::ShadercError));
@@ -53,7 +56,7 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
             Some(&options),
         )?;
 
-        Ok(output.as_binary_u8().to_vec())
+        Ok(output.as_binary().to_vec())
     }
 }
 
