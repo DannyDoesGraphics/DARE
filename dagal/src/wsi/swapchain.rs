@@ -4,6 +4,7 @@ use ash;
 use ash::vk;
 use derivative::Derivative;
 
+use crate::resource::traits::Resource;
 use std::ptr;
 use tracing::trace;
 
@@ -64,18 +65,19 @@ impl Swapchain {
         Ok(unsafe { self.ext.get_swapchain_images(self.handle)? }
             .into_iter()
             .map(|image| {
-                crate::resource::Image::from_vk(
-                    self.device.clone(),
+                crate::resource::Image::new(crate::resource::ImageCreateInfo::FromVkNotManaged {
+                    device: self.device.clone(),
                     image,
-                    self.format,
-                    vk::Extent3D {
+                    format: self.format,
+                    extent: vk::Extent3D {
                         width: self.extent.width,
                         height: self.extent.height,
                         depth: 1,
                     },
-                )
+                })
+                .unwrap()
             })
-            .collect())
+            .collect::<Vec<crate::resource::Image>>())
     }
 
     pub fn get_image_views(&self, images: &[vk::Image]) -> Result<Vec<crate::resource::ImageView>> {

@@ -1,10 +1,10 @@
-use std::future::Future;
-use std::pin::Pin;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
-use std::{ptr, thread};
+use std::future::Future;
+use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{ptr, thread};
 use tracing::trace;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,7 +32,11 @@ impl Fence {
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkFence {:p}", handle);
 
-        Ok(Self { handle, device, wait_thread_spawned: false })
+        Ok(Self {
+            handle,
+            device,
+            wait_thread_spawned: false,
+        })
     }
 
     /// Gets underlying reference of the handle
@@ -116,9 +120,7 @@ impl Future for Fence {
     /// - The fence has been signaled
     /// - The fence timed out (u64::MAX)
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let status = unsafe {
-            self.device.get_handle().get_fence_status(self.handle)
-        };
+        let status = unsafe { self.device.get_handle().get_fence_status(self.handle) };
         if status.is_err() {
             return Poll::Ready(Err(anyhow::Error::from(status.unwrap_err())));
         }

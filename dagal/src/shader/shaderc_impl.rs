@@ -27,9 +27,11 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
                 shader_kind,
                 in_path.file_name().unwrap().to_str().unwrap(),
             )?;
-            let output: Vec<u8> = output.iter().map(|data| {
-                data.to_le_bytes()
-            }).flatten().collect();
+            let output: Vec<u8> = output
+                .iter()
+                .map(|data| data.to_le_bytes())
+                .flatten()
+                .collect();
             std::fs::write(out_path, output.as_slice())?;
             Ok(())
         }

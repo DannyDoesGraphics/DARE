@@ -2,12 +2,12 @@ use std::ffi::c_char;
 use std::path::PathBuf;
 use std::{fs, ptr};
 
-use anyhow::{Error, Result};
-use ash::vk;
-use tracing::trace;
 use crate::pipelines::traits::PipelineBuilder;
 use crate::shader::ShaderCompiler;
 use crate::traits::Destructible;
+use anyhow::{Error, Result};
+use ash::vk;
+use tracing::trace;
 
 #[derive(Debug, Clone)]
 pub struct ComputePipeline {

@@ -19,6 +19,10 @@ pub trait ShaderCompiler {
     ) -> Result<()>;
 
     /// Compiles a shader from given string content and outputs the spir-v contents
-    fn compile(&self, content: &str, shader_kind: ShaderKind, shader_name: &str)
-        -> Result<Vec<u32>>;
+    fn compile(
+        &self,
+        content: &str,
+        shader_kind: ShaderKind,
+        shader_name: &str,
+    ) -> Result<Vec<u32>>;
 }

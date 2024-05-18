@@ -2,12 +2,12 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
+use crate::allocators::MemoryLocation;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
 use tracing::trace;
 use vk_mem::Alloc;
-use crate::allocators::MemoryType;
 
 use crate::traits::Destructible;
 
@@ -15,6 +15,7 @@ use crate::traits::Destructible;
 pub struct VkMemAllocator {
     handle: Arc<Mutex<Option<vk_mem::Allocator>>>,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
+    buffer_device_address: bool,
 }
 
 unsafe impl Send for VkMemAllocator {}
@@ -33,18 +34,18 @@ impl VkMemAllocator {
         instance: &ash::Instance,
         device: &ash::Device,
         physical_device: vk::PhysicalDevice,
+        buffer_device_address: bool,
     ) -> Result<Self> {
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         let mut allocator_ci = vk_mem::AllocatorCreateInfo::new(instance, device, physical_device);
-        allocator_ci.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+        if buffer_device_address {
+            allocator_ci.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+        }
         Ok(Self {
-            handle: unsafe {
-                Arc::new(Mutex::new(Some(vk_mem::Allocator::new(
-                   allocator_ci,
-                )?)))
-            },
+            handle: unsafe { Arc::new(Mutex::new(Some(vk_mem::Allocator::new(allocator_ci)?))) },
             memory_properties,
+            buffer_device_address,
         })
     }
 
@@ -87,7 +88,7 @@ impl super::Allocator for VkMemAllocator {
         &mut self,
         name: &str,
         requirements: &vk::MemoryRequirements,
-        ty: super::MemoryType,
+        ty: MemoryLocation,
     ) -> Result<Self::Allocation> {
         let allocator = self
             .handle
@@ -95,20 +96,18 @@ impl super::Allocator for VkMemAllocator {
             .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
         let allocator = allocator.as_ref().unwrap();
         let memory_property_flags = match ty {
-            super::MemoryType::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            super::MemoryType::CpuToGpu => {
+            MemoryLocation::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            MemoryLocation::CpuToGpu => {
                 vk::MemoryPropertyFlags::HOST_VISIBLE
                     | vk::MemoryPropertyFlags::HOST_COHERENT
                     | vk::MemoryPropertyFlags::DEVICE_LOCAL
             }
-            super::MemoryType::GpuToCpu => {
+            MemoryLocation::GpuToCpu => {
                 vk::MemoryPropertyFlags::DEVICE_LOCAL
                     | vk::MemoryPropertyFlags::HOST_COHERENT
                     | vk::MemoryPropertyFlags::HOST_CACHED
             }
-            MemoryType::CpuOnly => {
-                vk::MemoryPropertyFlags::empty()
-            }
+            MemoryLocation::CpuOnly => vk::MemoryPropertyFlags::empty(),
         };
 
         let memory_type_bits = self
@@ -119,10 +118,10 @@ impl super::Allocator for VkMemAllocator {
                 requirements,
                 &vk_mem::AllocationCreateInfo {
                     flags: match ty {
-                        MemoryType::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
-                        MemoryType::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED,
-                        MemoryType::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED,
-                        MemoryType::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryLocation::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
+                        MemoryLocation::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryLocation::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryLocation::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED,
                     },
                     required_flags: memory_property_flags,
                     usage: vk_mem::MemoryUsage::from(ty),
@@ -211,13 +210,13 @@ impl super::Allocation for VkMemAllocation {
 }
 
 #[allow(deprecated)]
-impl From<MemoryType> for vk_mem::MemoryUsage {
-    fn from(value: super::MemoryType) -> Self {
+impl From<MemoryLocation> for vk_mem::MemoryUsage {
+    fn from(value: MemoryLocation) -> Self {
         match value {
-            MemoryType::GpuOnly => vk_mem::MemoryUsage::GpuOnly,
-            MemoryType::CpuToGpu => vk_mem::MemoryUsage::CpuToGpu,
-            MemoryType::GpuToCpu => vk_mem::MemoryUsage::GpuToCpu,
-            MemoryType::CpuOnly => vk_mem::MemoryUsage::CpuOnly,
+            MemoryLocation::GpuOnly => vk_mem::MemoryUsage::GpuOnly,
+            MemoryLocation::CpuToGpu => vk_mem::MemoryUsage::CpuToGpu,
+            MemoryLocation::GpuToCpu => vk_mem::MemoryUsage::GpuToCpu,
+            MemoryLocation::CpuOnly => vk_mem::MemoryUsage::CpuOnly,
         }
     }
 }

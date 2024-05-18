@@ -82,13 +82,9 @@ pub struct CommandBufferRecording {
 }
 
 impl CommandBufferRecording {
-
     /// Create a new [`CommandBufferRecording`] from VkObjects. For internal use only.
     pub(crate) fn from_vk(handle: vk::CommandBuffer, device: crate::device::LogicalDevice) -> Self {
-        Self {
-            handle,
-            device
-        }
+        Self { handle, device }
     }
 
     /// Ends recording into the command buffer

@@ -4,6 +4,7 @@ use std::time::Instant;
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::raw_window_handle::HasDisplayHandle;
+use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
 use dagal::winit;
 use dagal::wsi::WindowDimensions;
@@ -94,6 +95,7 @@ impl<'a> RenderContext<'a> {
             instance.get_instance(),
             device.get_handle(),
             physical_device.handle(),
+            true
         )
         .unwrap();
         deletion_stack.push_resource(&allocator);
@@ -217,9 +219,9 @@ impl<'a> RenderContext<'a> {
     }
 
     fn create_draw_image(&mut self) {
-        let image = dagal::resource::Image::new_with_new_memory(
-            self.device.clone(),
-            &vk::ImageCreateInfo {
+        let image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+            device: self.device.clone(),
+            image_ci: vk::ImageCreateInfo {
                 s_type: vk::StructureType::IMAGE_CREATE_INFO,
                 p_next: ptr::null(),
                 flags: vk::ImageCreateFlags::empty(),
@@ -244,10 +246,9 @@ impl<'a> RenderContext<'a> {
                 initial_layout: vk::ImageLayout::UNDEFINED,
                 _marker: Default::default(),
             },
-            &mut self.allocator,
-            dagal::allocators::MemoryType::GpuOnly,
-            format!("Draw image - {:?}", Instant::now()).as_str(),
-        )
+            allocator: &mut self.allocator,
+            location: dagal::allocators::MemoryLocation::GpuOnly,
+        })
         .unwrap();
         let image_view = dagal::resource::ImageView::new(
             &vk::ImageViewCreateInfo {

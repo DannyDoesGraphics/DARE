@@ -40,7 +40,7 @@ impl<T: Allocator> SlotMapMemoryAllocator<T> {
         &mut self,
         name: &str,
         requirements: &vk::MemoryRequirements,
-        ty: super::MemoryType,
+        ty: super::MemoryLocation,
     ) -> Result<MemoryAllocation<T>> {
         let allocation = self.allocator.allocate(name, requirements, ty)?;
         let mut slot_map = self

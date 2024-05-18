@@ -1,8 +1,8 @@
 /// Provides traits for whatever shader provider you wish to use to compile & process your shaders
 pub mod traits;
 
-use std::env;
 use ash::vk;
+use std::env;
 pub use traits::*;
 pub mod shader;
 pub use shader::Shader;
@@ -22,12 +22,12 @@ pub enum ShaderKind {
 
 impl From<vk::ShaderStageFlags> for ShaderKind {
     fn from(value: vk::ShaderStageFlags) -> Self {
-        match value  {
+        match value {
             vk::ShaderStageFlags::VERTEX => ShaderKind::Vertex,
             vk::ShaderStageFlags::COMPUTE => ShaderKind::Compute,
             vk::ShaderStageFlags::FRAGMENT => ShaderKind::Fragment,
             vk::ShaderStageFlags::GEOMETRY => ShaderKind::Geometry,
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }

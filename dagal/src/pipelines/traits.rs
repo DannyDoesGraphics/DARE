@@ -26,18 +26,29 @@ pub trait PipelineBuilder: Default + Debug {
     fn replace_shader(self, shader: crate::shader::Shader, stage: vk::ShaderStageFlags) -> Self;
 
     /// Loads and replaces a shader based on SPIR-V content
-    fn replace_shader_from_spirv(self, device: crate::device::LogicalDevice, content: &[u32], stage: vk::ShaderStageFlags) -> Result<Self, (Self, anyhow::Error)> {
+    fn replace_shader_from_spirv(
+        self,
+        device: crate::device::LogicalDevice,
+        content: &[u32],
+        stage: vk::ShaderStageFlags,
+    ) -> Result<Self, (Self, anyhow::Error)> {
         let shader = crate::shader::Shader::from_slice(device, content);
         if shader.is_err() {
             let err = shader.unwrap_err();
-            return Err((self, anyhow::Error::from(err)))
+            return Err((self, anyhow::Error::from(err)));
         }
         let shader = shader.unwrap();
         Ok(self.replace_shader(shader, stage))
     }
 
     /// Loads and replaces a shader based on source code (**not .spv**) from a file
-    fn replace_shader_from_source_file<T: crate::shader::ShaderCompiler>(self, device: crate::device::LogicalDevice, compiler: &T, path: std::path::PathBuf, stage: vk::ShaderStageFlags) -> Result<Self, (Self, anyhow::Error)> {
+    fn replace_shader_from_source_file<T: crate::shader::ShaderCompiler>(
+        self,
+        device: crate::device::LogicalDevice,
+        compiler: &T,
+        path: std::path::PathBuf,
+        stage: vk::ShaderStageFlags,
+    ) -> Result<Self, (Self, anyhow::Error)> {
         /// do not care, force compilation of files
         let content = fs::read_to_string(path);
         if content.is_err() {
@@ -45,7 +56,11 @@ pub trait PipelineBuilder: Default + Debug {
             return Err((self, anyhow::Error::from(err)));
         }
         let content = content.unwrap();
-        let content = compiler.compile(content.as_str(), crate::shader::ShaderKind::from(stage), "asdasd");
+        let content = compiler.compile(
+            content.as_str(),
+            crate::shader::ShaderKind::from(stage),
+            "asdasd",
+        );
         if content.is_err() {
             let err = content.unwrap_err();
             return Err((self, anyhow::Error::from(err)));

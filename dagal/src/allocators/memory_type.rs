@@ -1,4 +1,4 @@
-pub enum MemoryType {
+pub enum MemoryLocation {
     /// Memory useful in device accessible memory
     GpuOnly,
     /// Memory useful for uploading data to the device
@@ -6,5 +6,5 @@ pub enum MemoryType {
     /// Memory useful for read back of data
     GpuToCpu,
     /// Memory that is restricted to the host
-    CpuOnly
+    CpuOnly,
 }

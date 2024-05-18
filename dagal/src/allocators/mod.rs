@@ -23,8 +23,6 @@ pub use slot_map_allocator::SlotMapMemoryAllocator;
 pub use memory_type::*;
 
 /// An interface to universally interact with all allocators with
-
-/// Expectation of an allocator
 pub trait Allocator: Clone + Send + Sync {
     type Allocation: Allocation;
 
@@ -33,7 +31,7 @@ pub trait Allocator: Clone + Send + Sync {
         &mut self,
         name: &str,
         requirements: &vk::MemoryRequirements,
-        ty: MemoryType,
+        ty: MemoryLocation,
     ) -> Result<Self::Allocation>;
 
     /// Free an allocation
