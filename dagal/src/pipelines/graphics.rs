@@ -3,8 +3,7 @@ use ash::vk;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void};
 use std::fmt::Debug;
-use std::path::PathBuf;
-use std::{fs, ptr};
+use std::{ptr};
 use tracing::trace;
 
 #[derive(Debug, Clone)]

@@ -3,7 +3,6 @@ use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
-use std::ops::Deref;
 
 #[derive(Debug, Clone)]
 pub struct ImageView {

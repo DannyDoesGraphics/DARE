@@ -1,7 +1,6 @@
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
 use ash::vk;
-use std::ops::Deref;
 use std::ptr;
 
 /// Contains the dynamic render context which contains references to the original command buffer
@@ -76,7 +75,7 @@ impl<'a> DynamicRenderContext<'a> {
     }
 
     /// Ends rendering
-    pub fn end_rendering(mut self) {
+    pub fn end_rendering(self) {
         unsafe {
             self.handle
                 .get_device()

@@ -2,7 +2,6 @@ use crate::command::command_buffer::CmdBuffer;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
-use std::ptr;
 
 /// Adds a basic struct which can immediately submit all commands
 #[derive(Debug)]

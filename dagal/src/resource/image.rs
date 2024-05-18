@@ -3,10 +3,9 @@ use crate::allocators::{Allocation, Allocator, SlotMapMemoryAllocator, VkMemAllo
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
-use anyhow::{Error, Result};
+use anyhow::{Result};
 use ash::vk;
 use ash::vk::Handle;
-use std::ffi::CString;
 use std::ptr;
 use tracing::trace;
 

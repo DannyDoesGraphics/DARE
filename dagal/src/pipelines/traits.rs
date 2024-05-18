@@ -35,7 +35,7 @@ pub trait PipelineBuilder: Default + Debug {
         let shader = crate::shader::Shader::from_slice(device, content);
         if shader.is_err() {
             let err = shader.unwrap_err();
-            return Err((self, anyhow::Error::from(err)));
+            return Err((self, err));
         }
         let shader = shader.unwrap();
         Ok(self.replace_shader(shader, stage))
@@ -63,7 +63,7 @@ pub trait PipelineBuilder: Default + Debug {
         );
         if content.is_err() {
             let err = content.unwrap_err();
-            return Err((self, anyhow::Error::from(err)));
+            return Err((self, err));
         };
         let content = content.unwrap();
         self.replace_shader_from_spirv(device, content.as_slice(), stage)

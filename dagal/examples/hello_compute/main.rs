@@ -1,4 +1,3 @@
-use std::time::Instant;
 use std::{env, ptr};
 
 use dagal::ash::vk;

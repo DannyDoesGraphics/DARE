@@ -1,7 +1,5 @@
 mod primitives;
 
-use gltf::Primitive;
-use std::time::Instant;
 use std::{mem, path, ptr, slice};
 
 use dagal::allocators::VkMemAllocator;
@@ -93,7 +91,7 @@ impl<'a> RenderContext<'a> {
         }
         let instance = instance.build().unwrap();
         deletion_stack.push_resource(&instance);
-        if VALIDATION == true {
+        if VALIDATION {
             let mut debug_messenger =
                 dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
                     .unwrap();
@@ -297,7 +295,7 @@ impl<'a> RenderContext<'a> {
         let indices: [u32; 6] = [0, 1, 2, 2, 1, 3];
 
         let mut immediate_submit =
-            dagal::util::ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
+            dagal::util::ImmediateSubmit::new(device.clone(), graphics_queue).unwrap();
         let rectangle = primitives::GPUMeshBuffer::new(
             &mut allocator,
             &mut immediate_submit,

@@ -1,4 +1,4 @@
-use dagal::allocators::{Allocator, VkMemAllocator};
+use dagal::allocators::{VkMemAllocator};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
