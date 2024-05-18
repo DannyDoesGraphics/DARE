@@ -1,13 +1,18 @@
+use std::future::Future;
+use std::pin::Pin;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
-use std::ptr;
+use std::{ptr, thread};
+use std::task::{Context, Poll};
 use tracing::trace;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fence {
     handle: vk::Fence,
     device: crate::device::LogicalDevice,
+    /// thanks phobos-rs
+    wait_thread_spawned: bool,
 }
 
 impl Fence {
@@ -27,13 +32,15 @@ impl Fence {
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkFence {:p}", handle);
 
-        Ok(Self { handle, device })
+        Ok(Self { handle, device, wait_thread_spawned: false })
     }
 
+    /// Gets underlying reference of the handle
     pub fn get_handle(&self) -> &vk::Fence {
         &self.handle
     }
 
+    /// Gets underlying copy of the handle
     pub fn handle(&self) -> vk::Fence {
         self.handle
     }
@@ -99,5 +106,38 @@ impl Destructible for Fence {
 impl Drop for Fence {
     fn drop(&mut self) {
         self.destroy();
+    }
+}
+
+impl Future for Fence {
+    type Output = Result<()>;
+
+    /// A fence's future can be considered ready if:
+    /// - The fence has been signaled
+    /// - The fence timed out (u64::MAX)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let status = unsafe {
+            self.device.get_handle().get_fence_status(self.handle)
+        };
+        if status.is_err() {
+            return Poll::Ready(Err(anyhow::Error::from(status.unwrap_err())));
+        }
+        let status: bool = status.unwrap();
+        if status {
+            self.wait_thread_spawned = false;
+            return Poll::Ready(Ok(()));
+        } else if !self.wait_thread_spawned {
+            let waker = cx.waker().clone();
+            self.wait_thread_spawned = true;
+            let fence = self.handle;
+            let device = self.device.get_handle().clone();
+            thread::spawn(move || {
+                unsafe {
+                    device.wait_for_fences(&[fence], true, u64::MAX).unwrap();
+                }
+                waker.wake();
+            });
+        }
+        Poll::Pending
     }
 }

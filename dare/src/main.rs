@@ -1,13 +1,18 @@
-use std::ptr;
+mod primitives;
+
+use std::{mem, ptr, slice};
 use std::time::Instant;
+use gltf::Primitive;
 
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
+use dagal::allocators::VkMemAllocator;
 
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
+use dagal::resource::traits::Resource;
 use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
 use dagal::winit;
@@ -48,6 +53,8 @@ struct RenderContext<'a> {
 
     gradient_pipeline: dagal::pipelines::ComputePipeline,
     triangle_pipeline: dagal::pipelines::GraphicsPipeline,
+
+    rectangle: primitives::GPUMeshBuffer,
 }
 
 struct Frame<'a> {
@@ -128,7 +135,7 @@ impl<'a> RenderContext<'a> {
         )
         .unwrap();
         deletion_stack.push_resource(&allocator);
-        let allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+        let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
         let graphics_queue = graphics_queue.borrow().get_queues()[0];
@@ -207,7 +214,7 @@ impl<'a> RenderContext<'a> {
             .unwrap();
         let compute_draw_shader = dagal::shader::Shader::from_file(
             device.clone(),
-            std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
+            std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
         )
         .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
@@ -218,17 +225,18 @@ impl<'a> RenderContext<'a> {
         deletion_stack.push_resource(&gradient_pipeline);
 
         // triangle pipeline
-        let mut triangle_frag_shader = dagal::shader::Shader::from_file(
+        let triangle_frag_shader = dagal::shader::Shader::from_file(
             device.clone(),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
+            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle.frag.spv"),
         )
         .unwrap();
-        let mut triangle_vert_shader = dagal::shader::Shader::from_file(
+        let triangle_vert_shader = dagal::shader::Shader::from_file(
             device.clone(),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
+            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle_mesh.vert.spv"),
         )
         .unwrap();
         let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+            .push_push_constant_struct::<primitives::GPUDrawPushConstants>(vk::ShaderStageFlags::VERTEX)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
         let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
@@ -248,6 +256,43 @@ impl<'a> RenderContext<'a> {
             .unwrap();
         deletion_stack.push_resource(&triangle_pipeline);
 
+        // Avengers, assemble rectangle
+        let vertices: [primitives::Vertex; 4] = [
+            primitives::Vertex {
+                position: glam::Vec3::new(0.5, -0.5, 0.0),
+                uv_x: 0.0,
+                normal: glam::Vec3::ZERO,
+                uv_y: 0.0,
+                color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
+            },
+            primitives::Vertex {
+                position: glam::Vec3::new(0.5, 0.5, 0.0),
+                uv_x: 0.0,
+                normal: glam::Vec3::ZERO,
+                uv_y: 0.0,
+                color: glam::Vec4::new(0.5, 0.5, 0.5, 1.0),
+            },
+            primitives::Vertex {
+                position: glam::Vec3::new(-0.5, -0.5, 0.0),
+                uv_x: 0.0,
+                normal: glam::Vec3::ZERO,
+                uv_y: 0.0,
+                color: glam::Vec4::new(1.0, 0.0, 0.0, 1.0),
+            },
+            primitives::Vertex {
+                position: glam::Vec3::new(-0.5, 0.5, 0.0),
+                uv_x: 0.0,
+                normal: glam::Vec3::ZERO,
+                uv_y: 0.0,
+                color: glam::Vec4::new(0.0, 1.0, 0.0, 1.0),
+            }
+        ];
+        let indices: [u32; 6] = [0,1,2,2,1,3];
+
+        let mut immediate_submit = dagal::util::ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
+        let rectangle = primitives::GPUMeshBuffer::new(&mut allocator, &mut immediate_submit, &indices, &vertices);
+        immediate_submit.destroy();
+        deletion_stack.push_resource(&rectangle);
         Self {
             instance,
             physical_device,
@@ -276,6 +321,7 @@ impl<'a> RenderContext<'a> {
             gradient_pipeline,
 
             triangle_pipeline,
+            rectangle,
         }
     }
 
@@ -533,31 +579,15 @@ impl<'a> RenderContext<'a> {
         draw_image: &dagal::resource::Image,
         draw_image_view: &dagal::resource::ImageView,
         mut triangle_pipeline: dagal::pipelines::GraphicsPipeline,
+        rectangle: &primitives::GPUMeshBuffer,
     ) {
-        let color_attachment = vk::RenderingAttachmentInfo {
-            s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
-            p_next: ptr::null(),
-            image_view: draw_image_view.handle(),
-            image_layout: vk::ImageLayout::GENERAL,
-            load_op: vk::AttachmentLoadOp::LOAD,
-            store_op: vk::AttachmentStoreOp::STORE,
-            clear_value: vk::ClearValue::default(),
-            _marker: Default::default(),
-            ..Default::default()
-        };
-        let color_attachments = &[color_attachment];
-        let render_info = dagal::pipelines::dynamic_rendering::rendering_info(
-            vk::Extent2D {
+        let dynamic_rendering_context = cmd.dynamic_rendering();
+        let dynamic_rendering_context = dynamic_rendering_context.push_image_as_color_attachment(vk::ImageLayout::GENERAL, draw_image_view, None)
+            .begin_rendering(vk::Extent2D {
                 width: draw_image.extent().width,
                 height: draw_image.extent().height,
-            },
-            color_attachments,
-            None,
-        );
+            });
         unsafe {
-            device
-                .get_handle()
-                .cmd_begin_rendering(cmd.handle(), &render_info);
             device.get_handle().cmd_bind_pipeline(
                 cmd.handle(),
                 vk::PipelineBindPoint::GRAPHICS,
@@ -585,8 +615,19 @@ impl<'a> RenderContext<'a> {
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
 
-            device.get_handle().cmd_draw(cmd.handle(), 3, 1, 0, 0);
-            device.get_handle().cmd_end_rendering(cmd.handle());
+            let push_constants = primitives::GPUDrawPushConstants {
+                world_matrix: glam::Mat4::IDENTITY,
+                vertex_buffer: rectangle.vertex_buffer.address(),
+            };
+            device.get_handle().cmd_push_constants(cmd.handle(), triangle_pipeline.layout(), vk::ShaderStageFlags::VERTEX, 0, unsafe {
+                slice::from_raw_parts(
+                    &push_constants as *const primitives::GPUDrawPushConstants as *const u8,
+                    mem::size_of::<primitives::GPUDrawPushConstants>()
+                )
+            });
+            device.get_handle().cmd_bind_index_buffer(cmd.handle(), rectangle.index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.get_handle().cmd_draw_indexed(cmd.handle(), 6, 1, 0, 0, 0);
+            dynamic_rendering_context.end_rendering();
         }
     }
 
@@ -673,6 +714,7 @@ impl<'a> RenderContext<'a> {
             self.draw_image.as_ref().unwrap(),
             self.draw_image_view.as_ref().unwrap(),
             self.triangle_pipeline.clone(),
+            &self.rectangle,
         );
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -849,8 +891,8 @@ fn main() {
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
     shader_compiler
         .compile_file(
-            std::path::PathBuf::from("./shaders/gradient.comp"),
-            std::path::PathBuf::from("./shaders/compiled/gradient.comp.spv"),
+            std::path::PathBuf::from("./dare/shaders/gradient.comp"),
+            std::path::PathBuf::from("./dare/shaders/compiled/gradient.comp.spv"),
             dagal::shader::ShaderKind::Compute,
         )
         .unwrap();
@@ -859,8 +901,8 @@ fn main() {
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
     shader_compiler
         .compile_file(
-            std::path::PathBuf::from("./shaders/colored_triangle.frag"),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.frag.spv"),
+            std::path::PathBuf::from("./dare/shaders/colored_triangle.frag"),
+            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle.frag.spv"),
             dagal::shader::ShaderKind::Fragment,
         )
         .unwrap();
@@ -869,8 +911,8 @@ fn main() {
     let shader_compiler = dagal::shader::ShaderCCompiler::new();
     shader_compiler
         .compile_file(
-            std::path::PathBuf::from("./shaders/colored_triangle.vert"),
-            std::path::PathBuf::from("./shaders/compiled/colored_triangle.vert.spv"),
+            std::path::PathBuf::from("./dare/shaders/colored_triangle_mesh.vert"),
+            std::path::PathBuf::from("./dare/shaders/compiled/colored_triangle_mesh.vert.spv"),
             dagal::shader::ShaderKind::Vertex,
         )
         .unwrap();

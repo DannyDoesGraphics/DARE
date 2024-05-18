@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
@@ -115,5 +117,16 @@ impl<T: Allocator> MemoryAllocation<T> {
             .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
         let handle = slot_map.get(&self.handle)?;
         Ok(handle.memory())
+    }
+
+    /// Get the mapped ptr of the allocation
+    pub fn mapped_ptr(&self) -> Result<Option<NonNull<c_void>>> {
+        let slot_map = self
+            .slot_map
+            .slot_map
+            .read()
+            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
+        let handle = slot_map.get(&self.handle)?;
+        Ok(handle.mapped_ptr())
     }
 }

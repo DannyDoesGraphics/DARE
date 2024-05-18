@@ -5,4 +5,6 @@ pub enum MemoryType {
     CpuToGpu,
     /// Memory useful for read back of data
     GpuToCpu,
+    /// Memory that is restricted to the host
+    CpuOnly
 }

@@ -7,6 +7,7 @@ use ash::vk;
 use derivative::Derivative;
 use tracing::trace;
 use vk_mem::Alloc;
+use crate::allocators::MemoryType;
 
 use crate::traits::Destructible;
 
@@ -35,10 +36,12 @@ impl VkMemAllocator {
     ) -> Result<Self> {
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let mut allocator_ci = vk_mem::AllocatorCreateInfo::new(instance, device, physical_device);
+        allocator_ci.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
         Ok(Self {
             handle: unsafe {
                 Arc::new(Mutex::new(Some(vk_mem::Allocator::new(
-                    vk_mem::AllocatorCreateInfo::new(instance, device, physical_device),
+                   allocator_ci,
                 )?)))
             },
             memory_properties,
@@ -103,6 +106,9 @@ impl super::Allocator for VkMemAllocator {
                     | vk::MemoryPropertyFlags::HOST_COHERENT
                     | vk::MemoryPropertyFlags::HOST_CACHED
             }
+            MemoryType::CpuOnly => {
+                vk::MemoryPropertyFlags::empty()
+            }
         };
 
         let memory_type_bits = self
@@ -112,7 +118,12 @@ impl super::Allocator for VkMemAllocator {
             allocator.allocate_memory(
                 requirements,
                 &vk_mem::AllocationCreateInfo {
-                    flags: vk_mem::AllocationCreateFlags::empty(),
+                    flags: match ty {
+                        MemoryType::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
+                        MemoryType::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryType::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryType::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED,
+                    },
                     required_flags: memory_property_flags,
                     usage: vk_mem::MemoryUsage::from(ty),
                     preferred_flags: vk::MemoryPropertyFlags::empty(),
@@ -200,12 +211,13 @@ impl super::Allocation for VkMemAllocation {
 }
 
 #[allow(deprecated)]
-impl From<super::MemoryType> for vk_mem::MemoryUsage {
+impl From<MemoryType> for vk_mem::MemoryUsage {
     fn from(value: super::MemoryType) -> Self {
         match value {
-            crate::allocators::MemoryType::GpuOnly => vk_mem::MemoryUsage::GpuOnly,
-            crate::allocators::MemoryType::CpuToGpu => vk_mem::MemoryUsage::CpuToGpu,
-            crate::allocators::MemoryType::GpuToCpu => vk_mem::MemoryUsage::GpuToCpu,
+            MemoryType::GpuOnly => vk_mem::MemoryUsage::GpuOnly,
+            MemoryType::CpuToGpu => vk_mem::MemoryUsage::CpuToGpu,
+            MemoryType::GpuToCpu => vk_mem::MemoryUsage::GpuToCpu,
+            MemoryType::CpuOnly => vk_mem::MemoryUsage::CpuOnly,
         }
     }
 }

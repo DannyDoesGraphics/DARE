@@ -5,6 +5,8 @@ pub mod deletion_stack;
 pub use deletion_stack::DeletionStack;
 pub mod slot_map;
 pub mod tests;
+pub mod immediate_submit;
+pub use immediate_submit::ImmediateSubmit;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {
     raw_pointers.iter().map(|&p| wrap_c_str(p)).collect()

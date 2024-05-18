@@ -82,6 +82,15 @@ pub struct CommandBufferRecording {
 }
 
 impl CommandBufferRecording {
+
+    /// Create a new [`CommandBufferRecording`] from VkObjects. For internal use only.
+    pub(crate) fn from_vk(handle: vk::CommandBuffer, device: crate::device::LogicalDevice) -> Self {
+        Self {
+            handle,
+            device
+        }
+    }
+
     /// Ends recording into the command buffer
     pub fn end(self) -> Result<CommandBufferExecutable> {
         unsafe { self.device.get_handle().end_command_buffer(self.handle)? }
@@ -89,6 +98,11 @@ impl CommandBufferRecording {
             handle: self.handle,
             device: self.device,
         })
+    }
+
+    /// Acquire a dynamic rendering context from the current [`CommandBufferRecording`]
+    pub fn dynamic_rendering(&self) -> crate::command::DynamicRenderContext {
+        crate::command::DynamicRenderContext::from_vk(&self)
     }
 }
 
