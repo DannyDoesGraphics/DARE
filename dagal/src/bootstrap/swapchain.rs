@@ -67,6 +67,8 @@ pub struct SwapchainBuilder {
     family_indices: HashSet<u32>,
     image_usage: vk::ImageUsageFlags,
     image_extent: vk::Extent2D,
+
+    preferred_image_counts: u32,
 }
 
 impl SwapchainBuilder {
@@ -95,6 +97,7 @@ impl SwapchainBuilder {
                 .collect(),
             preferred_color_spaces: vec![],
             preferred_present_modes: vec![],
+            preferred_image_counts: 0,
         }
     }
 
@@ -175,6 +178,17 @@ impl SwapchainBuilder {
         None
     }
 
+    /// Sets the preferred image counts of a swapchain.
+    ///
+    /// [`None`] and 0 represents using the minimum amount from [`VkSurfaceCapabilitiesKHR`](vk::SurfaceCapabilitiesKHR)
+    pub fn preferred_image_counts(mut self, preferred_count: Option<u32>) -> Self {
+        if let Some(preferred_count) = preferred_count {
+            assert!(preferred_count > self.surface_capabilities.min_image_count);
+        }
+        self.preferred_image_counts = preferred_count.unwrap_or(0);
+        self
+    }
+
     /// Builds the swapchain
     pub fn build(
         self,
@@ -187,7 +201,7 @@ impl SwapchainBuilder {
             p_next: ptr::null(),
             flags: vk::SwapchainCreateFlagsKHR::empty(),
             surface: self.surface,
-            min_image_count: self.surface_capabilities.min_image_count,
+            min_image_count: if self.preferred_image_counts == 0 { self.surface_capabilities.min_image_count } else { self.preferred_image_counts },
             image_format: Self::find_first_occurrence(
                 self.preferred_image_formats.as_slice(),
                 self.image_formats.as_slice(),
