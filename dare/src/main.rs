@@ -1,12 +1,17 @@
 mod primitives;
 
 use std::{mem, path, ptr, slice};
+use std::ffi::CString;
+use std::io::Write;
+use std::sync::Arc;
+use gltf::Gltf;
 
 use dagal::allocators::VkMemAllocator;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 use dagal::ash::vk;
+use dagal::ash::vk::Handle;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
@@ -15,6 +20,7 @@ use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
 use dagal::winit;
 use dagal::wsi::WindowDimensions;
+use crate::primitives::{GeometrySurface, GPUMeshBuffer, MeshAsset, Vertex};
 
 const FRAME_OVERLAP: usize = 2;
 
@@ -42,7 +48,9 @@ struct RenderContext<'a> {
     frame_number: usize,
     frames: Vec<Frame<'a>>,
 
-    draw_image: Option<dagal::resource::Image<dagal::allocators::VkMemAllocator>>,
+    depth_image: Option<dagal::resource::Image<VkMemAllocator>>,
+    depth_image_view: Option<dagal::resource::ImageView>,
+    draw_image: Option<dagal::resource::Image<VkMemAllocator>>,
     draw_image_view: Option<dagal::resource::ImageView>,
     draw_image_descriptors: Option<vk::DescriptorSet>,
 
@@ -50,9 +58,9 @@ struct RenderContext<'a> {
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
 
     gradient_pipeline: dagal::pipelines::ComputePipeline,
-    triangle_pipeline: dagal::pipelines::GraphicsPipeline,
+    mesh_pipeline: dagal::pipelines::GraphicsPipeline,
 
-    rectangle: primitives::GPUMeshBuffer,
+    test_meshes: Vec<Arc<MeshAsset>>,
 }
 
 struct Frame<'a> {
@@ -82,6 +90,7 @@ impl<'a> RenderContext<'a> {
         let mut deletion_stack = dagal::util::DeletionStack::new();
         let mut instance = dagal::bootstrap::InstanceBuilder::new()
             .set_vulkan_version((1, 3, 0))
+            .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())
             .set_validation(VALIDATION);
         for layer in dagal::ash_window::enumerate_required_extensions(rdh)
             .unwrap()
@@ -118,6 +127,7 @@ impl<'a> RenderContext<'a> {
                 descriptor_indexing: vk::TRUE,
                 ..Default::default()
             })
+            .debug_utils(true)
             .build(&instance)
             .unwrap();
         // clean up
@@ -254,57 +264,14 @@ impl<'a> RenderContext<'a> {
             .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
             .set_multisampling_none()
             .disable_blending()
-            .disable_depth_test()
+            .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
             .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
-            .set_depth_format(vk::Format::UNDEFINED)
+            .set_depth_format(vk::Format::D32_SFLOAT)
             .build(device.clone())
             .unwrap();
         deletion_stack.push_resource(&triangle_pipeline);
 
-        // Avengers, assemble rectangle
-        let vertices: [primitives::Vertex; 4] = [
-            primitives::Vertex {
-                position: glam::Vec3::new(0.5, -0.5, 0.0),
-                uv_x: 0.0,
-                normal: glam::Vec3::ZERO,
-                uv_y: 0.0,
-                color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
-            },
-            primitives::Vertex {
-                position: glam::Vec3::new(0.5, 0.5, 0.0),
-                uv_x: 0.0,
-                normal: glam::Vec3::ZERO,
-                uv_y: 0.0,
-                color: glam::Vec4::new(0.5, 0.5, 0.5, 1.0),
-            },
-            primitives::Vertex {
-                position: glam::Vec3::new(-0.5, -0.5, 0.0),
-                uv_x: 0.0,
-                normal: glam::Vec3::ZERO,
-                uv_y: 0.0,
-                color: glam::Vec4::new(1.0, 0.0, 0.0, 1.0),
-            },
-            primitives::Vertex {
-                position: glam::Vec3::new(-0.5, 0.5, 0.0),
-                uv_x: 0.0,
-                normal: glam::Vec3::ZERO,
-                uv_y: 0.0,
-                color: glam::Vec4::new(0.0, 1.0, 0.0, 1.0),
-            },
-        ];
-        let indices: [u32; 6] = [0, 1, 2, 2, 1, 3];
-
-        let mut immediate_submit =
-            dagal::util::ImmediateSubmit::new(device.clone(), graphics_queue).unwrap();
-        let rectangle = primitives::GPUMeshBuffer::new(
-            &mut allocator,
-            &mut immediate_submit,
-            &indices,
-            &vertices,
-        );
-        immediate_submit.destroy();
-        deletion_stack.push_resource(&rectangle);
-        Self {
+        let mut app = Self {
             instance,
             physical_device,
             device,
@@ -322,6 +289,8 @@ impl<'a> RenderContext<'a> {
             frame_number: 0,
             frames,
 
+            depth_image: None,
+            depth_image_view: None,
             draw_image: None,
             draw_image_view: None,
             draw_image_descriptors: None,
@@ -331,9 +300,12 @@ impl<'a> RenderContext<'a> {
 
             gradient_pipeline,
 
-            triangle_pipeline,
-            rectangle,
-        }
+            mesh_pipeline: triangle_pipeline,
+            test_meshes: vec![],
+        };
+        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/basicmesh.glb"));
+        app.test_meshes = meshes;
+        app
     }
 
     /// Builds a surface
@@ -419,6 +391,35 @@ impl<'a> RenderContext<'a> {
             location: dagal::allocators::MemoryLocation::GpuOnly,
         })
         .unwrap();
+        //self.wsi_deletion_stack.push_resource(&image);
+        let depth_image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+            device: self.device.clone(),
+            image_ci: vk::ImageCreateInfo {
+                s_type: vk::StructureType::IMAGE_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: vk::ImageCreateFlags::empty(),
+                image_type: vk::ImageType::TYPE_2D,
+                format: vk::Format::D32_SFLOAT,
+                extent: vk::Extent3D {
+                    width: self.swapchain.as_ref().unwrap().extent().height,
+                    height: self.swapchain.as_ref().unwrap().extent().width,
+                    depth: 1,
+                },
+                mip_levels: 1,
+                array_layers: 1,
+                samples: vk::SampleCountFlags::TYPE_1,
+                tiling: vk::ImageTiling::OPTIMAL,
+                usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                queue_family_index_count: 1,
+                p_queue_family_indices: &self.graphics_queue.get_family_index(),
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                _marker: Default::default(),
+            },
+            allocator: &mut self.allocator,
+            location: dagal::allocators::MemoryLocation::GpuOnly,
+        }).unwrap();
+        //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view =
             dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -441,9 +442,28 @@ impl<'a> RenderContext<'a> {
                 device: self.device.clone(),
             })
             .unwrap();
-        self.draw_image = Some(image);
+        let depth_image_view =
+            dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+                create_info: vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageViewCreateFlags::empty(),
+                    image: depth_image.handle(),
+                    view_type: vk::ImageViewType::TYPE_2D,
+                    format: depth_image.format(),
+                    components: Default::default(),
+                    subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::DEPTH),
+                    _marker: Default::default(),
+                },
+                device: self.device.clone(),
+            })
+                .unwrap();
         self.wsi_deletion_stack.push_resource(&image_view);
+        self.wsi_deletion_stack.push_resource(&depth_image_view);
+        self.draw_image = Some(image);
+        self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
+        self.depth_image_view = Some(depth_image_view);
         // update descriptors
         self.global_descriptor_pool
             .reset(vk::DescriptorPoolResetFlags::empty())
@@ -500,10 +520,15 @@ impl<'a> RenderContext<'a> {
                     .unwrap_unchecked();
             }
         }
-        self.wsi_deletion_stack.flush();
         if let Some(mut draw_image) = self.draw_image.take() {
-            draw_image.destroy()
+            draw_image.destroy();
         }
+        if let Some(mut depth_image) = self.depth_image.take() {
+            depth_image.destroy();
+        }
+        //self.depth_image = None;
+        //self.draw_image = None;
+        self.wsi_deletion_stack.flush();
         self.swapchain = None;
         self.surface = None;
         self.swapchain_image_views.clear();
@@ -589,12 +614,14 @@ impl<'a> RenderContext<'a> {
         cmd: &dagal::command::CommandBufferRecording,
         draw_image: &dagal::resource::Image,
         draw_image_view: &dagal::resource::ImageView,
-        mut triangle_pipeline: dagal::pipelines::GraphicsPipeline,
-        rectangle: &primitives::GPUMeshBuffer,
+        depth_image_view: &dagal::resource::ImageView,
+        mut mesh_pipeline: dagal::pipelines::GraphicsPipeline,
+        meshes: Vec<Arc<MeshAsset>>,
     ) {
         let dynamic_rendering_context = cmd.dynamic_rendering();
         let dynamic_rendering_context = dynamic_rendering_context
             .push_image_as_color_attachment(vk::ImageLayout::GENERAL, draw_image_view, None)
+            .depth_attachment_info(depth_image_view.handle(), vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
             .begin_rendering(vk::Extent2D {
                 width: draw_image.extent().width,
                 height: draw_image.extent().height,
@@ -603,7 +630,7 @@ impl<'a> RenderContext<'a> {
             device.get_handle().cmd_bind_pipeline(
                 cmd.handle(),
                 vk::PipelineBindPoint::GRAPHICS,
-                triangle_pipeline.handle(),
+                mesh_pipeline.handle(),
             );
             let viewport = vk::Viewport {
                 x: 0.0,
@@ -626,14 +653,18 @@ impl<'a> RenderContext<'a> {
             device
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
-
+            let view = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
+            let mut projection = glam::Mat4::perspective_rh(70_f32.to_radians(),  draw_image.extent().width as f32 / draw_image.extent().height as f32, 10000.0, 0.1);
+            projection.y_axis.y *= -1.0;
+            let world_matrix = projection * view;
+            let mesh_render = meshes.get(2).unwrap();
             let push_constants = primitives::GPUDrawPushConstants {
-                world_matrix: glam::Mat4::IDENTITY,
-                vertex_buffer: rectangle.vertex_buffer.address(),
+                world_matrix,
+                vertex_buffer: mesh_render.mesh_buffers.vertex_buffer.address(),
             };
             device.get_handle().cmd_push_constants(
                 cmd.handle(),
-                triangle_pipeline.layout(),
+                mesh_pipeline.layout(),
                 vk::ShaderStageFlags::VERTEX,
                 0,
                 unsafe {
@@ -645,15 +676,108 @@ impl<'a> RenderContext<'a> {
             );
             device.get_handle().cmd_bind_index_buffer(
                 cmd.handle(),
-                rectangle.index_buffer.handle(),
+                mesh_render.mesh_buffers.index_buffer.handle(),
                 0,
                 vk::IndexType::UINT32,
             );
             device
                 .get_handle()
-                .cmd_draw_indexed(cmd.handle(), 6, 1, 0, 0, 0);
+                .cmd_draw_indexed(cmd.handle(), mesh_render.surfaces[0].count, 1, mesh_render.surfaces[0].start_index, 0, 0);
             dynamic_rendering_context.end_rendering();
         }
+    }
+
+    fn load_gltf_meshes(&mut self, path: path::PathBuf) -> Vec<Arc<MeshAsset>> {
+        let (document, buffers, images) = gltf::import(&path).unwrap();
+        let mut meshes: Vec<Arc<MeshAsset>> = Vec::new();
+        let mut immediate_submit = dagal::util::ImmediateSubmit::new(self.device.clone(), self.graphics_queue.clone()).unwrap();
+
+        let mut indices: Vec<u32> = Vec::new();
+        let mut vertices: Vec<Vertex> = Vec::new();
+        for mesh in document.meshes() {
+            let mut surfaces: Vec<GeometrySurface> = Vec::new();
+            vertices.clear();
+            indices.clear();
+
+            for primitive in mesh.primitives() {
+                let start_index = indices.len() as u32;
+                let count = primitive.indices().unwrap().count() as u32;
+                let initial_vtx = vertices.len() as u32;
+
+                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+
+                // load indices
+                {
+                    let idxes = reader.read_indices().unwrap();
+                    let idxes = idxes.into_u32();
+                    for index in idxes {
+                        indices.push(index + initial_vtx);
+                    }
+                }
+
+                // load vertices
+                {
+                    let pos = reader.read_positions().unwrap();
+                    vertices.resize(vertices.len() + pos.clone().count(), Default::default());
+                    for (index, pos) in pos.enumerate() {
+                        *vertices.get_mut(initial_vtx as usize + index).unwrap() = Vertex {
+                            position: glam::Vec3::from(pos),
+                            uv_x: 0.0,
+                            normal: glam::Vec3::new(1.0, 0.0, 0.0),
+                            uv_y: 0.0,
+                            color: glam::Vec4::ONE,
+                        };
+                    }
+                }
+
+                // load normals
+                if let Some(normals) = reader.read_normals() {
+                    for (index, normal) in normals.enumerate() {
+                        vertices.get_mut(initial_vtx as usize + index).unwrap().normal = glam::Vec3::from(normal);
+                    }
+                }
+
+                // load UVs
+                if let Some(uvs) = reader.read_tex_coords(0) {
+                    for (index, uv) in uvs.into_f32().enumerate() {
+                        vertices.get_mut(initial_vtx as usize + index).unwrap().uv_x = uv[0];
+                        vertices.get_mut(initial_vtx as usize + index).unwrap().uv_y = uv[1];
+                    }
+                }
+
+                // load colors
+                if let Some(colors) = reader.read_colors(0) {
+                    for (index, color) in colors.into_rgba_f32().enumerate() {
+                        vertices.get_mut(initial_vtx as usize + index).unwrap().color = glam::Vec4::from(color);
+                    }
+                }
+                
+                surfaces.push(GeometrySurface {
+                    start_index,
+                    count,
+                })
+            }
+            
+            // display normals instead
+            {
+                for vertex in vertices.iter_mut() {
+                    vertex.color = glam::Vec4::from((vertex.normal, 1.0));
+                }
+            }
+            if mesh.name().unwrap() == "Cube" {
+                println!("{:?}", indices);
+                println!("{:?}", vertices);
+            }
+            let mesh_buffers = GPUMeshBuffer::new(&mut self.allocator, &mut immediate_submit, indices.as_slice(), vertices.as_slice(), Some(mesh.name().unwrap().to_string()));
+            self.deletion_stack.push_resource(&mesh_buffers);
+            meshes.push(Arc::new(MeshAsset {
+                name: mesh.name().unwrap().to_string(),
+                surfaces,
+                mesh_buffers,
+            }));
+        }
+        immediate_submit.destroy();
+        meshes
     }
 
     // Deals with drawing
@@ -718,6 +842,7 @@ impl<'a> RenderContext<'a> {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
+        /*
         Self::draw_background(
             &self.device,
             &cmd,
@@ -726,6 +851,7 @@ impl<'a> RenderContext<'a> {
             self.gradient_pipeline.clone(),
             self.draw_image_descriptors.unwrap(),
         );
+        */
         // add a sync point
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -733,13 +859,20 @@ impl<'a> RenderContext<'a> {
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
+        self.depth_image.as_ref().unwrap().transition(
+            &cmd,
+            &self.graphics_queue,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+        );
         Self::draw_geometry(
             &self.device,
             &cmd,
             self.draw_image.as_ref().unwrap(),
             self.draw_image_view.as_ref().unwrap(),
-            self.triangle_pipeline.clone(),
-            &self.rectangle,
+            self.depth_image_view.as_ref().unwrap(),
+            self.mesh_pipeline.clone(),
+            self.test_meshes.clone(),
         );
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -819,6 +952,9 @@ impl<'a> Drop for RenderContext<'a> {
         self.wsi_deletion_stack.flush();
         if let Some(mut draw_image) = self.draw_image.take() {
             draw_image.destroy();
+        }
+        if let Some(mut depth_image) = self.depth_image.take() {
+            depth_image.destroy();
         }
         self.deletion_stack.flush();
     }

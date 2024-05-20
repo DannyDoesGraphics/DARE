@@ -277,4 +277,17 @@ impl<'a> GraphicsPipelineBuilder<'a> {
         self.depth_stencil.max_depth_bounds = 1.0f32;
         self
     }
+
+    pub fn enable_depth_test(mut self, depth_write_enable: vk::Bool32, compare_op: vk::CompareOp) -> Self {
+        self.depth_stencil.depth_test_enable = vk::TRUE;
+        self.depth_stencil.depth_write_enable = depth_write_enable;
+        self.depth_stencil.depth_compare_op = compare_op;
+        self.depth_stencil.depth_bounds_test_enable = vk::FALSE;
+        self.depth_stencil.stencil_test_enable = vk::FALSE;
+        self.depth_stencil.front = Default::default();
+        self.depth_stencil.back = Default::default();
+        self.depth_stencil.min_depth_bounds = 0.0f32;
+        self.depth_stencil.max_depth_bounds = 1.0f32;
+        self
+    }
 }

@@ -16,6 +16,9 @@ struct LogicalDeviceInner {
     /// Contains queue families used
     #[derivative(PartialEq = "ignore")]
     queue_families: Vec<u32>,
+    /// Debug utils
+    #[derivative(PartialEq = "ignore", Debug="ignore")]
+    debug_utils: Option<ash::ext::debug_utils::Device>,
 }
 
 impl PartialEq for LogicalDeviceInner {
@@ -78,6 +81,7 @@ impl LogicalDevice {
         physical_device: PhysicalDevice,
         device_ci: &vk::DeviceCreateInfo,
         queue_families: Vec<u32>,
+        debug_utils_enabled: bool,
     ) -> Result<Self> {
         let device =
             unsafe { instance.create_device(*physical_device.get_handle(), device_ci, None)? };
@@ -85,10 +89,16 @@ impl LogicalDevice {
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkDevice {:p}", device.handle());
 
+        let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
+        if debug_utils_enabled {
+            debug_utils = Some(ash::ext::debug_utils::Device::new(instance, &device));
+        }
+
         Ok(Self {
             inner: Arc::new(LogicalDeviceInner {
                 handle: device,
                 queue_families,
+                debug_utils,
             }),
         })
     }
@@ -111,6 +121,11 @@ impl LogicalDevice {
 
     pub fn get_used_queue_families(&self) -> &[u32] {
         self.inner.queue_families.as_slice()
+    }
+
+    /// Get debug utils with the device
+    pub fn get_debug_utils(&self) -> Option<&ash::ext::debug_utils::Device> {
+        self.inner.debug_utils.as_ref()
     }
 
     /// Downgrades the arc pointer in logical device to allow for garbage collection.

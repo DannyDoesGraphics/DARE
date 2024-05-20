@@ -74,6 +74,29 @@ impl<'a> DynamicRenderContext<'a> {
         self
     }
 
+    pub fn depth_attachment_info(mut self, image_view: vk::ImageView, image_layout: vk::ImageLayout) -> Self {
+        let depth_attachment = vk::RenderingAttachmentInfo {
+            s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
+            p_next: ptr::null(),
+            image_view,
+            image_layout,
+            resolve_mode: vk::ResolveModeFlags::empty(),
+            resolve_image_view: vk::ImageView::null(),
+            resolve_image_layout: Default::default(),
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            clear_value: vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 0.0,
+                    stencil: 0,
+                }
+            },
+            _marker: Default::default(),
+        };
+        self.depth_attachment = Some(depth_attachment);
+        self
+    }
+
     /// Ends rendering
     pub fn end_rendering(self) {
         unsafe {

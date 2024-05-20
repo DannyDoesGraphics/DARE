@@ -26,7 +26,7 @@ impl ImmediateSubmit {
         let command_pool = crate::command::CommandPool::new(
             device.clone(),
             &queue,
-            vk::CommandPoolCreateFlags::empty(),
+            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
         )?;
         let command_buffer = command_pool.allocate(1)?.pop().unwrap();
         Ok(Self {

@@ -3,9 +3,10 @@ use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
 use std::mem;
+use std::ops::Deref;
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Vertex {
     pub position: glam::Vec3,
     pub uv_x: f32,
@@ -26,6 +27,7 @@ impl GPUMeshBuffer {
         immediate: &mut dagal::util::ImmediateSubmit,
         indices: &[u32],
         vertices: &[Vertex],
+        name: Option<String>,
     ) -> Self {
         let mut index_buffer = dagal::resource::Buffer::<u32, VkMemAllocator>::new(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
@@ -54,7 +56,22 @@ impl GPUMeshBuffer {
         vertex_buffer
             .upload(immediate, allocator, vertices)
             .unwrap();
-
+        if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
+            if let Some(name) = name {
+                let vertex_name = {
+                    let mut n = name.clone();
+                    n.push_str(" vertex");
+                    n
+                };
+                let index_name = {
+                    let mut n = name.clone();
+                    n.push_str(" index");
+                    n
+                };
+                index_buffer.set_name(debug_utils, index_name.as_str()).unwrap();
+                vertex_buffer.set_name(debug_utils, vertex_name.as_str()).unwrap()
+            }
+        }
         Self {
             index_buffer,
             vertex_buffer,
@@ -73,4 +90,18 @@ impl Destructible for GPUMeshBuffer {
 pub struct GPUDrawPushConstants {
     pub world_matrix: glam::Mat4,
     pub vertex_buffer: vk::DeviceAddress,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct GeometrySurface {
+    pub start_index: u32,
+    pub count: u32,
+}
+
+#[derive(Clone)]
+pub struct MeshAsset {
+    pub name: String,
+
+    pub surfaces: Vec<GeometrySurface>,
+    pub mesh_buffers: GPUMeshBuffer,
 }

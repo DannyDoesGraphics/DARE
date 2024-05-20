@@ -3,6 +3,7 @@ use std::slice::IterMut;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Result;
+use derivative::Derivative;
 
 /// Represents a slot map structure
 ///
@@ -175,10 +176,12 @@ impl<T: Send + Sync> SlotMap<T> {
     }
 }
 
-#[derive(Debug, Eq)]
+#[derive(Derivative, Eq, Hash)]
+#[derivative(Debug)]
 pub struct Slot<T> {
     index: usize,
     generation: usize,
+    #[derivative(Debug="ignore")]
     _marker: std::marker::PhantomData<T>,
 }
 

@@ -18,6 +18,7 @@ pub struct LogicalDeviceBuilder<'a> {
     features_1_3: vk::PhysicalDeviceVulkan13Features<'a>,
     extensions: HashSet<CString>,
     request_queues: Vec<Rc<RefCell<crate::bootstrap::QueueRequest>>>,
+    debug_utils: bool,
 }
 
 impl<'a> LogicalDeviceBuilder<'a> {
@@ -52,7 +53,13 @@ impl<'a> LogicalDeviceBuilder<'a> {
             features_1_3: Default::default(),
             extensions: HashSet::new(),
             request_queues: vec![],
+            debug_utils: false,
         }
+    }
+
+    pub fn debug_utils(mut self, enabled: bool) -> Self {
+        self.debug_utils = enabled;
+        self
     }
 
     pub fn attach_feature_1_0(mut self, feature: vk::PhysicalDeviceFeatures) -> Self {
@@ -197,6 +204,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
             self.physical_device,
             &device_ci,
             queue_families_used.into_iter().collect::<Vec<u32>>(),
+            self.debug_utils
         )?;
         // reallocate back the queues
         for (queue_request, queue_allocations) in
@@ -250,6 +258,7 @@ impl<'a> From<crate::bootstrap::PhysicalDevice> for LogicalDeviceBuilder<'a> {
             features_1_3: Default::default(),
             extensions: value.extensions_enabled,
             request_queues: value.queue_requests,
+            debug_utils: false,
         }
     }
 }
