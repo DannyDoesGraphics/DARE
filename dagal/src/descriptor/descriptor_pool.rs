@@ -1,4 +1,3 @@
-use std::ffi::c_void;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;

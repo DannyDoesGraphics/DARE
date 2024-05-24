@@ -1,7 +1,6 @@
 use anyhow::Result;
 use ash::vk;
 use std::ffi::c_void;
-use std::ptr;
 
 #[derive(Clone, Debug, Default)]
 pub struct DescriptorSetLayoutBuilder<'a> {
@@ -66,7 +65,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 
     /// Builds the descriptor layout
     pub fn build(
-        mut self,
+        self,
         device: crate::device::LogicalDevice,
         shader_stages: vk::ShaderStageFlags,
         p_next: *const c_void,
