@@ -1,4 +1,5 @@
 use std::{env, ptr};
+use dagal::allocators::GPUAllocatorImpl;
 
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -25,18 +26,18 @@ struct RenderContext<'a> {
     deletion_stack: dagal::util::DeletionStack<'a>,
     wsi_deletion_stack: dagal::util::DeletionStack<'a>,
     graphics_queue: dagal::device::Queue,
-    allocator: dagal::allocators::SlotMapMemoryAllocator<dagal::allocators::VkMemAllocator>,
+    allocator: dagal::allocators::SlotMapMemoryAllocator<dagal::allocators::GPUAllocatorImpl>,
 
     surface: Option<dagal::wsi::Surface>,
     swapchain: Option<dagal::wsi::Swapchain>,
-    swapchain_images: Vec<dagal::resource::Image<dagal::allocators::vk_mem_impl::VkMemAllocator>>,
+    swapchain_images: Vec<dagal::resource::Image<dagal::allocators::GPUAllocatorImpl>>,
     swapchain_image_views: Vec<dagal::resource::ImageView>,
     resize_requested: bool, // Whether frame needs to be resized
 
     frame_number: usize,
     frames: Vec<Frame<'a>>,
 
-    draw_image: Option<dagal::resource::Image<dagal::allocators::VkMemAllocator>>,
+    draw_image: Option<dagal::resource::Image<dagal::allocators::GPUAllocatorImpl>>,
     draw_image_view: Option<dagal::resource::ImageView>,
     draw_image_descriptors: Option<vk::DescriptorSet>,
 
@@ -112,13 +113,21 @@ impl<'a> RenderContext<'a> {
             deletion_stack.push(move || unsafe { device.get_handle().destroy_device(None) });
         }
 
-        let allocator = dagal::allocators::VkMemAllocator::new(
-            instance.get_instance(),
-            device.get_handle(),
-            physical_device.handle(),
-            true,
-        )
-        .unwrap();
+        let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+            instance: instance.get_instance().clone(),
+            device: device.get_handle().clone(),
+            physical_device: physical_device.handle().clone(),
+            debug_settings: gpu_allocator::AllocatorDebugSettings {
+                log_memory_information: false,
+                log_leaks_on_shutdown: true,
+                store_stack_traces: false,
+                log_allocations: false,
+                log_frees: false,
+                log_stack_traces: false,
+            },
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        }).unwrap();
         deletion_stack.push_resource(&allocator);
         let allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 

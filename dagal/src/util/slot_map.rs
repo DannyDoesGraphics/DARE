@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::slice::IterMut;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Result;
 use derivative::Derivative;
@@ -22,7 +22,7 @@ pub struct SlotMap<T: Send + Sync> {
     indices: Vec<Slot<T>>,
 
     /// Holds the underlying data
-    data: Vec<RwLock<T>>,
+    data: Vec<T>,
 
     /// References indices to handles that map to the data
     erase: Vec<usize>,
@@ -89,37 +89,18 @@ impl<T: Send + Sync> SlotMap<T> {
         key.index = next_free_indices;
 
         // create the data and update the indices index to point to it
-        self.data.push(RwLock::new(data));
+        self.data.push(data);
         self.indices.get_mut(next_free_indices).unwrap().index = self.data.len() - 1;
         self.erase.push(next_free_indices);
 
         self.indices.get_mut(next_free_indices).unwrap().clone()
     }
 
-    /// Attempts to do a mutable lock the data prior to invoking [`erase`](Self::erase). If it
-    /// fails, it returns an Err.
-    pub fn try_lock_erase(&mut self, slot: Slot<T>) -> Result<T> {
-        self.validate_slot(&slot)?;
-
-        let _unused = self
-            .data
-            .get(self.indices.get(slot.index).unwrap().index)
-            .unwrap()
-            .try_write()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
-        drop(_unused);
-        let handle = self.erase(slot)?;
-        Ok(handle.into_inner().unwrap())
-    }
-
     /// Erase data from the slot map effectively removing it entirely.
     ///
     /// **This only ensures that no new references are made to the data, but does not make
     /// checks regarding existing ones.**
-    ///
-    /// See [`try_lock_erase`](Self::try_lock_erase) to check if a handle is not currently being
-    /// borrowed before erasing.
-    pub fn erase(&mut self, slot: Slot<T>) -> Result<RwLock<T>> {
+    pub fn erase(&mut self, slot: Slot<T>) -> Result<T> {
         // validate generation
         self.validate_slot(&slot)?;
         // update generation
@@ -148,31 +129,30 @@ impl<T: Send + Sync> SlotMap<T> {
         Ok(removed_data)
     }
 
-    /// Retrieve the underlying read write lock to the data the slot is mapped to
-    pub fn get_rw(&self, slot: &Slot<T>) -> Result<&RwLock<T>> {
-        self.validate_slot(slot)?;
-
-        let indices_slot = self.indices.get(slot.index).unwrap();
-        Ok(self.data.get(indices_slot.index).unwrap())
-    }
-
     /// Retrieve the data that maps to the slot directly
-    pub fn get(&self, slot: &Slot<T>) -> Result<RwLockReadGuard<T>> {
-        self.get_rw(slot)?
-            .read()
-            .map_err(|_| anyhow::Error::from(errors::Errors::Poisoned))
+    pub fn get(&self, slot: &Slot<T>) -> Result<&T> {
+        let data_index = self.get_data_index(&slot)?;
+        Ok(self.data.get(data_index).unwrap())
     }
 
     /// Retrieve the data that maps to the slot directly as a mutable rw access
-    pub fn get_mut(&self, slot: &Slot<T>) -> Result<RwLockWriteGuard<T>> {
-        self.get_rw(slot)?
-            .write()
-            .map_err(|_| anyhow::Error::from(errors::Errors::Poisoned))
+    pub fn get_mut(&mut self, slot: &Slot<T>) -> Result<&mut T> {
+        let data_index = self.get_data_index(slot)?;
+        Ok(self.data.get_mut(data_index).unwrap())
     }
 
     /// Get a mutable iterator over all the data stored by the slot map.
-    pub fn mut_iter_data(&mut self) -> IterMut<'_, RwLock<T>> {
+    pub fn mut_iter_data(&mut self) -> IterMut<'_, T> {
         self.data.iter_mut()
+    }
+
+    /// Get the index the data is actually at in the `Data` vector
+    pub fn get_data_index(&self, slot: &Slot<T>) -> Result<usize> {
+        // validate generation
+        self.validate_slot(&slot)?;
+
+        let data_index = self.indices.get(slot.index).unwrap().index;
+        Ok(data_index)
     }
 }
 

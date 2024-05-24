@@ -1,9 +1,10 @@
-use dagal::allocators::{VkMemAllocator};
+use dagal::allocators::{GPUAllocatorImpl, VkMemAllocator};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
 use std::mem;
-use std::ops::Deref;
+use dagal::descriptor::bindless::bindless::GPUResourceTableHandle;
+use dagal::descriptor::GPUResourceTable;
 
 #[repr(C)]
 #[derive(Debug, Clone, Default)]
@@ -17,45 +18,48 @@ pub struct Vertex {
 
 #[derive(Clone)]
 pub struct GPUMeshBuffer {
-    pub index_buffer: dagal::resource::Buffer<u32, VkMemAllocator>,
-    pub vertex_buffer: dagal::resource::Buffer<Vertex, VkMemAllocator>,
+    pub index_buffer: dagal::resource::Buffer<u32, GPUAllocatorImpl>,
+    pub vertex_buffer: GPUResourceTableHandle<dagal::resource::Buffer<u8, GPUAllocatorImpl>>,
 }
 
 impl GPUMeshBuffer {
     pub fn new(
-        allocator: &mut dagal::allocators::SlotMapMemoryAllocator<VkMemAllocator>,
+        allocator: &mut dagal::allocators::SlotMapMemoryAllocator<GPUAllocatorImpl>,
         immediate: &mut dagal::util::ImmediateSubmit,
+        gpu_resource_table: &mut GPUResourceTable,
         indices: &[u32],
         vertices: &[Vertex],
         name: Option<String>,
     ) -> Self {
-        let mut index_buffer = dagal::resource::Buffer::<u32, VkMemAllocator>::new(
+        let mut index_buffer = dagal::resource::Buffer::<u32, GPUAllocatorImpl>::new(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
-                size: mem::size_of_val(indices) as u64,
+                size: indices.len() as u64,
                 memory_type: dagal::allocators::MemoryLocation::GpuOnly,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                     | vk::BufferUsageFlags::INDEX_BUFFER,
             },
         )
         .unwrap();
-        let mut vertex_buffer = dagal::resource::Buffer::<Vertex, VkMemAllocator>::new(
+        let mut vertex_buffer_handle = gpu_resource_table.new_buffer(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
-                size: mem::size_of_val(vertices) as u64,
+                size: mem::size_of_val(vertices) as vk::DeviceSize,
                 memory_type: dagal::allocators::MemoryLocation::GpuOnly,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                     | vk::BufferUsageFlags::STORAGE_BUFFER
                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            },
-        )
-        .unwrap();
+            }
+        ).unwrap();
+        let mut vertex_buffer = gpu_resource_table.get_buffer(&vertex_buffer_handle).unwrap();
         index_buffer.upload(immediate, allocator, indices).unwrap(); // fuck it lol
-        vertex_buffer
-            .upload(immediate, allocator, vertices)
-            .unwrap();
+        unsafe {
+            vertex_buffer
+                .upload_arbitrary(immediate, allocator, vertices)
+                .unwrap();
+        }
         if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
             if let Some(name) = name {
                 let vertex_name = {
@@ -74,7 +78,7 @@ impl GPUMeshBuffer {
         }
         Self {
             index_buffer,
-            vertex_buffer,
+            vertex_buffer: vertex_buffer_handle,
         }
     }
 }
@@ -89,7 +93,7 @@ impl Destructible for GPUMeshBuffer {
 #[repr(C)]
 pub struct GPUDrawPushConstants {
     pub world_matrix: glam::Mat4,
-    pub vertex_buffer: vk::DeviceAddress,
+    pub vertex_buffer_id: u32,
 }
 
 #[derive(Debug, Clone, Copy, Hash, Ord, PartialOrd, Eq, PartialEq)]

@@ -1,25 +1,28 @@
 use crate::allocators::slot_map_allocator::MemoryAllocation;
-use crate::allocators::{Allocation, Allocator, SlotMapMemoryAllocator, VkMemAllocator};
+use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator, VkMemAllocator};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use anyhow::{Result};
 use ash::vk;
-use ash::vk::Handle;
+use ash::vk::{Handle};
 use std::ptr;
+use ash::prelude::VkResult;
 use tracing::trace;
 
 #[derive(Debug, Clone)]
-pub struct Image<A: Allocator = VkMemAllocator> {
+pub struct Image<A: Allocator = GPUAllocatorImpl> {
     handle: vk::Image,
     format: vk::Format,
     extent: vk::Extent3D,
+    usage_flags: vk::ImageUsageFlags,
+    image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
     allocation: Option<MemoryAllocation<A>>,
     name: Option<String>,
 }
 
-pub enum ImageCreateInfo<'a, A: Allocator = VkMemAllocator> {
+pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image from an existing VkImage whose memory is not managed by the application
     /// (i.e. swapchain images)
     FromVkNotManaged {
@@ -169,6 +172,41 @@ impl Image {
                 .cmd_blit_image2(cmd.handle(), &blint_info);
         }
     }
+
+    /// Acquires a full image view
+    pub fn acquire_full_image_view(&self) -> VkResult<vk::ImageView> {
+        let aspect_flag: vk::ImageAspectFlags = if self.usage_flags & vk::ImageUsageFlags::COLOR_ATTACHMENT == vk::ImageUsageFlags::COLOR_ATTACHMENT {
+            vk::ImageAspectFlags::COLOR
+        } else if self.usage_flags & vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT == vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT {
+            vk::ImageAspectFlags::DEPTH
+        } else {
+            unimplemented!()
+        };
+        unsafe {
+            self.device.get_handle()
+                .create_image_view(
+                    &vk::ImageViewCreateInfo {
+                        s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                        p_next: ptr::null(),
+                        flags: vk::ImageViewCreateFlags::empty(),
+                        image: self.handle,
+                        view_type: if self.image_type == vk::ImageType::TYPE_2D {
+                            vk::ImageViewType::TYPE_2D
+                        } else if self.image_type == vk::ImageType::TYPE_1D {
+                            vk::ImageViewType::TYPE_1D
+                        } else if self.image_type == vk::ImageType::TYPE_3D {
+                            vk::ImageViewType::TYPE_3D
+                        } else {
+                            unimplemented!()
+                        },
+                        format: self.format,
+                        components: Default::default(),
+                        subresource_range: Self::image_subresource_range(aspect_flag),
+                        _marker: Default::default(),
+                    }, None
+                )
+        }
+    }
 }
 
 impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
@@ -216,10 +254,26 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// ```
     /// use std::ptr;
     /// use ash::vk;
+    /// use dagal::allocators::GPUAllocatorImpl;
     /// use dagal::resource::traits::Resource;
     /// use dagal::util::tests::TestSettings;
+    /// use dagal::gpu_allocator;
     /// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = dagal::allocators::VkMemAllocator::new(instance.get_instance(), device.get_handle(), physical_device.handle(), false).unwrap();
+    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    ///     instance: instance.get_instance().clone(),
+    ///     device: device.get_handle().clone(),
+    ///     physical_device: physical_device.handle().clone(),
+    ///     debug_settings: gpu_allocator::AllocatorDebugSettings {
+    ///         log_memory_information: false,
+    ///             log_leaks_on_shutdown: true,
+    ///             store_stack_traces: false,
+    ///             log_allocations: false,
+    ///             log_frees: false,
+    ///             log_stack_traces: false,
+    ///         },
+    ///         buffer_device_address: false,
+    ///         allocation_sizes: Default::default(),
+    ///  }).unwrap();
     /// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
     /// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: device.clone(),
@@ -266,6 +320,12 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                 handle: image,
                 format,
                 extent,
+                usage_flags: vk::ImageUsageFlags::empty(),
+                image_type: if extent.depth > 1 {
+                    vk::ImageType::TYPE_2D
+                } else {
+                    vk::ImageType::TYPE_2D
+                },
                 allocation: None,
                 name: None,
             }),
@@ -278,6 +338,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                     handle,
                     extent: image_ci.extent,
                     format: image_ci.format,
+                    usage_flags: image_ci.usage,
+                    image_type: image_ci.image_type,
                     allocation: None,
                     name: None,
                 })

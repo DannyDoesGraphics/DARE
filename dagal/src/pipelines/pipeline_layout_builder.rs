@@ -38,6 +38,15 @@ impl PipelineLayoutBuilder {
         self
     }
 
+    /// Push a GPU resource table
+    pub fn push_bindless_gpu_resource_table(
+        mut self,
+        bindless: &crate::descriptor::GPUResourceTable
+    ) -> Self {
+        self.descriptor_sets.push(bindless.get_descriptor_layout());
+        self
+    }
+
     pub fn build(
         self,
         device: crate::device::LogicalDevice,

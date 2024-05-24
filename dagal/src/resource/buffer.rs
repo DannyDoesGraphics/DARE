@@ -1,28 +1,32 @@
 use crate::allocators::slot_map_allocator::MemoryAllocation;
-use crate::allocators::{Allocation, Allocator, SlotMapMemoryAllocator, VkMemAllocator};
+use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator, VkMemAllocator};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use anyhow::{Result};
 use ash::vk;
-use ash::vk::Handle;
+use ash::vk::{Handle};
 use std::ffi::{c_void};
 use std::fmt::{Debug};
 use std::ptr::NonNull;
 use std::{mem, ptr};
+use derivative::Derivative;
 use tracing::trace;
 
-#[derive(Clone, Debug)]
-pub struct Buffer<T: Sized, A: Allocator = VkMemAllocator> {
+#[derive(Derivative, Debug)]
+#[derivative(Clone)]
+pub struct Buffer<T: Sized, A: Allocator = GPUAllocatorImpl> {
     handle: vk::Buffer,
     device: crate::device::LogicalDevice,
     allocation: Option<MemoryAllocation<A>>,
     address: vk::DeviceAddress,
+    size: vk::DeviceSize,
     name: Option<String>,
+    #[derivative(Default)]
     _marker: std::marker::PhantomData<T>,
 }
 
-pub enum BufferCreateInfo<'a, A: Allocator = VkMemAllocator> {
+pub enum BufferCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a buffer with a new empty buffer with the requested size
     NewEmptyBuffer {
         device: crate::device::LogicalDevice,
@@ -86,7 +90,7 @@ impl<T: Sized, A: Allocator> Buffer<T, A> {
             device: self.device.clone(),
             allocator,
             size: buffer_size,
-            memory_type: crate::allocators::MemoryLocation::CpuOnly,
+            memory_type: crate::allocators::MemoryLocation::CpuToGpu,
             usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
         })?;
         unsafe {
@@ -120,6 +124,10 @@ impl<T: Sized, A: Allocator> Buffer<T, A> {
         staging_buffer.destroy();
         Ok(())
     }
+
+    pub fn get_size(&self) -> vk::DeviceSize {
+        self.size
+    }
 }
 
 impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
@@ -134,13 +142,14 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
                 memory_type,
                 usage_flags,
             } => {
+                let byte_size = (mem::size_of::<T>() * size as usize) as vk::DeviceSize;
                 let handle = unsafe {
                     device.get_handle().create_buffer(
                         &vk::BufferCreateInfo {
                             s_type: vk::StructureType::BUFFER_CREATE_INFO,
                             p_next: ptr::null(),
                             flags: vk::BufferCreateFlags::empty(),
-                            size,
+                            size: byte_size,
                             usage: usage_flags,
                             sharing_mode: if device.get_used_queue_families().len() == 1 {
                                 vk::SharingMode::EXCLUSIVE
@@ -194,6 +203,7 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
                     device,
                     allocation: Some(allocation),
                     address,
+                    size: byte_size,
                     name: None,
                     _marker: Default::default(),
                 })

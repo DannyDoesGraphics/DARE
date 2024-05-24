@@ -7,7 +7,7 @@ authors = ["Danny Le <git@dannydoes.graphics>"]
 [dependencies]
 ash = "0.38.0"
 ash-window = {version = "0.13.0", optional = false}
-gpu-allocator = { version = "0.26.0", features = ["default", "vulkan"], optional = true }
+gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", branch = "ash-0.38", features = ["default", "vulkan"], optional = true }
 winit = {version = "0.30.0", optional = true}
 raw-window-handle = {version = "0.6.1", optional = false}
 vk-mem = {version = "0.4.0", optional = true }

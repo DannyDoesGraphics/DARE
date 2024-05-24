@@ -1,3 +1,4 @@
+use std::ffi::c_void;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
@@ -11,33 +12,43 @@ pub struct DescriptorPool {
     device: crate::device::LogicalDevice,
 }
 
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
+/// Indicate the ratio of each descriptor type size
+#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
 pub struct PoolSizeRatio {
     pub descriptor_type: vk::DescriptorType,
     pub ratio: f32,
 }
 
+#[derive(Copy, Clone, Default, Debug)]
+pub struct PoolSize {
+    handle: vk::DescriptorPoolSize,
+}
+impl PoolSize {
+    pub fn descriptor_count(mut self, count: u32) -> Self {
+        self.handle.descriptor_count = count;
+        self
+    }
+
+    pub fn descriptor_type(mut self, ty: vk::DescriptorType) -> Self {
+        self.handle.ty = ty;
+        self
+    }
+}
+
 impl DescriptorPool {
-    pub fn new(
-        device: crate::device::LogicalDevice,
-        max_sets: u32,
-        pool_ratios: &[PoolSizeRatio],
-    ) -> Result<Self> {
-        let pool_sizes: Vec<vk::DescriptorPoolSize> = pool_ratios
-            .iter()
-            .map(|pool_ratio| vk::DescriptorPoolSize {
-                ty: pool_ratio.descriptor_type,
-                descriptor_count: (pool_ratio.ratio * max_sets as f32).ceil() as u32,
-            })
-            .collect();
+    pub fn new_with_pool_sizes(device: crate::device::LogicalDevice, flags: vk::DescriptorPoolCreateFlags, max_sets: u32, pool_sizes: &[PoolSize]) -> Result<Self> {
+        let raw_pool_sizes: Vec<vk::DescriptorPoolSize> = pool_sizes.iter().map(|pool_size| {
+            pool_size.handle
+        }).collect();
+
 
         let pool_ci = vk::DescriptorPoolCreateInfo {
             s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
             p_next: ptr::null(),
-            flags: vk::DescriptorPoolCreateFlags::empty(),
+            flags,
             max_sets,
-            pool_size_count: pool_sizes.len() as u32,
-            p_pool_sizes: pool_sizes.as_ptr(),
+            pool_size_count: raw_pool_sizes.len() as u32,
+            p_pool_sizes: raw_pool_sizes.as_ptr(),
             _marker: Default::default(),
         };
 
@@ -47,6 +58,18 @@ impl DescriptorPool {
         trace!("Creating VkDescriptorPool {:p}", handle);
 
         Ok(Self { handle, device })
+    }
+
+    pub fn new(
+        device: crate::device::LogicalDevice,
+        max_sets: u32,
+        pool_ratios: &[PoolSizeRatio],
+    ) -> Result<Self> {
+        let pool_sizes: Vec<PoolSize> = pool_ratios
+            .iter()
+            .map(|pool_ratio| PoolSize::default().descriptor_type(pool_ratio.descriptor_type).descriptor_count((pool_ratio.ratio * max_sets as f32).ceil() as u32))
+            .collect();
+        Self::new_with_pool_sizes(device, vk::DescriptorPoolCreateFlags::empty(), max_sets, pool_sizes.as_slice())
     }
 
     /// Resets a descriptor pool and clears it entirely

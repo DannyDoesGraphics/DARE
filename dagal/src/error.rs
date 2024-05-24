@@ -24,6 +24,11 @@ pub enum DagalError {
 
     #[error("shaderc encountered an error")]
     ShadercError,
+
+    #[error("Expected buffer to have vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS")]
+    NoShaderDeviceAddress,
+
+
 }
 
 impl<T> From<PoisonError<T>> for DagalError {

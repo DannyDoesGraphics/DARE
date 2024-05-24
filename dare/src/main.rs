@@ -6,13 +6,15 @@ use std::io::Write;
 use std::sync::Arc;
 use gltf::Gltf;
 
-use dagal::allocators::VkMemAllocator;
+use dagal::allocators::{GPUAllocatorImpl, VkMemAllocator};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
 use dagal::command::command_buffer::CmdBuffer;
+use dagal::descriptor::GPUResourceTable;
+use dagal::gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::resource::traits::Resource;
@@ -37,20 +39,22 @@ struct RenderContext<'a> {
     deletion_stack: dagal::util::DeletionStack<'a>,
     wsi_deletion_stack: dagal::util::DeletionStack<'a>,
     graphics_queue: dagal::device::Queue,
-    allocator: dagal::allocators::SlotMapMemoryAllocator<dagal::allocators::VkMemAllocator>,
+    allocator: dagal::allocators::SlotMapMemoryAllocator<GPUAllocatorImpl>,
 
     surface: Option<dagal::wsi::Surface>,
     swapchain: Option<dagal::wsi::Swapchain>,
-    swapchain_images: Vec<dagal::resource::Image<dagal::allocators::vk_mem_impl::VkMemAllocator>>,
+    swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>>,
     swapchain_image_views: Vec<dagal::resource::ImageView>,
     resize_requested: bool, // Whether frame needs to be resized
 
     frame_number: usize,
     frames: Vec<Frame<'a>>,
 
-    depth_image: Option<dagal::resource::Image<VkMemAllocator>>,
+    gpu_resource_table: GPUResourceTable,
+
+    depth_image: Option<dagal::resource::Image<GPUAllocatorImpl>>,
     depth_image_view: Option<dagal::resource::ImageView>,
-    draw_image: Option<dagal::resource::Image<VkMemAllocator>>,
+    draw_image: Option<dagal::resource::Image<GPUAllocatorImpl>>,
     draw_image_view: Option<dagal::resource::ImageView>,
     draw_image_descriptors: Option<vk::DescriptorSet>,
 
@@ -125,6 +129,18 @@ impl<'a> RenderContext<'a> {
             .attach_feature_1_2(vk::PhysicalDeviceVulkan12Features {
                 buffer_device_address: vk::TRUE,
                 descriptor_indexing: vk::TRUE,
+                descriptor_binding_partially_bound: vk::TRUE,
+                descriptor_binding_update_unused_while_pending: vk::TRUE,
+                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+                descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+                shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                ..Default::default()
+            })
+            .attach_feature_1_0(vk::PhysicalDeviceFeatures {
+                shader_int64: vk::TRUE,
                 ..Default::default()
             })
             .debug_utils(true)
@@ -136,13 +152,21 @@ impl<'a> RenderContext<'a> {
             deletion_stack.push(move || unsafe { device.get_handle().destroy_device(None) });
         }
 
-        let allocator = VkMemAllocator::new(
-            instance.get_instance(),
-            device.get_handle(),
-            physical_device.handle(),
-            true,
-        )
-        .unwrap();
+        let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+            instance: instance.get_instance().clone(),
+            device: device.get_handle().clone(),
+            physical_device: physical_device.handle().clone(),
+            debug_settings: gpu_allocator::AllocatorDebugSettings {
+                log_memory_information: false,
+                log_leaks_on_shutdown: true,
+                store_stack_traces: false,
+                log_allocations: false,
+                log_frees: false,
+                log_stack_traces: false,
+            },
+            buffer_device_address: true,
+            allocation_sizes: Default::default(),
+        }).unwrap();
         deletion_stack.push_resource(&allocator);
         let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
 
@@ -196,6 +220,8 @@ impl<'a> RenderContext<'a> {
             })
             .collect();
 
+        let gpu_resource_table = GPUResourceTable::new(device.clone(), &mut allocator).unwrap();
+
         let global_descriptor_pool = dagal::descriptor::DescriptorPool::new(
             device.clone(),
             10,
@@ -237,9 +263,11 @@ impl<'a> RenderContext<'a> {
         deletion_stack.push_resource(&gradient_pipeline);
 
         let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+            .push_descriptor_sets(vec![gpu_resource_table.get_descriptor_layout()])
             .push_push_constant_struct::<primitives::GPUDrawPushConstants>(
                 vk::ShaderStageFlags::VERTEX,
             )
+            .push_bindless_gpu_resource_table(&gpu_resource_table)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
         let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
@@ -263,7 +291,7 @@ impl<'a> RenderContext<'a> {
             .set_polygon_mode(vk::PolygonMode::FILL)
             .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
             .set_multisampling_none()
-            .disable_blending()
+            .enable_blending_alpha_blend()
             .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
             .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
             .set_depth_format(vk::Format::D32_SFLOAT)
@@ -289,6 +317,7 @@ impl<'a> RenderContext<'a> {
             frame_number: 0,
             frames,
 
+            gpu_resource_table,
             depth_image: None,
             depth_image_view: None,
             draw_image: None,
@@ -303,7 +332,7 @@ impl<'a> RenderContext<'a> {
             mesh_pipeline: triangle_pipeline,
             test_meshes: vec![],
         };
-        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/basicmesh.glb"));
+        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/daddy.glb"));
         app.test_meshes = meshes;
         app
     }
@@ -369,8 +398,8 @@ impl<'a> RenderContext<'a> {
                 image_type: vk::ImageType::TYPE_2D,
                 format: vk::Format::R16G16B16A16_SFLOAT,
                 extent: vk::Extent3D {
-                    width: self.swapchain.as_ref().unwrap().extent().height,
-                    height: self.swapchain.as_ref().unwrap().extent().width,
+                    width: self.swapchain.as_ref().unwrap().extent().width,
+                    height: self.swapchain.as_ref().unwrap().extent().height,
                     depth: 1,
                 },
                 mip_levels: 1,
@@ -401,8 +430,8 @@ impl<'a> RenderContext<'a> {
                 image_type: vk::ImageType::TYPE_2D,
                 format: vk::Format::D32_SFLOAT,
                 extent: vk::Extent3D {
-                    width: self.swapchain.as_ref().unwrap().extent().height,
-                    height: self.swapchain.as_ref().unwrap().extent().width,
+                    width: self.swapchain.as_ref().unwrap().extent().width,
+                    height: self.swapchain.as_ref().unwrap().extent().height,
                     depth: 1,
                 },
                 mip_levels: 1,
@@ -430,13 +459,7 @@ impl<'a> RenderContext<'a> {
                     view_type: vk::ImageViewType::TYPE_2D,
                     format: image.format(),
                     components: Default::default(),
-                    subresource_range: vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    },
+                    subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR),
                     _marker: Default::default(),
                 },
                 device: self.device.clone(),
@@ -464,6 +487,7 @@ impl<'a> RenderContext<'a> {
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
         self.depth_image_view = Some(depth_image_view);
+
         // update descriptors
         self.global_descriptor_pool
             .reset(vk::DescriptorPoolResetFlags::empty())
@@ -505,7 +529,6 @@ impl<'a> RenderContext<'a> {
             window.width(),
             window.height()
         );
-        self.resize_requested = false;
         // wait until fences are signaled
         {
             let fences: Vec<vk::Fence> = self
@@ -535,6 +558,7 @@ impl<'a> RenderContext<'a> {
         self.build_surface(window);
         self.build_swapchain(window);
         self.create_draw_image();
+        self.resize_requested = false;
     }
 
     // Draw into the background
@@ -594,9 +618,9 @@ impl<'a> RenderContext<'a> {
                 vk::ShaderStageFlags::COMPUTE,
                 0,
                 unsafe {
-                    std::slice::from_raw_parts(
+                    slice::from_raw_parts(
                         &pc as *const PushConstants as *const u8,
-                        std::mem::size_of::<PushConstants>(),
+                        mem::size_of::<PushConstants>(),
                     )
                 },
             );
@@ -616,6 +640,7 @@ impl<'a> RenderContext<'a> {
         draw_image_view: &dagal::resource::ImageView,
         depth_image_view: &dagal::resource::ImageView,
         mut mesh_pipeline: dagal::pipelines::GraphicsPipeline,
+        gpu_rt: &GPUResourceTable,
         meshes: Vec<Arc<MeshAsset>>,
     ) {
         let dynamic_rendering_context = cmd.dynamic_rendering();
@@ -631,6 +656,14 @@ impl<'a> RenderContext<'a> {
                 cmd.handle(),
                 vk::PipelineBindPoint::GRAPHICS,
                 mesh_pipeline.handle(),
+            );
+            device.get_handle().cmd_bind_descriptor_sets(
+                cmd.handle(),
+                vk::PipelineBindPoint::GRAPHICS,
+                mesh_pipeline.layout(),
+                0,
+                &[gpu_rt.get_descriptor_set()],
+                &[],
             );
             let viewport = vk::Viewport {
                 x: 0.0,
@@ -653,14 +686,14 @@ impl<'a> RenderContext<'a> {
             device
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
-            let view = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
+            let view = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -2.5));
             let mut projection = glam::Mat4::perspective_rh(70_f32.to_radians(),  draw_image.extent().width as f32 / draw_image.extent().height as f32, 10000.0, 0.1);
             projection.y_axis.y *= -1.0;
             let world_matrix = projection * view;
             let mesh_render = meshes.get(2).unwrap();
             let push_constants = primitives::GPUDrawPushConstants {
                 world_matrix,
-                vertex_buffer: mesh_render.mesh_buffers.vertex_buffer.address(),
+                vertex_buffer_id: mesh_render.mesh_buffers.vertex_buffer.id() as u32,
             };
             device.get_handle().cmd_push_constants(
                 cmd.handle(),
@@ -764,11 +797,7 @@ impl<'a> RenderContext<'a> {
                     vertex.color = glam::Vec4::from((vertex.normal, 1.0));
                 }
             }
-            if mesh.name().unwrap() == "Cube" {
-                println!("{:?}", indices);
-                println!("{:?}", vertices);
-            }
-            let mesh_buffers = GPUMeshBuffer::new(&mut self.allocator, &mut immediate_submit, indices.as_slice(), vertices.as_slice(), Some(mesh.name().unwrap().to_string()));
+            let mesh_buffers = GPUMeshBuffer::new(&mut self.allocator, &mut immediate_submit, &mut self.gpu_resource_table, indices.as_slice(), vertices.as_slice(), Some(mesh.name().unwrap().to_string()));
             self.deletion_stack.push_resource(&mesh_buffers);
             meshes.push(Arc::new(MeshAsset {
                 name: mesh.name().unwrap().to_string(),
@@ -802,7 +831,7 @@ impl<'a> RenderContext<'a> {
             swapchain_frame.render_fence.reset().unwrap();
         }
         // check if we can even render
-        if self.draw_image.is_none() || self.swapchain.is_none() || self.surface.is_none() {
+        if self.draw_image.is_none() || self.swapchain.is_none() || self.surface.is_none() || self.depth_image.is_none() {
             return;
         }
 
@@ -816,8 +845,11 @@ impl<'a> RenderContext<'a> {
                 1000000000,
                 Some(swapchain_frame.swapchain_semaphore.clone()),
                 None,
-            )
-            .unwrap();
+            );
+        if swapchain_image_index.is_err() {
+            return;
+        }
+        let swapchain_image_index = swapchain_image_index.unwrap();
         let swapchain_image = self
             .swapchain_images
             .get(swapchain_image_index as usize)
@@ -842,7 +874,6 @@ impl<'a> RenderContext<'a> {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
-        /*
         Self::draw_background(
             &self.device,
             &cmd,
@@ -851,7 +882,6 @@ impl<'a> RenderContext<'a> {
             self.gradient_pipeline.clone(),
             self.draw_image_descriptors.unwrap(),
         );
-        */
         // add a sync point
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -872,6 +902,7 @@ impl<'a> RenderContext<'a> {
             self.draw_image_view.as_ref().unwrap(),
             self.depth_image_view.as_ref().unwrap(),
             self.mesh_pipeline.clone(),
+            &self.gpu_resource_table,
             self.test_meshes.clone(),
         );
         self.draw_image.as_ref().unwrap().transition(
@@ -956,6 +987,7 @@ impl<'a> Drop for RenderContext<'a> {
         if let Some(mut depth_image) = self.depth_image.take() {
             depth_image.destroy();
         }
+        self.gpu_resource_table.destroy();
         self.deletion_stack.flush();
     }
 }
@@ -1017,6 +1049,7 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
                 if let Some(render_context) = self.render_context.as_mut() {
                     // prevent 0,0
                     if window.width() != 0 && window.height() != 0 {
+                        render_context.resize_requested = true;
                         render_context.resize_swapchain(window);
                     }
                 }
@@ -1024,7 +1057,7 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
             winit::event::WindowEvent::RedrawRequested => {
                 if let Some(render_context) = self.render_context.as_mut() {
                     // do not draw if window size is impossibly small
-                    if window.width() != 0 && window.height() != 0 {
+                    if window.width() != 0 && window.height() != 0 && !render_context.resize_requested {
                         render_context.draw();
                     }
                 }

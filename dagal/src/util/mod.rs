@@ -5,7 +5,11 @@ pub mod deletion_stack;
 pub use deletion_stack::DeletionStack;
 pub mod immediate_submit;
 pub mod slot_map;
+pub use slot_map::SlotMap;
 pub mod tests;
+pub mod free_list_allocator;
+pub use free_list_allocator::FreeList;
+
 pub use immediate_submit::ImmediateSubmit;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {

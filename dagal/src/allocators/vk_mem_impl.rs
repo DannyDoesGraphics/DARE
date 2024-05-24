@@ -67,17 +67,19 @@ impl VkMemAllocator {
 
     fn find_memory_type_index(
         &self,
-        memory_requirements: &vk::MemoryRequirements,
-        flags: vk::MemoryPropertyFlags,
+        memory_type_bits: u32,
+        properties: vk::MemoryPropertyFlags,
     ) -> Option<u32> {
-        self.memory_properties
-            .memory_types
-            .iter()
-            .find(|memory_type| {
-                (1 << memory_type.heap_index) & memory_requirements.memory_type_bits != 0
-                    && memory_type.property_flags.contains(flags)
-            })
-            .map(|memory_type| memory_type.heap_index as _)
+        let memory_properties = self.memory_properties;
+
+        for (index, memory_type) in memory_properties.memory_types.iter().enumerate() {
+            if (memory_type_bits & (1 << index)) != 0
+                && (memory_type.property_flags & properties) == properties
+            {
+                return Some(index as u32);
+            }
+        }
+        None
     }
 }
 
@@ -99,8 +101,6 @@ impl super::Allocator for VkMemAllocator {
             MemoryLocation::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
             MemoryLocation::CpuToGpu => {
                 vk::MemoryPropertyFlags::HOST_VISIBLE
-                    | vk::MemoryPropertyFlags::HOST_COHERENT
-                    | vk::MemoryPropertyFlags::DEVICE_LOCAL
             }
             MemoryLocation::GpuToCpu => {
                 vk::MemoryPropertyFlags::DEVICE_LOCAL
@@ -111,7 +111,7 @@ impl super::Allocator for VkMemAllocator {
         };
 
         let memory_type_bits = self
-            .find_memory_type_index(requirements, memory_property_flags)
+            .find_memory_type_index(requirements.memory_type_bits, memory_property_flags)
             .unwrap();
         let allocation = unsafe {
             allocator.allocate_memory(
@@ -119,9 +119,9 @@ impl super::Allocator for VkMemAllocator {
                 &vk_mem::AllocationCreateInfo {
                     flags: match ty {
                         MemoryLocation::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
-                        MemoryLocation::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED,
-                        MemoryLocation::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED,
-                        MemoryLocation::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED,
+                        MemoryLocation::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE,
+                        MemoryLocation::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_ALLOW_TRANSFER_INSTEAD,
+                        MemoryLocation::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_RANDOM,
                     },
                     required_flags: memory_property_flags,
                     usage: vk_mem::MemoryUsage::from(ty),

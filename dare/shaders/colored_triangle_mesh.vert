@@ -1,5 +1,15 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_ARB_gpu_shader_int64 : enable
+
+
+layout(set = 0, binding = 0) uniform sampler samplers;
+layout(set = 0, binding = 1) uniform texture2D sampled_images[];
+layout(set = 0, binding = 2, r32f) uniform image2D storage_images[];
+layout(set = 0, binding = 3) readonly buffer BDA {
+    uint64_t  buffer_addresses[];
+};
 
 layout (location = 0) out vec3 outColor;
 layout (location = 1) out vec2 outUV;
@@ -20,16 +30,17 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 layout( push_constant ) uniform constants
 {
     mat4 render_matrix;
-    VertexBuffer vertexBuffer;
-} PushConstants;
+    uint vertex_buffer_id;
+} pc;
 
 void main()
 {
     //load vertex data from device adress
-    Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
+    VertexBuffer vertex_buffer = VertexBuffer(buffer_addresses[pc.vertex_buffer_id]);
+    Vertex v = vertex_buffer.vertices[gl_VertexIndex];
 
     //output data
-    gl_Position = PushConstants.render_matrix * vec4(v.position, 1.0f);
+    gl_Position = pc.render_matrix * vec4(v.position, 1.0f);
     outColor = v.color.xyz;
     outUV.x = v.uv_x;
     outUV.y = v.uv_y;

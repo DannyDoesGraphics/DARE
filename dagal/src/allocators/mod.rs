@@ -9,6 +9,8 @@ use std::ptr::NonNull;
 
 #[cfg(feature = "gpu-allocator")]
 pub mod gpu_allocator_impl;
+#[cfg(feature = "gpu-allocator")]
+pub use gpu_allocator_impl::*;
 
 #[cfg(feature = "vk-mem-rs")]
 pub mod vk_mem_impl;

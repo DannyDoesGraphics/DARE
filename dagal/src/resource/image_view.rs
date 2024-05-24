@@ -27,10 +27,26 @@ pub enum ImageViewCreateInfo<'a> {
     /// ```
     /// use std::ptr;
     /// use ash::vk;
+    /// use dagal::allocators::GPUAllocatorImpl;
     /// use dagal::resource::traits::Resource;
     /// use dagal::util::tests::TestSettings;
+    /// use dagal::gpu_allocator;
     /// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = dagal::allocators::VkMemAllocator::new(instance.get_instance(), device.get_handle(), physical_device.handle(), false).unwrap();
+    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    ///     instance: instance.get_instance().clone(),
+    ///     device: device.get_handle().clone(),
+    ///     physical_device: physical_device.handle().clone(),
+    ///     debug_settings: gpu_allocator::AllocatorDebugSettings {
+    ///         log_memory_information: false,
+    ///             log_leaks_on_shutdown: true,
+    ///             store_stack_traces: false,
+    ///             log_allocations: false,
+    ///             log_frees: false,
+    ///             log_stack_traces: false,
+    ///         },
+    ///         buffer_device_address: false,
+    ///         allocation_sizes: Default::default(),
+    ///  }).unwrap();
     /// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
     /// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: device.clone(),

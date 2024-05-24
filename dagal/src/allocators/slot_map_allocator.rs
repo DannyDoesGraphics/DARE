@@ -60,7 +60,7 @@ impl<T: Allocator> SlotMapMemoryAllocator<T> {
             .slot_map
             .try_write()
             .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
-        let allocation = slot_map.try_lock_erase(allocation)?;
+        let allocation = slot_map.erase(allocation)?;
         self.allocator.free(allocation)?;
         Ok(())
     }
