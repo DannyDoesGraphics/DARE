@@ -88,11 +88,12 @@ pub struct LogicalDeviceCreateInfo<'a> {
     pub device_ci: vk::DeviceCreateInfo<'a>,
     pub queue_families: Vec<u32>,
     pub enabled_extensions: HashSet<String>,
+    pub debug_utils: bool,
 }
 
 impl LogicalDevice {
-    pub fn new<'a>(
-        device_ci: LogicalDeviceCreateInfo<'a>
+    pub fn new(
+        device_ci: LogicalDeviceCreateInfo
     ) -> Result<Self> {
         let device =
             unsafe { device_ci.instance.create_device(*device_ci.physical_device.get_handle(), &device_ci.device_ci, None)? };
@@ -101,7 +102,7 @@ impl LogicalDevice {
         trace!("Creating VkDevice {:p}", device.handle());
 
         let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
-        if device_ci.enabled_extensions.contains(&crate::util::wrap_c_str(ash::ext::debug_utils::NAME.as_ptr()).to_string_lossy().to_string()) {
+        if device_ci.debug_utils {
             debug_utils = Some(ash::ext::debug_utils::Device::new(device_ci.instance, &device));
         }
 

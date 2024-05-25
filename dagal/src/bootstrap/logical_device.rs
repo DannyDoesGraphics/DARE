@@ -206,6 +206,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 device_ci,
                 queue_families: queue_families_used.into_iter().collect::<Vec<u32>>(),
                 enabled_extensions: self.extensions.iter().map(|data| data.to_string_lossy().to_string()).collect::<HashSet<String>>(),
+                debug_utils: self.debug_utils,
             },
         )?;
         // reallocate back the queues

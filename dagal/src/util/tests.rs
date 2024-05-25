@@ -94,7 +94,8 @@ pub fn create_vulkan_and_device(
         .unwrap();
     let physical_device = physical_device_bootstrap.handle.clone();
     let mut logical_device =
-        crate::bootstrap::LogicalDeviceBuilder::from(physical_device_bootstrap);
+        crate::bootstrap::LogicalDeviceBuilder::from(physical_device_bootstrap)
+            .debug_utils(true);
     for ext in settings.logical_device_extensions.iter() {
         logical_device = logical_device.add_extension(ext.as_ptr());
     }
