@@ -1,5 +1,6 @@
 use std::{mem, ptr};
 use std::ffi::c_void;
+use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use ash::vk;
@@ -7,33 +8,14 @@ use derivative::Derivative;
 
 use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
-use crate::resource::ImageCreateInfo;
+use crate::resource::{Buffer, ImageCreateInfo, TypedBuffer, TypedBufferCreateInfo};
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
 
 
-#[derive(Debug, Clone)]
-pub struct GPUResourceTableHandle<T: Clone + Destructible> {
-	handle: Handle<T>,
-	free_list: FreeList<T>,
-}
-
-impl<T: Clone + Destructible> GPUResourceTableHandle<T> {
-	pub fn id(&self) -> u64 {
-		self.handle.id()
-	}
-}
-
-impl<T: Clone + Destructible> Destructible for GPUResourceTableHandle<T> {
-	fn destroy(&mut self) {
-		self.free_list.deallocate_destructible(self.handle.clone()).unwrap();
-	}
-}
-
-/// Bindless support
-#[derive(Derivative)]
+#[derive(Clone, Derivative)]
 #[derivative(Debug)]
 pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	device: crate::device::LogicalDevice,
@@ -41,12 +23,12 @@ pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	set_layout: crate::descriptor::DescriptorSetLayout,
 	descriptor_set: vk::DescriptorSet,
 	#[derivative(Debug="ignore")]
-	address_buffer: crate::resource::Buffer<A>,
+	address_buffer: Buffer<A>,
 
 	// Storage for the underlying resources
 	images: FreeList<crate::resource::Image<A>>,
 	image_views: FreeList<crate::resource::ImageView>,
-	buffers: FreeList<crate::resource::Buffer<A>>, // we sadly must force every buffer to be u8...
+	buffers: FreeList<Buffer<A>>,
 }
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
@@ -106,7 +88,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			.build(device.clone(), vk::ShaderStageFlags::ALL, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty() )?;
 		let descriptor_set = pool.allocate(set_layout.handle())?;
 		// create a descriptor write
-		let bda_buffer: crate::resource::buffer::Buffer<A> = crate::resource::buffer::Buffer::new(
+		let bda_buffer: Buffer<A> = Buffer::new(
 			crate::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
 				device: device.clone(),
 				allocator,
@@ -166,7 +148,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 		self.set_layout.handle()
 	}
 
-	pub fn new_image(&mut self, image_ci: crate::resource::ImageCreateInfo<A>, sampler: vk::Sampler, mut image_view: vk::ImageViewCreateInfo, image_layout: vk::ImageLayout) -> Result<GPUResourceTableHandle<crate::resource::Image<A>>> {
+	pub fn new_image(&mut self, image_ci: ImageCreateInfo<A>, sampler: vk::Sampler, mut image_view: vk::ImageViewCreateInfo, image_layout: vk::ImageLayout)
+		-> Result<Handle<crate::resource::Image<A>>> {
 		let flags: vk::ImageUsageFlags = match &image_ci {
 			ImageCreateInfo::FromVkNotManaged { .. } => { unimplemented!() } /// We only manage managed images
 			ImageCreateInfo::NewUnallocated { image_ci, .. } => { image_ci.usage }
@@ -223,16 +206,14 @@ impl<A: Allocator> GPUResourceTable<A> {
 			self.device.get_handle().update_descriptor_sets(&write_infos, &[]);
 		}
 		
-		Ok(GPUResourceTableHandle {
-			handle,
-			free_list: self.images.clone(),
-		})
+		Ok(handle)
 	}
 
 	/// Create a new buffer and put it into the bindless buffer
 	///
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
-	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>) -> Result<GPUResourceTableHandle<crate::resource::Buffer<A>>> {
+	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
+		-> Result<Handle<Buffer<A>>> {
 		/// confirm that BDA is enabled
 		match buffer_ci {
 			crate::resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
@@ -242,7 +223,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			}
 		}
 
-		let buffer: crate::resource::Buffer<A> = crate::resource::Buffer::new(buffer_ci)?;
+		let buffer: Buffer<A> = Buffer::new(buffer_ci)?;
 		let buffer_address = buffer.address();
 		let handle = self.buffers.allocate(buffer)?;
 		// expand into the slot
@@ -251,20 +232,42 @@ impl<A: Allocator> GPUResourceTable<A> {
 			let data_ptr = &buffer_address as *const _ as *const c_void;
 			ptr::copy_nonoverlapping(data_ptr, target_ptr, mem::size_of::<vk::DeviceAddress>());
 		}
-		Ok(GPUResourceTableHandle {
-			handle,
-			free_list: self.buffers.clone(),
-		})
+		Ok(handle)
 	}
 
-	/// Get more images
-	pub fn get_buffer(&self, handle: &GPUResourceTableHandle<crate::resource::Buffer<A>>) -> Result<crate::resource::Buffer<A>> {
-		self.buffers.get(&handle.handle)
+	pub fn free_buffer(&mut self, handle: Handle<Buffer<A>>) -> Result<()> {
+		self.buffers.deallocate_destructible(handle)
+	}
+
+	pub fn new_typed_buffer<T: Sized>(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
+	-> Result<Handle<TypedBuffer<T, A>>> {
+		let handle = self.new_buffer(buffer_ci)?;
+		let handle: Handle<TypedBuffer<T, A>> = Handle::new(handle.id());
+		Ok(handle)
+	}
+
+	pub fn free_typed_buffer<T: Sized>(&mut self, handle: Handle<TypedBuffer<T>>) -> Result<()> {
+		let handle = Handle::new(handle.id());
+		self.buffers.deallocate_destructible(handle)
+	}
+
+	/// Get buffer
+	pub fn get_buffer(&self, handle: &Handle<Buffer<A>>) -> Result<Buffer<A>> {
+		self.buffers.get(handle)
+	}
+
+	/// Get typed buffer
+	pub fn get_typed_buffer<T: Sized>(&self, handle: &Handle<TypedBuffer<T, A>>) -> Result<TypedBuffer<T, A>> {
+		let buffer = unsafe { self.buffers.untyped_get(handle)? };
+		let buffer: Result<TypedBuffer<T, A>> = TypedBuffer::new(TypedBufferCreateInfo::FromDagalBuffer {
+			handle: buffer
+		});
+		buffer
 	}
 
 	/// Get even more images
-	pub fn get_image(&self, handle: &GPUResourceTableHandle<crate::resource::Image<A>>) -> Result<crate::resource::Image<A>> {
-		self.images.get(&handle.handle)
+	pub fn get_image(&self, handle: &Handle<crate::resource::Image<A>>) -> Result<crate::resource::Image<A>> {
+		self.images.get(&handle)
 	}
 }
 

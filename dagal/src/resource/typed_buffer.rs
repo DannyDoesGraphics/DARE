@@ -10,10 +10,10 @@ use crate::traits::Destructible;
 use anyhow::Result;
 
 /// Create a typed buffer
-#[derive(Debug, Clone)]
-struct TypedBuffer<T: Sized, A: Allocator = GPUAllocatorImpl> {
+#[derive(Debug)]
+pub struct TypedBuffer<T: Sized, A: Allocator = GPUAllocatorImpl> {
 	handle: Buffer<A>,
-	_maker: PhantomData<T>,
+	_marker: PhantomData<T>,
 }
 
 impl<T: Sized, A: Allocator> Destructible for TypedBuffer<T, A> {
@@ -22,9 +22,21 @@ impl<T: Sized, A: Allocator> Destructible for TypedBuffer<T, A> {
 	}
 }
 
+impl<T: Sized, A: Allocator> Clone for TypedBuffer<T, A> {
+	fn clone(&self) -> Self {
+		Self {
+			handle: self.handle.clone(),
+			_marker: Default::default(),
+		}
+	}
+}
+
 pub enum TypedBufferCreateInfo<'a, A: Allocator> {
-	FromDagalBuffer {
+	FromDagalBufferCI {
 		handle: BufferCreateInfo<'a, A>,
+	},
+	FromDagalBuffer {
+		handle: Buffer<A>,
 	}
 }
 
@@ -35,7 +47,7 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBuffer<T, A> {
 	/// All size info is assumed to by scaled by the size of the type in the buffer
 	fn new(create_info: Self::CreateInfo) -> Result<Self> where Self: Sized {
 		match create_info {
-			TypedBufferCreateInfo::FromDagalBuffer { mut handle } => {
+			TypedBufferCreateInfo::FromDagalBufferCI { mut handle } => {
 				match &mut handle {
 					BufferCreateInfo::NewEmptyBuffer { size, .. } => {
 						*size = *size * mem::size_of::<T>() as vk::DeviceSize;
@@ -44,7 +56,13 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBuffer<T, A> {
 				let handle = Buffer::new(handle)?;
 				Ok(Self {
 					handle,
-					_maker: Default::default(),
+					_marker: Default::default(),
+				})
+			}
+			TypedBufferCreateInfo::FromDagalBuffer { handle } => {
+				Ok(Self {
+					handle,
+					_marker: Default::default()
 				})
 			}
 		}

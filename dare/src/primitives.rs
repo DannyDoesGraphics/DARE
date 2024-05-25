@@ -3,8 +3,9 @@ use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
 use std::mem;
-use dagal::descriptor::bindless::bindless::GPUResourceTableHandle;
 use dagal::descriptor::GPUResourceTable;
+use dagal::resource::{Buffer, TypedBuffer};
+use dagal::util::free_list_allocator::Handle;
 
 #[repr(C)]
 #[derive(Debug, Clone, Default)]
@@ -18,8 +19,8 @@ pub struct Vertex {
 
 #[derive(Clone)]
 pub struct GPUMeshBuffer {
-    pub index_buffer: dagal::resource::Buffer<GPUAllocatorImpl>,
-    pub vertex_buffer: GPUResourceTableHandle<dagal::resource::Buffer<GPUAllocatorImpl>>,
+    pub index_buffer: Buffer<GPUAllocatorImpl>,
+    pub vertex_buffer: Handle<TypedBuffer<Vertex>>,
 }
 
 impl GPUMeshBuffer {
@@ -31,7 +32,7 @@ impl GPUMeshBuffer {
         vertices: &[Vertex],
         name: Option<String>,
     ) -> Self {
-        let mut index_buffer = dagal::resource::Buffer::<GPUAllocatorImpl>::new(
+        let mut index_buffer = Buffer::<GPUAllocatorImpl>::new(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
@@ -42,7 +43,7 @@ impl GPUMeshBuffer {
             },
         )
         .unwrap();
-        let vertex_buffer_handle = gpu_resource_table.new_buffer(
+        let vertex_buffer_handle = gpu_resource_table.new_typed_buffer::<Vertex>(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
@@ -53,11 +54,11 @@ impl GPUMeshBuffer {
                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             }
         ).unwrap();
-        let mut vertex_buffer = gpu_resource_table.get_buffer(&vertex_buffer_handle).unwrap();
+        let mut vertex_buffer = gpu_resource_table.get_typed_buffer(&vertex_buffer_handle).unwrap();
         index_buffer.upload(immediate, allocator, indices).unwrap(); // fuck it lol
         unsafe {
             vertex_buffer
-                .upload_arbitrary(immediate, allocator, vertices)
+                .upload(immediate, allocator, vertices)
                 .unwrap();
         }
         if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
@@ -80,13 +81,6 @@ impl GPUMeshBuffer {
             index_buffer,
             vertex_buffer: vertex_buffer_handle,
         }
-    }
-}
-
-impl Destructible for GPUMeshBuffer {
-    fn destroy(&mut self) {
-        self.index_buffer.destroy();
-        self.vertex_buffer.destroy();
     }
 }
 

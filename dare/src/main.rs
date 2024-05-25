@@ -805,7 +805,15 @@ impl<'a> RenderContext<'a> {
                 }
             }
             let mesh_buffers = GPUMeshBuffer::new(&mut self.allocator, &mut immediate_submit, &mut self.gpu_resource_table, indices.as_slice(), vertices.as_slice(), Some(mesh.name().unwrap().to_string()));
-            self.deletion_stack.push_resource(&mesh_buffers);
+            self.deletion_stack.push({
+                let mut gpu_rt = self.gpu_resource_table.clone();
+                let mut index_buffer = mesh_buffers.index_buffer.clone();
+                let typed_buffer = mesh_buffers.vertex_buffer.clone();
+                move || {
+                    index_buffer.destroy();
+                    gpu_rt.free_typed_buffer(typed_buffer).unwrap()
+                }
+            });
             meshes.push(Arc::new(MeshAsset {
                 name: mesh.name().unwrap().to_string(),
                 surfaces,

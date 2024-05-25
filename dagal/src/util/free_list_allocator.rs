@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::mem;
-use std::sync::{Arc, RwLock};
+use std::slice::IterMut;
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use crate::traits::Destructible;
 use anyhow::Result;
 
@@ -23,7 +24,21 @@ impl<T> Handle<T> {
 	pub fn id(&self) -> u64 {
 		self.id
 	}
+
+	/// If for whatever reason we wish to manually set the id ourselves.
+	pub(crate) unsafe fn set_id(mut self, id: u64) -> Self {
+		self.id = id;
+		self
+	}
+
+	pub fn new(id: u64) -> Self {
+		Self {
+			id,
+			_marker: Default::default(),
+		}
+	}
 }
+
 
 /// Free list allocator
 ///
@@ -38,7 +53,6 @@ impl<T> Handle<T> {
 struct FreeListInner<T> {
 	resources: Vec<Option<T>>,
 	free_ids: Vec<u64>,
-	_marker: PhantomData<T>
 }
 
 #[derive(Debug, Clone)]
@@ -52,7 +66,6 @@ impl<T: Clone> Default for FreeList<T> {
 			inner: Arc::new(RwLock::new(FreeListInner {
 				resources: vec![],
 				free_ids: vec![],
-				_marker: Default::default(),
 			}))
 		}
 	}
@@ -90,7 +103,29 @@ impl<T: Clone> FreeList<T> {
 	}
 
 	pub fn get(&self, handle: &Handle<T>) -> Result<T> {
-		if !self.is_valid(handle)? {
+		unsafe {
+			self.get(handle)
+		}
+	}
+
+	pub fn is_valid(&self, handle: &Handle<T>) -> Result<bool> {
+		unsafe {
+			self.untyped_is_valid(handle)
+		}
+	}
+
+	pub(crate) unsafe fn untyped_is_valid<A>(&self, handle: &Handle<A>) -> Result<bool> {
+		if let Some(resource) = self.inner.read().map_err(|err| {
+			anyhow::Error::from(crate::DagalError::PoisonError)
+		})?.resources.get(handle.id as usize) {
+			return Ok(resource.is_some());
+		}
+		Ok(false)
+	}
+
+	/// Get the underlying values regardless of handle type
+	pub(crate) unsafe fn untyped_get<A>(&self, handle: &Handle<A>) -> Result<T> {
+		if unsafe { !self.untyped_is_valid(handle)? } {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
 		let guard = self.inner.read().map_err(|err| {
@@ -102,13 +137,13 @@ impl<T: Clone> FreeList<T> {
 		Ok(resource)
 	}
 
-	pub fn is_valid(&self, handle: &Handle<T>) -> Result<bool> {
-		if let Some(resource) = self.inner.read().map_err(|err| {
+	pub fn with_iter_mut<F: FnOnce(&mut dyn Iterator<Item = &mut Option<T>>)>(&mut self, f: F) {
+		let mut guard = self.inner.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
-		})?.resources.get(handle.id as usize) {
-			return Ok(resource.is_some());
-		}
-		Ok(false)
+		}).unwrap();
+
+		let mut iter = guard.resources.iter_mut();
+		let result = f(&mut iter);
 	}
 }
 
