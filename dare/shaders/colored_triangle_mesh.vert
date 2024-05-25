@@ -1,14 +1,12 @@
 #version 450
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_nonuniform_qualifier : require
-#extension GL_ARB_gpu_shader_int64 : enable
-
+#include <dagal/ext.glsl>
+#include <dagal/dagal.glsl>
 
 layout(set = 0, binding = 0) uniform sampler samplers;
 layout(set = 0, binding = 1) uniform texture2D sampled_images[];
 layout(set = 0, binding = 2, r32f) uniform image2D storage_images[];
 layout(set = 0, binding = 3) readonly buffer BDA {
-    uint64_t  buffer_addresses[];
+    u64 buffer_addresses[];
 };
 
 layout (location = 0) out vec3 outColor;
@@ -16,9 +14,9 @@ layout (location = 1) out vec2 outUV;
 
 struct Vertex {
     vec3 position;
-    float uv_x;
+    f32 uv_x;
     vec3 normal;
-    float uv_y;
+    f32 uv_y;
     vec4 color;
 };
 
@@ -30,7 +28,7 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 layout( push_constant ) uniform constants
 {
     mat4 render_matrix;
-    uint vertex_buffer_id;
+    u32 vertex_buffer_id;
 } pc;
 
 void main()

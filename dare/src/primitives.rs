@@ -1,4 +1,4 @@
-use dagal::allocators::{GPUAllocatorImpl, VkMemAllocator};
+use dagal::allocators::{GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::Destructible;
@@ -42,7 +42,7 @@ impl GPUMeshBuffer {
             },
         )
         .unwrap();
-        let mut vertex_buffer_handle = gpu_resource_table.new_buffer(
+        let vertex_buffer_handle = gpu_resource_table.new_buffer(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,

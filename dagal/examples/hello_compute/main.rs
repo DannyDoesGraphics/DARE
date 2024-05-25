@@ -116,7 +116,7 @@ impl<'a> RenderContext<'a> {
         let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
             instance: instance.get_instance().clone(),
             device: device.get_handle().clone(),
-            physical_device: physical_device.handle().clone(),
+            physical_device: physical_device.handle(),
             debug_settings: gpu_allocator::AllocatorDebugSettings {
                 log_memory_information: false,
                 log_leaks_on_shutdown: true,

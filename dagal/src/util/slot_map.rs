@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::slice::IterMut;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Result;
 use derivative::Derivative;
@@ -131,7 +130,7 @@ impl<T: Send + Sync> SlotMap<T> {
 
     /// Retrieve the data that maps to the slot directly
     pub fn get(&self, slot: &Slot<T>) -> Result<&T> {
-        let data_index = self.get_data_index(&slot)?;
+        let data_index = self.get_data_index(slot)?;
         Ok(self.data.get(data_index).unwrap())
     }
 
@@ -149,7 +148,7 @@ impl<T: Send + Sync> SlotMap<T> {
     /// Get the index the data is actually at in the `Data` vector
     pub fn get_data_index(&self, slot: &Slot<T>) -> Result<usize> {
         // validate generation
-        self.validate_slot(&slot)?;
+        self.validate_slot(slot)?;
 
         let data_index = self.indices.get(slot.index).unwrap().index;
         Ok(data_index)

@@ -5,7 +5,7 @@ use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
 
-use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator, VkMemAllocator};
+use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource::ImageCreateInfo;
 use crate::resource::traits::Resource;
@@ -173,7 +173,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			ImageCreateInfo::NewAllocated { image_ci, .. } => { image_ci.usage }
 		};
 		let image = crate::resource::Image::new(image_ci)?;
-		let vk_image = image.handle().clone();
+		let vk_image = image.handle();
 		let handle = self.images.allocate(image)?;
 		image_view.image = vk_image;
 		let image_view = unsafe {
@@ -259,12 +259,12 @@ impl<A: Allocator> GPUResourceTable<A> {
 
 	/// Get more images
 	pub fn get_buffer(&self, handle: &GPUResourceTableHandle<crate::resource::Buffer<u8, A>>) -> Result<crate::resource::Buffer<u8, A>> {
-		Ok(self.buffers.get(&handle.handle)?)
+		self.buffers.get(&handle.handle)
 	}
 
 	/// Get even more images
 	pub fn get_image(&self, handle: &GPUResourceTableHandle<crate::resource::Image<A>>) -> Result<crate::resource::Image<A>> {
-		Ok(self.images.get(&handle.handle)?)
+		self.images.get(&handle.handle)
 	}
 }
 

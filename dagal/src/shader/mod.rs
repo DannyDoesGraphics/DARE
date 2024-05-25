@@ -9,6 +9,8 @@ pub use shader::Shader;
 
 #[cfg(feature = "shaderc")]
 pub mod shaderc_impl;
+pub(crate) mod glsl_preprocessor;
+
 #[cfg(feature = "shaderc")]
 pub use shaderc_impl::*;
 

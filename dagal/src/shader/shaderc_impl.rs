@@ -1,4 +1,8 @@
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use anyhow::Result;
+use shaderc::{IncludeType, ResolvedInclude};
+
 
 /// Implementation of [`shaderc`] compiler
 pub struct ShaderCCompiler {
@@ -48,6 +52,44 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
         }
         let mut options = options.unwrap();
         options.add_macro_definition("EP", Some("main"));
+        options.set_warnings_as_errors();
+        let include_context = Arc::new(Mutex::new(super::glsl_preprocessor::IncludeContext::new()));
+
+        options.set_include_callback({
+            let include_context = include_context.clone();
+            move |requested_path, include_type, including_path, depth| {
+                let source_path = Path::new(including_path).canonicalize().unwrap_or_else(|_| PathBuf::from(including_path));
+                /// we add a custom absolute include path
+                let include_path = match include_type {
+                    IncludeType::Relative => {
+                        println!("Nope updating: {}", requested_path);
+                        source_path.parent().unwrap_or_else(|| Path::new("")).join(requested_path)
+                                   .canonicalize().unwrap_or_else(|_| PathBuf::from(requested_path))
+                    }
+                    IncludeType::Standard => {
+                        if requested_path.starts_with("dagal/") {
+                            println!("Yep updating: {}", requested_path);
+                            let requested_path_str = requested_path.trim_start_matches("dagal/");
+                            PathBuf::from("dagal/shaders/includes").join(requested_path_str)
+                        } else {
+                            println!("I give up: {}", requested_path);
+                            PathBuf::from(requested_path)
+                        }
+                    }
+                };
+                println!("{:?} -> {:?} / {}", source_path, include_path, requested_path);
+                let include_path = include_path.canonicalize().unwrap();
+
+                let mut guard = include_context.lock().unwrap();
+                let res = guard.resolve_include(source_path, include_path).map_err(|err| {
+                    err.to_string()
+                })?;
+                Ok(ResolvedInclude {
+                    resolved_name: res.resolved_name,
+                    content: res.content,
+                })
+            }
+        });
 
         let output = self.handle.compile_into_spirv(
             content,

@@ -58,7 +58,7 @@ impl Allocator for GPUAllocatorImpl {
 		})?;
 		let allocate_ci = gpu_allocator::vulkan::AllocationCreateDesc {
 			name,
-			requirements: requirements.clone(),
+			requirements: *requirements,
 			location: match ty {
 				super::MemoryLocation::GpuOnly => gpu_allocator::MemoryLocation::GpuOnly,
 				super::MemoryLocation::CpuToGpu => gpu_allocator::MemoryLocation::CpuToGpu,

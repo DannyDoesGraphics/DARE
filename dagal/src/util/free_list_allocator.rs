@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 use std::mem;
-use std::slice::{Iter, IterMut};
 use std::sync::{Arc, RwLock};
 use crate::traits::Destructible;
 use anyhow::Result;
@@ -91,7 +90,7 @@ impl<T: Clone> FreeList<T> {
 	}
 
 	pub fn get(&self, handle: &Handle<T>) -> Result<T> {
-		if !self.is_valid(&handle)? {
+		if !self.is_valid(handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
 		let guard = self.inner.read().map_err(|err| {

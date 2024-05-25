@@ -1,12 +1,12 @@
 mod primitives;
+mod assets;
+mod ray_tracing;
 
 use std::{mem, path, ptr, slice};
-use std::ffi::CString;
 use std::io::Write;
 use std::sync::Arc;
-use gltf::Gltf;
 
-use dagal::allocators::{GPUAllocatorImpl, VkMemAllocator};
+use dagal::allocators::{GPUAllocatorImpl};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -14,7 +14,6 @@ use dagal::ash::vk;
 use dagal::ash::vk::Handle;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::descriptor::GPUResourceTable;
-use dagal::gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::resource::traits::Resource;
@@ -155,7 +154,7 @@ impl<'a> RenderContext<'a> {
         let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
             instance: instance.get_instance().clone(),
             device: device.get_handle().clone(),
-            physical_device: physical_device.handle().clone(),
+            physical_device: physical_device.handle(),
             debug_settings: gpu_allocator::AllocatorDebugSettings {
                 log_memory_information: false,
                 log_leaks_on_shutdown: true,
@@ -332,7 +331,7 @@ impl<'a> RenderContext<'a> {
             mesh_pipeline: triangle_pipeline,
             test_meshes: vec![],
         };
-        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/daddy.glb"));
+        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/SM_Deccer_Cubes.glb"));
         app.test_meshes = meshes;
         app
     }
@@ -721,9 +720,9 @@ impl<'a> RenderContext<'a> {
     }
 
     fn load_gltf_meshes(&mut self, path: path::PathBuf) -> Vec<Arc<MeshAsset>> {
-        let (document, buffers, images) = gltf::import(&path).unwrap();
+        let (document, buffers, images) = gltf::import(path).unwrap();
         let mut meshes: Vec<Arc<MeshAsset>> = Vec::new();
-        let mut immediate_submit = dagal::util::ImmediateSubmit::new(self.device.clone(), self.graphics_queue.clone()).unwrap();
+        let mut immediate_submit = dagal::util::ImmediateSubmit::new(self.device.clone(), self.graphics_queue).unwrap();
 
         let mut indices: Vec<u32> = Vec::new();
         let mut vertices: Vec<Vertex> = Vec::new();

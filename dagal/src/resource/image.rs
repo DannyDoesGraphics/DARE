@@ -1,5 +1,5 @@
 use crate::allocators::slot_map_allocator::MemoryAllocation;
-use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator, VkMemAllocator};
+use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
