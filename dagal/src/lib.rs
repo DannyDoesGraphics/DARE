@@ -2,7 +2,6 @@ pub mod allocators;
 #[cfg(feature = "bootstrap")]
 pub mod bootstrap;
 pub mod command;
-pub mod context;
 pub mod core;
 pub mod device;
 pub mod error;
