@@ -338,11 +338,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                 };
                 if let Some(debug_utils) = res.device.clone().get_debug_utils() {
                     if let Some(name) = res.name.clone() {
-                        println!("Setting name: {}", name);
                         res.set_name(&debug_utils, name.as_str())?;
                     }
-                } else {
-                    println!("None!");
                 }
                 Ok(res)
             },
@@ -367,7 +364,6 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                 image_ci,
                 name
             } => {
-                println!("Got {:?}", name);
                 let mut image = Self::new(ImageCreateInfo::NewUnallocated { device, image_ci, name })?;
                 let memory_requirements = unsafe {
                     image
