@@ -50,6 +50,13 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     },
 }
 
+impl<A: Allocator> Image<A> {
+    /// Get all used usage flags
+    pub fn usage_flags(&self) -> vk::ImageUsageFlags {
+        self.usage_flags
+    }
+}
+
 impl Image {
     pub fn image_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {

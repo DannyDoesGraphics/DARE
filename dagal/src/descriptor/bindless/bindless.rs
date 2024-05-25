@@ -7,7 +7,8 @@ use derivative::Derivative;
 
 use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
-use crate::resource::{Buffer, ImageCreateInfo, TypedBuffer, TypedBufferCreateInfo};
+use crate::resource;
+use crate::resource::ImageViewCreateInfo;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use crate::util::free_list_allocator::Handle;
@@ -22,12 +23,12 @@ pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	set_layout: crate::descriptor::DescriptorSetLayout,
 	descriptor_set: vk::DescriptorSet,
 	#[derivative(Debug="ignore")]
-	address_buffer: Buffer<A>,
+	address_buffer: resource::Buffer<A>,
 
 	// Storage for the underlying resources
-	images: FreeList<crate::resource::Image<A>>,
-	image_views: FreeList<crate::resource::ImageView>,
-	buffers: FreeList<Buffer<A>>,
+	images: FreeList<resource::Image<A>>,
+	image_views: FreeList<resource::ImageView>,
+	buffers: FreeList<resource::Buffer<A>>,
 }
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
@@ -38,6 +39,12 @@ const BUFFER_BINDING_INDEX: u32 = 3;
 const STORAGE_IMAGE_BINDING_INDEX: u32 = 2;
 const SAMPLED_IMAGE_BINDING_INDEX: u32 = 1;
 const SAMPLER_BINDING_INDEX: u32 = 0;
+
+pub enum ResourceInput<'a, T: Resource<'a>> {
+	Resource(T),
+	ResourceCI(T::CreateInfo),
+	ResourceHandle(Handle<T>),
+}
 
 impl<A: Allocator> GPUResourceTable<A> {
 	pub fn new(device: crate::device::LogicalDevice, allocator: &mut SlotMapMemoryAllocator<A>) -> Result<Self> {
@@ -87,8 +94,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 			.build(device.clone(), vk::ShaderStageFlags::ALL, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty() )?;
 		let descriptor_set = pool.allocate(set_layout.handle())?;
 		// create a descriptor write
-		let bda_buffer: Buffer<A> = Buffer::new(
-			crate::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
+		let bda_buffer: resource::Buffer<A> = resource::Buffer::new(
+			resource::buffer::BufferCreateInfo::NewEmptyBuffer {
 				device: device.clone(),
 				allocator,
 				size: MAX_BUFFER_RESOURCES as u64,
@@ -147,21 +154,52 @@ impl<A: Allocator> GPUResourceTable<A> {
 		self.set_layout.handle()
 	}
 
-	pub fn new_image(&mut self, image_ci: ImageCreateInfo<A>, sampler: vk::Sampler, mut image_view: vk::ImageViewCreateInfo, image_layout: vk::ImageLayout)
-		-> Result<Handle<crate::resource::Image<A>>> {
-		let flags: vk::ImageUsageFlags = match &image_ci {
-			ImageCreateInfo::FromVkNotManaged { .. } => { unimplemented!() } /// We only manage managed images
-			ImageCreateInfo::NewUnallocated { image_ci, .. } => { image_ci.usage }
-			ImageCreateInfo::NewAllocated { image_ci, .. } => { image_ci.usage }
-		};
-		let image = crate::resource::Image::new(image_ci)?;
-		let vk_image = image.handle();
-		let handle = self.images.allocate(image)?;
-		image_view.image = vk_image;
-		let image_view = unsafe {
-			self.device.get_handle().create_image_view(&image_view, None)
-		}?;
+	/// Create a new image view
+	pub fn new_image_view(&mut self, image_view_ci: resource::ImageViewCreateInfo) -> Result<Handle<resource::ImageView>> {
+		let image_view = resource::ImageView::new(image_view_ci)?;
+		self.image_views.allocate(image_view)
+	}
 
+	/// Get an image view
+	pub fn get_image_view(&self, image_view: &Handle<resource::ImageView>) -> Result<resource::ImageView> {
+		self.image_views.get(image_view)
+	}
+
+	pub fn new_image<'a>(&mut self, image_ci: ResourceInput<'a, resource::Image<A>>, mut image_view_ci: ResourceInput<'a, resource::ImageView>, sampler: vk::Sampler, image_layout: vk::ImageLayout)
+		-> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)> where A: 'a {
+		let image_handle = match image_ci {
+			ResourceInput::Resource(image) => {
+				self.images.allocate(image)?
+			},
+			ResourceInput::ResourceCI(image_ci) => {
+				let image = resource::Image::new(image_ci)?;
+				self.images.allocate(image)?
+			},
+			ResourceInput::ResourceHandle(handle) => {
+				handle
+			}
+		};
+		let image = self.images.get(&image_handle).unwrap();
+		let image_view_handle = match image_view_ci {
+			ResourceInput::Resource(image_view) => {
+				self.image_views.allocate(image_view)?
+			},
+			ResourceInput::ResourceCI(mut image_view_ci) => {
+				match &mut image_view_ci {
+					ImageViewCreateInfo::FromCreateInfo { create_info, .. } => {
+						create_info.image = image.handle();
+					}
+					ImageViewCreateInfo::FromVk { .. } => {}
+				}
+				let image_view = resource::ImageView::new(image_view_ci)?;
+				self.image_views.allocate(image_view)?
+			}
+			ResourceInput::ResourceHandle(handle) => handle,
+		};
+		let image_view = self.image_views.get(&image_view_handle)?;
+
+		let flags: vk::ImageUsageFlags = image.usage_flags();
+		let handle = self.images.allocate(image)?;
 		let mut write_infos: Vec<vk::WriteDescriptorSet> = Vec::new();
 		if flags & vk::ImageUsageFlags::SAMPLED == vk::ImageUsageFlags::SAMPLED {
 			write_infos.push(vk::WriteDescriptorSet {
@@ -174,7 +212,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 				descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
 					sampler,
-					image_view,
+					image_view: image_view.handle(),
 					image_layout,
 				},
 				p_buffer_info: ptr::null(),
@@ -193,7 +231,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 				descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
 					sampler,
-					image_view,
+					image_view: image_view.handle(),
 					image_layout,
 				},
 				p_buffer_info: ptr::null(),
@@ -201,18 +239,14 @@ impl<A: Allocator> GPUResourceTable<A> {
 				_marker: Default::default(),
 			});
 		}
-		unsafe {
-			self.device.get_handle().update_descriptor_sets(&write_infos, &[]);
-		}
-		
-		Ok(handle)
+		Ok((image_handle, image_view_handle))
 	}
 
 	/// Create a new buffer and put it into the bindless buffer
 	///
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
 	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
-		-> Result<Handle<Buffer<A>>> {
+		-> Result<Handle<resource::Buffer<A>>> {
 		/// confirm that BDA is enabled
 		match buffer_ci {
 			crate::resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
@@ -222,7 +256,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			}
 		}
 
-		let buffer: Buffer<A> = Buffer::new(buffer_ci)?;
+		let buffer: resource::Buffer<A> = resource::Buffer::new(buffer_ci)?;
 		let buffer_address = buffer.address();
 		let handle = self.buffers.allocate(buffer)?;
 		// expand into the slot
@@ -234,38 +268,38 @@ impl<A: Allocator> GPUResourceTable<A> {
 		Ok(handle)
 	}
 
-	pub fn free_buffer(&mut self, handle: Handle<Buffer<A>>) -> Result<()> {
+	pub fn free_buffer(&mut self, handle: Handle<resource::Buffer<A>>) -> Result<()> {
 		self.buffers.deallocate_destructible(handle)
 	}
 
 	pub fn new_typed_buffer<T: Sized>(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
-	-> Result<Handle<TypedBuffer<T, A>>> {
+	-> Result<Handle<resource::TypedBuffer<T, A>>> {
 		let handle = self.new_buffer(buffer_ci)?;
-		let handle: Handle<TypedBuffer<T, A>> = Handle::new(handle.id());
+		let handle: Handle<resource::TypedBuffer<T, A>> = Handle::new(handle.id());
 		Ok(handle)
 	}
 
-	pub fn free_typed_buffer<T: Sized>(&mut self, handle: Handle<TypedBuffer<T>>) -> Result<()> {
+	pub fn free_typed_buffer<T: Sized>(&mut self, handle: Handle<resource::TypedBuffer<T>>) -> Result<()> {
 		let handle = Handle::new(handle.id());
 		self.buffers.deallocate_destructible(handle)
 	}
 
 	/// Get buffer
-	pub fn get_buffer(&self, handle: &Handle<Buffer<A>>) -> Result<Buffer<A>> {
+	pub fn get_buffer(&self, handle: &Handle<resource::Buffer<A>>) -> Result<resource::Buffer<A>> {
 		self.buffers.get(handle)
 	}
 
 	/// Get typed buffer
-	pub fn get_typed_buffer<T: Sized>(&self, handle: &Handle<TypedBuffer<T, A>>) -> Result<TypedBuffer<T, A>> {
+	pub fn get_typed_buffer<T: Sized>(&self, handle: &Handle<resource::TypedBuffer<T, A>>) -> Result<resource::TypedBuffer<T, A>> {
 		let buffer = unsafe { self.buffers.untyped_get(handle)? };
-		let buffer: Result<TypedBuffer<T, A>> = TypedBuffer::new(TypedBufferCreateInfo::FromDagalBuffer {
+		let buffer: Result<resource::TypedBuffer<T, A>> = resource::TypedBuffer::new(resource::TypedBufferCreateInfo::FromDagalBuffer {
 			handle: buffer
 		});
 		buffer
 	}
 
 	/// Get even more images
-	pub fn get_image(&self, handle: &Handle<crate::resource::Image<A>>) -> Result<crate::resource::Image<A>> {
+	pub fn get_image(&self, handle: &Handle<resource::Image<A>>) -> Result<resource::Image<A>> {
 		self.images.get(handle)
 	}
 }
