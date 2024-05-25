@@ -41,12 +41,12 @@ pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	set_layout: crate::descriptor::DescriptorSetLayout,
 	descriptor_set: vk::DescriptorSet,
 	#[derivative(Debug="ignore")]
-	address_buffer: crate::resource::Buffer<vk::DeviceAddress, A>,
+	address_buffer: crate::resource::Buffer<A>,
 
 	// Storage for the underlying resources
 	images: FreeList<crate::resource::Image<A>>,
 	image_views: FreeList<crate::resource::ImageView>,
-	buffers: FreeList<crate::resource::Buffer<u8, A>>, // we sadly must force every buffer to be u8...
+	buffers: FreeList<crate::resource::Buffer<A>>, // we sadly must force every buffer to be u8...
 }
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
@@ -106,7 +106,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			.build(device.clone(), vk::ShaderStageFlags::ALL, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty() )?;
 		let descriptor_set = pool.allocate(set_layout.handle())?;
 		// create a descriptor write
-		let bda_buffer: crate::resource::buffer::Buffer<vk::DeviceAddress, A> = crate::resource::buffer::Buffer::new(
+		let bda_buffer: crate::resource::buffer::Buffer<A> = crate::resource::buffer::Buffer::new(
 			crate::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
 				device: device.clone(),
 				allocator,
@@ -232,7 +232,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	/// Create a new buffer and put it into the bindless buffer
 	///
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
-	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>) -> Result<GPUResourceTableHandle<crate::resource::Buffer<u8, A>>> {
+	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>) -> Result<GPUResourceTableHandle<crate::resource::Buffer<A>>> {
 		/// confirm that BDA is enabled
 		match buffer_ci {
 			crate::resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
@@ -242,7 +242,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			}
 		}
 
-		let buffer: crate::resource::Buffer<u8, A> = crate::resource::Buffer::new(buffer_ci)?;
+		let buffer: crate::resource::Buffer<A> = crate::resource::Buffer::new(buffer_ci)?;
 		let buffer_address = buffer.address();
 		let handle = self.buffers.allocate(buffer)?;
 		// expand into the slot
@@ -258,7 +258,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	}
 
 	/// Get more images
-	pub fn get_buffer(&self, handle: &GPUResourceTableHandle<crate::resource::Buffer<u8, A>>) -> Result<crate::resource::Buffer<u8, A>> {
+	pub fn get_buffer(&self, handle: &GPUResourceTableHandle<crate::resource::Buffer<A>>) -> Result<crate::resource::Buffer<A>> {
 		self.buffers.get(&handle.handle)
 	}
 

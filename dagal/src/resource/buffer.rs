@@ -15,15 +15,13 @@ use tracing::trace;
 
 #[derive(Derivative, Debug)]
 #[derivative(Clone)]
-pub struct Buffer<T: Sized, A: Allocator = GPUAllocatorImpl> {
+pub struct Buffer<A: Allocator = GPUAllocatorImpl> {
     handle: vk::Buffer,
     device: crate::device::LogicalDevice,
     allocation: Option<MemoryAllocation<A>>,
     address: vk::DeviceAddress,
     size: vk::DeviceSize,
     name: Option<String>,
-    #[derivative(Default)]
-    _marker: std::marker::PhantomData<T>,
 }
 
 pub enum BufferCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
@@ -37,7 +35,7 @@ pub enum BufferCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     },
 }
 
-impl<T: Sized, A: Allocator> Destructible for Buffer<T, A> {
+impl<A: Allocator> Destructible for Buffer<A> {
     fn destroy(&mut self) {
         unsafe {
             #[cfg(feature = "log-lifetimes")]
@@ -51,7 +49,7 @@ impl<T: Sized, A: Allocator> Destructible for Buffer<T, A> {
     }
 }
 
-impl<T: Sized, A: Allocator> Buffer<T, A> {
+impl<A: Allocator> Buffer<A> {
     /// If BDA is enabled, you are able to acquire the [`VkDeviceAddress`](vk::DeviceAddress) of the
     /// buffer
     pub fn address(&self) -> vk::DeviceAddress {
@@ -66,24 +64,25 @@ impl<T: Sized, A: Allocator> Buffer<T, A> {
         }
     }
 
-    /// Upload data to a buffer with basic type safety ensured
-    pub fn upload(
+    /// Upload data to a buffer with basic safety ensured.
+    ///
+    /// We currently only check if the buffer is smaller
+    pub fn upload<T: Sized>(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
         allocator: &mut SlotMapMemoryAllocator<A>,
         content: &[T],
     ) -> Result<()> {
-        // TODO: add bounds checking of the buffer
-
+        assert!(mem::size_of_val(content) <= self.size as usize);
         unsafe { self.upload_arbitrary::<T>(immediate, allocator, content) }
     }
 
     /// Upload arbitrary data to a buffer without any form of safety checking
-    pub unsafe fn upload_arbitrary<D: Sized>(
+    pub unsafe fn upload_arbitrary<T: Sized>(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
         allocator: &mut SlotMapMemoryAllocator<A>,
-        content: &[D],
+        content: &[T],
     ) -> Result<()> {
         let buffer_size: vk::DeviceSize = mem::size_of_val(content) as vk::DeviceSize;
         let mut staging_buffer = Self::new(BufferCreateInfo::NewEmptyBuffer {
@@ -130,10 +129,10 @@ impl<T: Sized, A: Allocator> Buffer<T, A> {
     }
 }
 
-impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
+impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
     type CreateInfo = BufferCreateInfo<'a, A>;
     type HandleType = vk::Buffer;
-    fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self> {
+    fn new(create_info: Self::CreateInfo) -> Result<Self> {
         return match create_info {
             BufferCreateInfo::NewEmptyBuffer {
                 device,
@@ -142,14 +141,13 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
                 memory_type,
                 usage_flags,
             } => {
-                let byte_size = (mem::size_of::<T>() * size as usize) as vk::DeviceSize;
                 let handle = unsafe {
                     device.get_handle().create_buffer(
                         &vk::BufferCreateInfo {
                             s_type: vk::StructureType::BUFFER_CREATE_INFO,
                             p_next: ptr::null(),
                             flags: vk::BufferCreateFlags::empty(),
-                            size: byte_size,
+                            size,
                             usage: usage_flags,
                             sharing_mode: if device.get_used_queue_families().len() == 1 {
                                 vk::SharingMode::EXCLUSIVE
@@ -203,9 +201,8 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for Buffer<T, A> {
                     device,
                     allocation: Some(allocation),
                     address,
-                    size: byte_size,
+                    size,
                     name: None,
-                    _marker: Default::default(),
                 })
             }
         };

@@ -18,8 +18,8 @@ pub struct Vertex {
 
 #[derive(Clone)]
 pub struct GPUMeshBuffer {
-    pub index_buffer: dagal::resource::Buffer<u32, GPUAllocatorImpl>,
-    pub vertex_buffer: GPUResourceTableHandle<dagal::resource::Buffer<u8, GPUAllocatorImpl>>,
+    pub index_buffer: dagal::resource::Buffer<GPUAllocatorImpl>,
+    pub vertex_buffer: GPUResourceTableHandle<dagal::resource::Buffer<GPUAllocatorImpl>>,
 }
 
 impl GPUMeshBuffer {
@@ -31,11 +31,11 @@ impl GPUMeshBuffer {
         vertices: &[Vertex],
         name: Option<String>,
     ) -> Self {
-        let mut index_buffer = dagal::resource::Buffer::<u32, GPUAllocatorImpl>::new(
+        let mut index_buffer = dagal::resource::Buffer::<GPUAllocatorImpl>::new(
             dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
-                size: indices.len() as u64,
+                size: mem::size_of_val(indices) as vk::DeviceSize,
                 memory_type: dagal::allocators::MemoryLocation::GpuOnly,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                     | vk::BufferUsageFlags::INDEX_BUFFER,

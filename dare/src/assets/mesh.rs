@@ -4,11 +4,11 @@ pub struct Mesh {
 	name: Option<String>,
 	position: glam::Vec3,
 	scale: glam::Vec3,
-	vertex_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<u8>>,
-	normal_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<u8>>,
-	tangent_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<u8>>,
-	index_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<u8>>,
-	uv_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<u8>>,
+	vertex_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
+	normal_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
+	tangent_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
+	index_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
+	uv_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
 }
 
 #[repr(C)]
