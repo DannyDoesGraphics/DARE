@@ -5,6 +5,7 @@ pub mod buffer;
 pub mod image_view;
 pub mod traits;
 pub mod acceleration_structure;
+mod typed_buffer;
 
 pub use acceleration_structure::AccelerationStructureCreateInfo;
 pub use acceleration_structure::AccelerationStructure;
