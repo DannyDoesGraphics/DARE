@@ -62,22 +62,18 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
                 /// we add a custom absolute include path
                 let include_path = match include_type {
                     IncludeType::Relative => {
-                        println!("Nope updating: {}", requested_path);
                         source_path.parent().unwrap_or_else(|| Path::new("")).join(requested_path)
                                    .canonicalize().unwrap_or_else(|_| PathBuf::from(requested_path))
                     }
                     IncludeType::Standard => {
                         if requested_path.starts_with("dagal/") {
-                            println!("Yep updating: {}", requested_path);
                             let requested_path_str = requested_path.trim_start_matches("dagal/");
                             PathBuf::from("dagal/shaders/includes").join(requested_path_str)
                         } else {
-                            println!("I give up: {}", requested_path);
                             PathBuf::from(requested_path)
                         }
                     }
                 };
-                println!("{:?} -> {:?} / {}", source_path, include_path, requested_path);
                 let include_path = include_path.canonicalize().unwrap();
 
                 let mut guard = include_context.lock().unwrap();
