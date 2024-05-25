@@ -200,11 +200,13 @@ impl<'a> LogicalDeviceBuilder<'a> {
             _marker: Default::default(),
         };
         let device = crate::device::LogicalDevice::new(
-            instance,
-            self.physical_device,
-            &device_ci,
-            queue_families_used.into_iter().collect::<Vec<u32>>(),
-            self.debug_utils
+            crate::device::LogicalDeviceCreateInfo {
+                instance,
+                physical_device: self.physical_device,
+                device_ci,
+                queue_families: queue_families_used.into_iter().collect::<Vec<u32>>(),
+                enabled_extensions: self.extensions.iter().map(|data| data.to_string_lossy().to_string()).collect::<HashSet<String>>(),
+            },
         )?;
         // reallocate back the queues
         for (queue_request, queue_allocations) in

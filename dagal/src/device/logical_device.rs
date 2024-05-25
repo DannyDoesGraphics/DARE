@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::ffi::c_char;
 use crate::device::physical_device::PhysicalDevice;
 use crate::traits::Destructible;
 use anyhow::Result;
@@ -16,9 +18,14 @@ struct LogicalDeviceInner {
     /// Contains queue families used
     #[derivative(PartialEq = "ignore")]
     queue_families: Vec<u32>,
+    /// Enabled extensions
+    enabled_extensions: HashSet<String>,
     /// Debug utils
     #[derivative(PartialEq = "ignore", Debug="ignore")]
     debug_utils: Option<ash::ext::debug_utils::Device>,
+    /// Acceleration structure
+    #[derivative(PartialEq = "ignore", Debug="ignore")]
+    acceleration_structure: Option<ash::khr::acceleration_structure::Device>,
 }
 
 impl PartialEq for LogicalDeviceInner {
@@ -75,32 +82,47 @@ impl WeakLogicalDevice {
     }
 }
 
+pub struct LogicalDeviceCreateInfo<'a> {
+    pub instance: &'a ash::Instance,
+    pub physical_device: PhysicalDevice,
+    pub device_ci: vk::DeviceCreateInfo<'a>,
+    pub queue_families: Vec<u32>,
+    pub enabled_extensions: HashSet<String>,
+}
+
 impl LogicalDevice {
-    pub fn new(
-        instance: &ash::Instance,
-        physical_device: PhysicalDevice,
-        device_ci: &vk::DeviceCreateInfo,
-        queue_families: Vec<u32>,
-        debug_utils_enabled: bool,
+    pub fn new<'a>(
+        device_ci: LogicalDeviceCreateInfo<'a>
     ) -> Result<Self> {
         let device =
-            unsafe { instance.create_device(*physical_device.get_handle(), device_ci, None)? };
+            unsafe { device_ci.instance.create_device(*device_ci.physical_device.get_handle(), &device_ci.device_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkDevice {:p}", device.handle());
 
         let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
-        if debug_utils_enabled {
-            debug_utils = Some(ash::ext::debug_utils::Device::new(instance, &device));
+        if device_ci.enabled_extensions.contains(&crate::util::wrap_c_str(ash::ext::debug_utils::NAME.as_ptr()).to_string_lossy().to_string()) {
+            debug_utils = Some(ash::ext::debug_utils::Device::new(device_ci.instance, &device));
+        }
+
+        let mut acceleration_structure: Option<ash::khr::acceleration_structure::Device> = None;
+        if device_ci.enabled_extensions.contains(&crate::util::wrap_c_str(ash::khr::acceleration_structure::NAME.as_ptr()).to_string_lossy().to_string()) {
+            acceleration_structure = Some(ash::khr::acceleration_structure::Device::new(device_ci.instance, &device));
         }
 
         Ok(Self {
             inner: Arc::new(LogicalDeviceInner {
                 handle: device,
-                queue_families,
+                queue_families: device_ci.queue_families,
+                enabled_extensions: device_ci.enabled_extensions,
                 debug_utils,
+                acceleration_structure,
             }),
         })
+    }
+
+    pub fn has_extension(&self, ext: *const c_char) -> bool {
+        self.inner.enabled_extensions.contains(&crate::util::wrap_c_str(ext).to_string_lossy().to_string())
     }
 
     /// Get reference to the underlying [`ash::Device`]
@@ -126,6 +148,11 @@ impl LogicalDevice {
     /// Get debug utils with the device
     pub fn get_debug_utils(&self) -> Option<&ash::ext::debug_utils::Device> {
         self.inner.debug_utils.as_ref()
+    }
+
+    /// Get the acceleration structure ext
+    pub fn get_acceleration_structure(&self) -> Option<&ash::khr::acceleration_structure::Device> {
+        self.inner.acceleration_structure.as_ref()
     }
 
     /// Downgrades the arc pointer in logical device to allow for garbage collection.
