@@ -1,6 +1,5 @@
 use std::{mem, ptr};
 use std::ffi::c_void;
-use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use ash::vk;
@@ -267,7 +266,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 
 	/// Get even more images
 	pub fn get_image(&self, handle: &Handle<crate::resource::Image<A>>) -> Result<crate::resource::Image<A>> {
-		self.images.get(&handle)
+		self.images.get(handle)
 	}
 }
 

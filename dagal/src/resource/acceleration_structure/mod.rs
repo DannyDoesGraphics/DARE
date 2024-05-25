@@ -1,5 +1,4 @@
 
-use ash::ext::debug_utils::Device;
 use ash::vk;
 use ash::vk::Handle;
 use crate::resource::traits::Resource;

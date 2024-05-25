@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 use std::mem;
-use std::slice::IterMut;
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, RwLock};
 use crate::traits::Destructible;
 use anyhow::Result;
 
@@ -143,7 +142,7 @@ impl<T: Clone> FreeList<T> {
 		}).unwrap();
 
 		let mut iter = guard.resources.iter_mut();
-		let result = f(&mut iter);
+		f(&mut iter);
 	}
 }
 

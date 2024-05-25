@@ -50,7 +50,7 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBuffer<T, A> {
 			TypedBufferCreateInfo::FromDagalBufferCI { mut handle } => {
 				match &mut handle {
 					BufferCreateInfo::NewEmptyBuffer { size, .. } => {
-						*size = *size * mem::size_of::<T>() as vk::DeviceSize;
+						*size *= mem::size_of::<T>() as vk::DeviceSize;
 					}
 				}
 				let handle = Buffer::new(handle)?;

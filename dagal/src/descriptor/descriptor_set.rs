@@ -95,7 +95,7 @@ impl DescriptorSet {
 						}
 					}
 
-					let mut descriptor_write = descriptor_write.clone();
+					let mut descriptor_write = descriptor_write;
 					descriptor_write.descriptor_count = descriptor_count;
 					descriptor_write.p_image_info = descriptor_image_infos[start..].as_ptr();
 					descriptor_writes.push(descriptor_write);
@@ -114,7 +114,7 @@ impl DescriptorSet {
 						}
 					}
 
-					let mut descriptor_write = descriptor_write.clone();
+					let mut descriptor_write = descriptor_write;
 					descriptor_write.descriptor_count = descriptor_count;
 					descriptor_write.p_buffer_info = descriptor_buffer_infos[start..].as_ptr();
 					descriptor_writes.push(descriptor_write);

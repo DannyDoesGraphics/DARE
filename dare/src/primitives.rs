@@ -1,7 +1,6 @@
 use dagal::allocators::{GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use dagal::traits::Destructible;
 use std::mem;
 use dagal::descriptor::GPUResourceTable;
 use dagal::resource::{Buffer, TypedBuffer};
