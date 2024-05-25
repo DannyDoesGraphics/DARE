@@ -45,9 +45,10 @@ impl Resource<'_> for AccelerationStructure {
 					device,
 					name,
 				};
-				if let Some(debug_utils) = handle.device.get_debug_utils() {
+				if let Some(debug_utils) = handle.device.clone().get_debug_utils() {
 					if let Some(name) = handle.get_name() {
-						handle.set_name(debug_utils, name)?;
+						let name = name.to_string();
+						handle.set_name(debug_utils, name.as_str())?;
 					}
 				}
 				Ok(handle)

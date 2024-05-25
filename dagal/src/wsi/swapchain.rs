@@ -64,7 +64,8 @@ impl Swapchain {
     pub fn get_images(&self) -> Result<Vec<crate::resource::Image>> {
         Ok(unsafe { self.ext.get_swapchain_images(self.handle)? }
             .into_iter()
-            .map(|image| {
+            .enumerate()
+            .map(|(index, image)| {
                 crate::resource::Image::new(crate::resource::ImageCreateInfo::FromVkNotManaged {
                     device: self.device.clone(),
                     image,
@@ -74,6 +75,9 @@ impl Swapchain {
                         height: self.extent.height,
                         depth: 1,
                     },
+                    usage_flags: vk::ImageUsageFlags::TRANSFER_DST,
+                    image_type: vk::ImageType::TYPE_3D,
+                    name: Some(format!("Swapchain image {index}")),
                 })
                 .unwrap()
             })

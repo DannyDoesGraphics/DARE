@@ -6,7 +6,7 @@ use std::{mem, path, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
 
-use dagal::allocators::{GPUAllocatorImpl};
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -83,6 +83,12 @@ struct PushConstants {
     data2: glam::Vec4,
     data3: glam::Vec4,
     data4: glam::Vec4,
+}
+
+#[derive(Debug, Clone)]
+struct AllocatedImage<A: Allocator = GPUAllocatorImpl> {
+    handle: dagal::resource::Image<A>,
+    view: dagal::resource::ImageView,
 }
 
 /// Whether to enable validation layers or not
@@ -417,6 +423,7 @@ impl<'a> RenderContext<'a> {
             },
             allocator: &mut self.allocator,
             location: dagal::allocators::MemoryLocation::GpuOnly,
+            name: Some(String::from("Draw image")),
         })
         .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
@@ -446,6 +453,7 @@ impl<'a> RenderContext<'a> {
             },
             allocator: &mut self.allocator,
             location: dagal::allocators::MemoryLocation::GpuOnly,
+            name: Some(String::from("GBuffer Depth")),
         }).unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view =

@@ -256,6 +256,7 @@ impl<'a> RenderContext<'a> {
             },
             allocator: &mut self.allocator,
             location: dagal::allocators::MemoryLocation::GpuOnly,
+            name: Some(String::from("Draw Image")),
         })
         .unwrap();
         let image_view =

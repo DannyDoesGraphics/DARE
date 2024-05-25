@@ -30,11 +30,15 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         image: vk::Image,
         format: vk::Format,
         extent: vk::Extent3D,
+        usage_flags: vk::ImageUsageFlags,
+        image_type: vk::ImageType,
+        name: Option<String>,
     },
     /// Create a new image without any allocation made
     NewUnallocated {
         device: crate::device::LogicalDevice,
         image_ci: vk::ImageCreateInfo<'a>,
+        name: Option<String>,
     },
     /// Create a new image that has allocated memory
     NewAllocated {
@@ -42,6 +46,7 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         allocator: &'a mut SlotMapMemoryAllocator<A>,
         location: crate::allocators::MemoryLocation,
         image_ci: vk::ImageCreateInfo<'a>,
+        name: Option<String>,
     },
 }
 
@@ -245,7 +250,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     ///         p_queue_family_indices: &queue.get_family_index(),
     ///         initial_layout: vk::ImageLayout::UNDEFINED,
     ///         _marker: Default::default(),
-    ///     }
+    ///     },
+    ///     name: None,
     /// }).unwrap();
     /// deletion_stack.push_resource(&image);
     /// deletion_stack.flush();
@@ -300,7 +306,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     ///         _marker: Default::default(),
     ///     },
     ///     allocator: &mut allocator,
-    ///     location: dagal::allocators::MemoryLocation::GpuOnly
+    ///     location: dagal::allocators::MemoryLocation::GpuOnly,
+    ///     name: None,
     /// }).unwrap();
     /// deletion_stack.push_resource(&image);
     /// deletion_stack.flush();
@@ -313,51 +320,62 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
             ImageCreateInfo::FromVkNotManaged {
                 device,
                 image,
+                usage_flags,
+                image_type,
                 format,
                 extent,
-            } => Ok(Self {
-                device,
-                handle: image,
-                format,
-                extent,
-                usage_flags: vk::ImageUsageFlags::empty(),
-                image_type: if extent.depth > 1 {
-                    vk::ImageType::TYPE_2D
+                name,
+            } => {
+                let mut res = Self {
+                    device,
+                    handle: image,
+                    format,
+                    extent,
+                    usage_flags,
+                    image_type,
+                    allocation: None,
+                    name,
+                };
+                if let Some(debug_utils) = res.device.clone().get_debug_utils() {
+                    if let Some(name) = res.name.clone() {
+                        println!("Setting name: {}", name);
+                        res.set_name(&debug_utils, name.as_str())?;
+                    }
                 } else {
-                    vk::ImageType::TYPE_2D
-                },
-                allocation: None,
-                name: None,
-            }),
-            ImageCreateInfo::NewUnallocated { device, image_ci } => {
+                    println!("None!");
+                }
+                Ok(res)
+            },
+            ImageCreateInfo::NewUnallocated { device, image_ci, name } => {
                 let handle = unsafe { device.get_handle().create_image(&image_ci, None)? };
                 #[cfg(feature = "log-lifetimes")]
                 trace!("Created VkImage {:p}", handle);
-                Ok(Self {
+                Ok(Self::new(ImageCreateInfo::FromVkNotManaged {
                     device,
-                    handle,
-                    extent: image_ci.extent,
+                    image: handle,
                     format: image_ci.format,
+                    extent: image_ci.extent,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
-                    allocation: None,
-                    name: None,
-                })
+                    name,
+                })?)
             }
             ImageCreateInfo::NewAllocated {
                 device,
                 allocator,
                 location,
                 image_ci,
+                name
             } => {
-                let mut image = Self::new(ImageCreateInfo::NewUnallocated { device, image_ci })?;
+                println!("Got {:?}", name);
+                let mut image = Self::new(ImageCreateInfo::NewUnallocated { device, image_ci, name })?;
                 let memory_requirements = unsafe {
                     image
                         .device
                         .get_handle()
                         .get_image_memory_requirements(image.handle)
                 };
-                let allocation = allocator.allocate("", &memory_requirements, location)?;
+                let allocation = allocator.allocate(image.name.as_deref().unwrap_or(""), &memory_requirements, location)?;
                 unsafe {
                     image.device.get_handle().bind_image_memory(
                         image.handle,
