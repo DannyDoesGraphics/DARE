@@ -3,7 +3,6 @@ pub use compute::ComputePipeline;
 pub use compute::ComputePipelineBuilder;
 pub mod traits;
 pub use traits::*;
-pub mod dynamic_rendering;
 pub mod graphics;
 pub mod pipeline_layout_builder;
 
