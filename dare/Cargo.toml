@@ -5,8 +5,8 @@ edition = "2021"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-anyhow = "1.0.82"
-thiserror = "1.0.59"
+anyhow = "1.0.86"
+thiserror = "1.0.61"
 dagal = { path = "../dagal", features = ["winit", "bootstrap", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc"] }
 vk-mem = "0.4.0"
 tracing = "0.1.40"
