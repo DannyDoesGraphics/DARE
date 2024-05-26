@@ -24,6 +24,28 @@ impl Destructible for Sampler {
 }
 
 pub enum SamplerCreateInfo<'a> {
+	/// Creates a sampler from an existing [`VkSamplerCreateInfo`](vk::SamplerCreateInfo).
+	///
+	/// # Examples
+	/// ```
+	/// use std::ptr;
+	/// use ash::vk;
+	/// use dagal::resource::traits::Resource;
+	/// use dagal::util::tests::TestSettings;
+	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let sampler = dagal::resource::Sampler::new(
+	///     dagal::resource::SamplerCreateInfo::FromCreateInfo {
+	///         device: device.clone(),
+	/// 		create_info: vk::SamplerCreateInfo {
+	///             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
+	/// 			p_next: ptr::null(),
+	/// 			..Default::default()
+	/// 		},
+	/// 		name: None,
+	/// }).unwrap();
+	/// deletion_stack.push_resource(&sampler);
+	/// deletion_stack.flush();
+	/// ```
 	FromCreateInfo {
 		device: crate::device::LogicalDevice,
 		create_info: vk::SamplerCreateInfo<'a>,
