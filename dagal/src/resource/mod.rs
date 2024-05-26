@@ -6,6 +6,7 @@ pub mod image_view;
 pub mod traits;
 pub mod acceleration_structure;
 pub mod typed_buffer;
+pub mod sampler;
 
 pub use acceleration_structure::AccelerationStructureCreateInfo;
 pub use acceleration_structure::AccelerationStructure;
@@ -15,3 +16,5 @@ pub use typed_buffer::TypedBuffer;
 pub use typed_buffer::TypedBufferCreateInfo;
 pub use image_view::ImageView;
 pub use image_view::ImageViewCreateInfo;
+pub use sampler::Sampler;
+pub use sampler::SamplerCreateInfo;

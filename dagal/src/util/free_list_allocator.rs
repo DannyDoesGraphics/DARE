@@ -92,18 +92,17 @@ impl<T: Clone> FreeList<T> {
 		if !self.is_valid(&handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		let mut resource: Option<T> = None;
 		let mut guard = self.inner.write().map_err(|err| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
-		mem::swap(guard.resources.get_mut(handle.id as usize).unwrap(), &mut resource);
+		let mut resource: Option<T> = guard.resources.get_mut(handle.id as usize).and_then(Option::take);
 		guard.free_ids.push(handle.id);
 		Ok(resource.unwrap())
 	}
 
 	pub fn get(&self, handle: &Handle<T>) -> Result<T> {
 		unsafe {
-			self.get(handle)
+			self.untyped_get(handle)
 		}
 	}
 

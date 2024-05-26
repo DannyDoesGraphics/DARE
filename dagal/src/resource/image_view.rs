@@ -73,7 +73,8 @@ pub enum ImageViewCreateInfo<'a> {
     ///         _marker: Default::default(),
     ///     },
     ///     allocator: &mut allocator,
-    ///     location: dagal::allocators::MemoryLocation::GpuOnly
+    ///     location: dagal::allocators::MemoryLocation::GpuOnly,
+    ///     name: None,
     /// }).unwrap();
     /// deletion_stack.push_resource(&image);
     /// let image_view = dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {

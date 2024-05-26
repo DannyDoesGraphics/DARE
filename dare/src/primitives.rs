@@ -1,7 +1,7 @@
-use dagal::allocators::{GPUAllocatorImpl};
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use std::mem;
+use std::{mem};
 use dagal::descriptor::GPUResourceTable;
 use dagal::resource::{Buffer, TypedBuffer};
 use dagal::util::free_list_allocator::Handle;

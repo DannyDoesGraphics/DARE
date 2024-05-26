@@ -12,6 +12,7 @@ use std::ptr::NonNull;
 use std::{mem, ptr};
 use derivative::Derivative;
 use tracing::trace;
+use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Derivative, Debug)]
 #[derivative(Clone)]
@@ -73,7 +74,9 @@ impl<A: Allocator> Buffer<A> {
         allocator: &mut SlotMapMemoryAllocator<A>,
         content: &[T],
     ) -> Result<()> {
-        assert!(mem::size_of_val(content) <= self.size as usize);
+        if (mem::size_of_val(content) as vk::DeviceSize) < self.size {
+            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
+        }
         unsafe { self.upload_arbitrary::<T>(immediate, allocator, content) }
     }
 
@@ -103,15 +106,15 @@ impl<A: Allocator> Buffer<A> {
             immediate.submit(Box::new({
                 let src_buffer = staging_buffer.handle();
                 let dst_buffer = self.handle();
-                move |device, cmd| {
+                move |context: ImmediateSubmitContext| {
                     let copy = vk::BufferCopy {
                         src_offset: 0,
                         dst_offset: 0,
                         size: buffer_size,
                     };
                     unsafe {
-                        device.get_handle().cmd_copy_buffer(
-                            cmd.handle(),
+                        context.device.get_handle().cmd_copy_buffer(
+                            context.cmd.handle(),
                             src_buffer,
                             dst_buffer,
                             &[copy],
@@ -122,6 +125,23 @@ impl<A: Allocator> Buffer<A> {
         }
         staging_buffer.destroy();
         Ok(())
+    }
+
+    /// Write to a mapped pointer if one exists
+    pub fn write<T: Sized>(&mut self, offset: vk::DeviceSize, data: &[T]) -> Result<()> {
+        if offset + (mem::size_of_val(data) as vk::DeviceSize) < self.size {
+            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
+        }
+        if let Some(mapped_ptr) = self.mapped_ptr() {
+            unsafe {
+                let data_ptr = data.as_ptr() as *const _ as *const c_void;
+                let mapped_ptr = mapped_ptr.as_ptr().add(offset as usize);
+                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, data.len());
+            }
+            Ok(())
+        } else {
+            Err(anyhow::Error::from(crate::DagalError::NoMappedPointer))
+        }
     }
 
     pub fn get_size(&self) -> vk::DeviceSize {

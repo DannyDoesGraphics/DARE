@@ -9,6 +9,7 @@ use ash::vk::{Handle};
 use std::ptr;
 use ash::prelude::VkResult;
 use tracing::trace;
+use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Debug, Clone)]
 pub struct Image<A: Allocator = GPUAllocatorImpl> {
@@ -54,18 +55,6 @@ impl<A: Allocator> Image<A> {
     /// Get all used usage flags
     pub fn usage_flags(&self) -> vk::ImageUsageFlags {
         self.usage_flags
-    }
-}
-
-impl Image {
-    pub fn image_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
-        vk::ImageSubresourceRange {
-            aspect_mask: aspect,
-            base_mip_level: 0,
-            level_count: vk::REMAINING_MIP_LEVELS,
-            base_array_layer: 0,
-            layer_count: vk::REMAINING_ARRAY_LAYERS,
-        }
     }
 
     /// Acquire image format
@@ -213,10 +202,22 @@ impl Image {
                         },
                         format: self.format,
                         components: Default::default(),
-                        subresource_range: Self::image_subresource_range(aspect_flag),
+                        subresource_range: Image::image_subresource_range(aspect_flag),
                         _marker: Default::default(),
                     }, None
                 )
+        }
+    }
+}
+
+impl Image {
+    pub fn image_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+        vk::ImageSubresourceRange {
+            aspect_mask: aspect,
+            base_mip_level: 0,
+            level_count: vk::REMAINING_MIP_LEVELS,
+            base_array_layer: 0,
+            layer_count: vk::REMAINING_ARRAY_LAYERS,
         }
     }
 }

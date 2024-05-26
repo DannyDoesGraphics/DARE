@@ -28,7 +28,11 @@ pub enum DagalError {
     #[error("Expected buffer to have vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS")]
     NoShaderDeviceAddress,
 
+    #[error("Vulkan resource does not have a mapped pointer. You're most likely using GPU only")]
+    NoMappedPointer,
 
+    #[error("Insufficient space to upload the data")]
+    InsufficientSpace,
 }
 
 impl<T> From<PoisonError<T>> for DagalError {

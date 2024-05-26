@@ -4,31 +4,30 @@ use std::ffi::c_void;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
+use tracing::instrument::WithSubscriber;
 
 use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource;
-use crate::resource::ImageViewCreateInfo;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
 
 
-#[derive(Clone, Derivative)]
-#[derivative(Debug)]
+#[derive(Clone, Derivative, Debug)]
 pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	device: crate::device::LogicalDevice,
 	pool: crate::descriptor::DescriptorPool,
 	set_layout: crate::descriptor::DescriptorSetLayout,
 	descriptor_set: vk::DescriptorSet,
-	#[derivative(Debug="ignore")]
 	address_buffer: resource::Buffer<A>,
 
 	// Storage for the underlying resources
 	images: FreeList<resource::Image<A>>,
 	image_views: FreeList<resource::ImageView>,
 	buffers: FreeList<resource::Buffer<A>>,
+	samplers: FreeList<resource::Sampler>,
 }
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
@@ -136,6 +135,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			images: FreeList::default(),
 			image_views: FreeList::default(),
 			buffers: FreeList::default(),
+			samplers: FreeList::default(),
 		})
 	}
 
@@ -155,9 +155,21 @@ impl<A: Allocator> GPUResourceTable<A> {
 	}
 
 	/// Create a new image view
-	pub fn new_image_view(&mut self, image_view_ci: resource::ImageViewCreateInfo) -> Result<Handle<resource::ImageView>> {
-		let image_view = resource::ImageView::new(image_view_ci)?;
-		self.image_views.allocate(image_view)
+	pub fn new_image_view(&mut self, image_view_ci: ResourceInput<resource::ImageView>) -> Result<Handle<resource::ImageView>> {
+		match image_view_ci {
+			ResourceInput::Resource(resource) => {
+				self.image_views.allocate(resource)
+			},
+			ResourceInput::ResourceCI(ci) => {
+				let resource = resource::ImageView::new(ci)?;
+				self.image_views.allocate(resource)
+			},
+			ResourceInput::ResourceHandle(handle) => Ok(handle),
+		}
+	}
+
+	pub fn free_image_view(&mut self, handle: Handle<resource::ImageView>) -> Result<()> {
+		self.image_views.deallocate_destructible(handle)
 	}
 
 	/// Get an image view
@@ -165,7 +177,62 @@ impl<A: Allocator> GPUResourceTable<A> {
 		self.image_views.get(image_view)
 	}
 
-	pub fn new_image<'a>(&mut self, image_ci: ResourceInput<'a, resource::Image<A>>, mut image_view_ci: ResourceInput<'a, resource::ImageView>, sampler: vk::Sampler, image_layout: vk::ImageLayout)
+	/// Get a new sampler
+	pub fn new_sampler(&mut self, sampler: ResourceInput<resource::Sampler>) -> Result<Handle<resource::Sampler>> {
+		match sampler {
+			ResourceInput::ResourceHandle(handle) => {
+				return Ok(handle);
+			},
+			_ => {}
+		};
+
+		let sampler_handle = match sampler {
+			ResourceInput::Resource(resource) => {
+				self.samplers.allocate(resource)
+			}
+			ResourceInput::ResourceCI(create_info) => {
+				let resource = resource::Sampler::new(create_info)?;
+				self.samplers.allocate(resource)
+			}
+			_ => unimplemented!()
+		}?;
+		let sampler = self.samplers.get(&sampler_handle)?;
+		let p_image_info = vk::DescriptorImageInfo {
+			sampler: sampler.handle(),
+			image_view: vk::ImageView::null(),
+			image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+		};
+		unsafe {
+			self.device.get_handle().update_descriptor_sets(&[
+				vk::WriteDescriptorSet {
+					s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+					p_next: ptr::null(),
+					dst_set: self.descriptor_set,
+					dst_binding: SAMPLER_BINDING_INDEX,
+					dst_array_element: sampler_handle.id() as u32,
+					descriptor_count: 1,
+					descriptor_type: vk::DescriptorType::SAMPLER,
+					p_image_info: &p_image_info,
+					p_buffer_info: ptr::null(),
+					p_texel_buffer_view: ptr::null(),
+					_marker: Default::default(),
+				}], &[]);
+		}
+
+		Ok(sampler_handle)
+	}
+
+	/// Get a sampler from is handle
+	pub fn get_sampler(&self, sampler: &Handle<resource::Sampler>) -> Result<resource::Sampler> {
+		self.samplers.get(sampler)
+	}
+
+	/// Free a list sampler from the gpu resource table
+	pub fn free_sampler(&mut self, sampler: Handle<resource::Sampler>) -> Result<()> {
+		self.samplers.deallocate_destructible(sampler)
+	}
+
+	pub fn new_image<'a>(&mut self, image_ci: ResourceInput<'a, resource::Image<A>>, image_view_ci: ResourceInput<'a, resource::ImageView>, image_layout: vk::ImageLayout)
 		-> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)> where A: 'a {
 		let image_handle = match image_ci {
 			ResourceInput::Resource(image) => {
@@ -180,22 +247,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			}
 		};
 		let image = self.images.get(&image_handle).unwrap();
-		let image_view_handle = match image_view_ci {
-			ResourceInput::Resource(image_view) => {
-				self.image_views.allocate(image_view)?
-			},
-			ResourceInput::ResourceCI(mut image_view_ci) => {
-				match &mut image_view_ci {
-					ImageViewCreateInfo::FromCreateInfo { create_info, .. } => {
-						create_info.image = image.handle();
-					}
-					ImageViewCreateInfo::FromVk { .. } => {}
-				}
-				let image_view = resource::ImageView::new(image_view_ci)?;
-				self.image_views.allocate(image_view)?
-			}
-			ResourceInput::ResourceHandle(handle) => handle,
-		};
+		let image_view_handle = self.new_image_view(image_view_ci)?;
 		let image_view = self.image_views.get(&image_view_handle)?;
 
 		let flags: vk::ImageUsageFlags = image.usage_flags();
@@ -211,7 +263,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 				descriptor_count: 1,
 				descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
-					sampler,
+					sampler: vk::Sampler::null(),
 					image_view: image_view.handle(),
 					image_layout,
 				},
@@ -230,7 +282,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 				descriptor_count: 1,
 				descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
-					sampler,
+					sampler: vk::Sampler::null(),
 					image_view: image_view.handle(),
 					image_layout,
 				},
@@ -239,7 +291,15 @@ impl<A: Allocator> GPUResourceTable<A> {
 				_marker: Default::default(),
 			});
 		}
+		unsafe {
+			self.device.get_handle().update_descriptor_sets(write_infos.as_slice(), &[]);
+		}
+
 		Ok((image_handle, image_view_handle))
+	}
+
+	pub fn free_image(&mut self, handle: Handle<resource::Image<A>>) -> Result<()> {
+		self.images.deallocate_destructible(handle)
 	}
 
 	/// Create a new buffer and put it into the bindless buffer

@@ -13,6 +13,13 @@ pub struct ImmediateSubmit {
     queue: crate::device::Queue,
 }
 
+#[derive(Debug)]
+pub struct ImmediateSubmitContext<'a> {
+    pub device: &'a crate::device::LogicalDevice,
+    pub cmd: &'a crate::command::CommandBufferRecording,
+    pub queue: &'a crate::device::Queue,
+}
+
 impl Destructible for ImmediateSubmit {
     fn destroy(&mut self) {
         self.fence.destroy();
@@ -39,11 +46,9 @@ impl ImmediateSubmit {
     }
 
     /// Immediately submit a function which fills out a command buffer
-    pub fn submit(
+    pub fn submit<T: FnOnce(ImmediateSubmitContext)>(
         &self,
-        function: Box<
-            dyn FnOnce(crate::device::LogicalDevice, &crate::command::CommandBufferRecording),
-        >,
+        function: T,
     ) {
         unsafe {
             self.device
@@ -59,7 +64,12 @@ impl ImmediateSubmit {
             .clone()
             .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
             .unwrap();
-        function(self.device.clone(), &cmd);
+        let context = ImmediateSubmitContext {
+            device: &self.device,
+            cmd: &cmd,
+            queue: &self.queue,
+        };
+        function(context);
         let cmd = cmd.end().unwrap();
         let raw_cmd = cmd.handle();
         cmd.submit(
