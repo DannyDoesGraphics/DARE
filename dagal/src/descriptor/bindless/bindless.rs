@@ -4,7 +4,6 @@ use std::ffi::c_void;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
-use tracing::instrument::WithSubscriber;
 
 use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;

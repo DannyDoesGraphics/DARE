@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::mem;
 use std::sync::{Arc, RwLock};
 use crate::traits::Destructible;
 use anyhow::Result;
@@ -95,7 +94,7 @@ impl<T: Clone> FreeList<T> {
 		let mut guard = self.inner.write().map_err(|err| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
-		let mut resource: Option<T> = guard.resources.get_mut(handle.id as usize).and_then(Option::take);
+		let resource: Option<T> = guard.resources.get_mut(handle.id as usize).and_then(Option::take);
 		guard.free_ids.push(handle.id);
 		Ok(resource.unwrap())
 	}

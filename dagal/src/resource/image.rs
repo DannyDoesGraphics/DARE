@@ -9,7 +9,6 @@ use ash::vk::{Handle};
 use std::ptr;
 use ash::prelude::VkResult;
 use tracing::trace;
-use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Debug, Clone)]
 pub struct Image<A: Allocator = GPUAllocatorImpl> {

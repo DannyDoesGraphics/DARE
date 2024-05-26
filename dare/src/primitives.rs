@@ -1,4 +1,4 @@
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::{GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use std::{mem};

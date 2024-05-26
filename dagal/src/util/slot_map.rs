@@ -82,8 +82,7 @@ impl<T: Send + Sync> SlotMap<T> {
                 _marker: Default::default(),
             });
             self.free_queue.push_front(self.indices.len() - 1);
-        } else {
-        }
+        } 
         let next_free_indices = self.free_queue.pop_back().unwrap();
         // generate a key to return back
         let key: &mut Slot<T> = self.indices.get_mut(next_free_indices).unwrap();

@@ -3,7 +3,6 @@ mod assets;
 mod ray_tracing;
 
 use std::{mem, path, ptr, slice};
-use std::arch::x86_64::_blcfill_u32;
 use std::io::Write;
 use std::sync::Arc;
 
@@ -196,7 +195,7 @@ impl<'a> RenderContext<'a> {
         assert!(!graphics_queue.borrow().get_queues().is_empty());
         let graphics_queue = graphics_queue.borrow().get_queues()[0];
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
-        let immediate_submit = ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
+        let immediate_submit = ImmediateSubmit::new(device.clone(), graphics_queue).unwrap();
 
         let frames: Vec<Frame<'a>> = (0..FRAME_OVERLAP)
             .map(|_| {

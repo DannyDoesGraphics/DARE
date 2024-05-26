@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-use crate::descriptor::GPUResourceTable;
 use crate::traits::Destructible;
-use crate::util::free_list_allocator::Handle;
 
 /// A stack which is used to delete objects in order
 #[derive(Default)]
