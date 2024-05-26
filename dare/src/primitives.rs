@@ -1,6 +1,6 @@
 use std::mem;
 
-use dagal::allocators::GPUAllocatorImpl;
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::descriptor::GPUResourceTable;
 use dagal::resource::{Buffer, TypedBuffer};
@@ -102,4 +102,27 @@ pub struct MeshAsset {
 
 	pub surfaces: Vec<GeometrySurface>,
 	pub mesh_buffers: GPUMeshBuffer,
+}
+
+#[derive(Debug, Clone)]
+pub enum MaterialPass {}
+
+#[derive(Debug, Clone)]
+pub struct MaterialInstance {
+	material_pipeline: dagal::pipelines::GraphicsPipeline,
+	material_set: dagal::descriptor::DescriptorSet,
+	pass_type: MaterialPass,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderObject<A: Allocator = GPUAllocatorImpl> {
+	index_count: u32,
+	first_index: u32,
+	index_buffer: Buffer<A>,
+}
+
+pub struct DrawContext {}
+
+pub trait Renderable {
+	fn draw(&self, matrix: &glam::Mat4, draw_context: &DrawContext);
 }
