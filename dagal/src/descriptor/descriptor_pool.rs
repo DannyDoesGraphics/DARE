@@ -35,9 +35,6 @@ impl PoolSizeRatio {
 }
 
 /// Create information for a [`DescriptorPool`].
-///
-/// # FromPoolSizeRatios
-/// All ratios inputted in  `ratios` vector will be scaled by `count`
 pub enum DescriptorPoolCreateInfo {
 	FromVk {
 		handle: vk::DescriptorPool,
@@ -47,6 +44,47 @@ pub enum DescriptorPoolCreateInfo {
 	},
 
 	/// Allocate a pool from descriptor pool sizes
+	///
+	/// # Examples
+	/// ```
+	/// use std::ptr;
+	/// use ash::vk;
+	/// use dagal::allocators::GPUAllocatorImpl;
+	/// use dagal::resource::traits::Resource;
+	/// use dagal::util::tests::TestSettings;
+	/// use dagal::gpu_allocator;
+	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+	///     instance: instance.get_instance().clone(),
+	///     device: device.get_handle().clone(),
+	///     physical_device: physical_device.handle().clone(),
+	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
+	///         log_memory_information: false,
+	///             log_leaks_on_shutdown: true,
+	///             store_stack_traces: false,
+	///             log_allocations: false,
+	///             log_frees: false,
+	///             log_stack_traces: false,
+	///         },
+	///         buffer_device_address: false,
+	///         allocation_sizes: Default::default(),
+	///  }).unwrap();
+	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let pool = dagal::descriptor::DescriptorPool::new(
+	///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizes {
+	/// 		sizes: vec![
+	///             vk::DescriptorPoolSize::default()
+	///                 .ty(vk::DescriptorType::SAMPLER)
+	///                 .descriptor_count(1)
+	///         ],
+	/// 		flags: Default::default(),
+	/// 		max_sets: 1,
+	/// 		device: device.clone(),
+	/// 		name: None,
+	/// 	}).unwrap();
+	/// deletion_stack.push_resource(&pool);
+	/// deletion_stack.flush();
+	/// ```
 	FromPoolSizes {
 		sizes: Vec<vk::DescriptorPoolSize>,
 		flags: vk::DescriptorPoolCreateFlags,
@@ -56,6 +94,54 @@ pub enum DescriptorPoolCreateInfo {
 		name: Option<String>,
 	},
 
+	/// All ratios inputted will be scaled by `count`. The actual scaling is rounded.
+	///
+	/// # Examples
+	/// ```
+	/// use std::ptr;
+	/// use ash::vk;
+	/// use dagal::allocators::GPUAllocatorImpl;
+	/// use dagal::resource::traits::Resource;
+	/// use dagal::util::tests::TestSettings;
+	/// use dagal::gpu_allocator;
+	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+	///     instance: instance.get_instance().clone(),
+	///     device: device.get_handle().clone(),
+	///     physical_device: physical_device.handle().clone(),
+	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
+	///         log_memory_information: false,
+	///             log_leaks_on_shutdown: true,
+	///             store_stack_traces: false,
+	///             log_allocations: false,
+	///             log_frees: false,
+	///             log_stack_traces: false,
+	///         },
+	///         buffer_device_address: false,
+	///         allocation_sizes: Default::default(),
+	///  }).unwrap();
+	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let pool = dagal::descriptor::DescriptorPool::new(
+	///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizeRatios {
+	/// 		ratios: vec![
+	/// 			dagal::descriptor::PoolSizeRatio {
+	/// 				descriptor_type: vk::DescriptorType::SAMPLER,
+	/// 				ratio: 1.0,
+	/// 			},
+	///             dagal::descriptor::PoolSizeRatio {
+	/// 				descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+	/// 				ratio: 1.0,
+	/// 			}
+	///         ],
+	/// 		count: 10,
+	/// 		flags: Default::default(),
+	/// 		max_sets: 1,
+	/// 		device: device.clone(),
+	/// 		name: None,
+	/// 	}).unwrap();
+	/// deletion_stack.push_resource(&pool);
+	/// deletion_stack.flush();
+	/// ```
 	FromPoolSizeRatios {
 		ratios: Vec<PoolSizeRatio>,
 		/// Scale the ratios by
