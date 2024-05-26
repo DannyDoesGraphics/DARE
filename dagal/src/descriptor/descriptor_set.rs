@@ -51,7 +51,7 @@ impl DescriptorType {
 #[derivative(Debug)]
 pub struct DescriptorWriteInfo {
 	pub slot: u32,
-	pub binding: Option<u32>,
+	pub binding: u32,
 	pub ty: DescriptorType,
 	#[derivative(Debug = "ignore")]
 	pub descriptors: Vec<DescriptorInfo>,
@@ -63,7 +63,7 @@ impl DescriptorWriteInfo {
 		self
 	}
 
-	pub fn binding(mut self, binding: Option<u32>) -> Self {
+	pub fn binding(mut self, binding: u32) -> Self {
 		self.binding = binding;
 		self
 	}
@@ -159,12 +159,11 @@ impl DescriptorSet {
 		let mut descriptor_image_infos: Vec<vk::DescriptorImageInfo> = Vec::with_capacity(writes.len());
 
 		for write in writes.iter() {
-			let dst_binding = write.binding.unwrap();
 			let descriptor_write = vk::WriteDescriptorSet {
 				s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 				p_next: ptr::null(),
 				dst_set: self.handle,
-				dst_binding,
+				dst_binding: write.binding,
 				dst_array_element: write.slot,
 				descriptor_count: 0,
 				descriptor_type: write.ty.to_vk(),

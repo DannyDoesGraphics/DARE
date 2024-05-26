@@ -117,7 +117,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 		descriptor_set.write(&[
 			crate::descriptor::DescriptorWriteInfo::default()
 				.ty(crate::descriptor::DescriptorType::StorageBuffer)
-				.binding(Some(BUFFER_BINDING_INDEX))
+				.binding(BUFFER_BINDING_INDEX)
 				.slot(0)
 				.push_descriptor(crate::descriptor::DescriptorInfo::Buffer(vk::DescriptorBufferInfo {
 					buffer: bda_buffer.handle(),

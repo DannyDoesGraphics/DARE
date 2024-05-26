@@ -607,7 +607,7 @@ impl<'a> RenderContext<'a> {
 		self.draw_image_descriptors.as_mut().unwrap().write(&[
 			dagal::descriptor::DescriptorWriteInfo::default()
 				.slot(0)
-				.binding(Some(0))
+				.binding(0)
 				.ty(dagal::descriptor::DescriptorType::StorageImage)
 				.push_descriptor(
 					dagal::descriptor::DescriptorInfo::Image(img_info)
