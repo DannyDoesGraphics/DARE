@@ -1,13 +1,14 @@
 use std::marker::PhantomData;
 use std::mem;
-use ash::ext::debug_utils::Device;
+
+use anyhow::Result;
 use ash::vk;
+
 use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
 use crate::device::LogicalDevice;
 use crate::resource::{Buffer, BufferCreateInfo};
-use crate::resource::traits::Resource;
+use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
-use anyhow::Result;
 
 /// Create a typed buffer
 #[derive(Debug)]
@@ -79,8 +80,11 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBuffer<T, A> {
 	fn get_device(&self) -> &LogicalDevice {
 		self.handle.get_device()
 	}
+}
 
-	fn set_name(&mut self, debug_utils: &Device, name: &str) -> Result<()> {
+impl<T: Sized> Nameable for TypedBuffer<T> {
+	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::BUFFER;
+	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
 		self.handle.set_name(debug_utils, name)
 	}
 
@@ -90,7 +94,6 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBuffer<T, A> {
 }
 
 impl<T: Sized, A: Allocator> TypedBuffer<T, A> {
-
 	/// Upload into the typed buffer using the type exclusively
 	pub fn upload(&mut self,
 	              immediate: &mut crate::util::ImmediateSubmit,

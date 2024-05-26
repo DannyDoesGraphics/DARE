@@ -1,9 +1,10 @@
-use ash::vk;
-use crate::resource::traits::Resource;
-use crate::traits::Destructible;
 use anyhow::Result;
+use ash::vk;
 use ash::vk::Handle;
 use tracing::trace;
+
+use crate::resource::traits::{Nameable, Resource};
+use crate::traits::Destructible;
 
 #[derive(Debug, Clone)]
 pub struct Sampler {
@@ -70,14 +71,12 @@ impl<'a> Resource<'a> for Sampler {
 	fn get_device(&self) -> &crate::device::LogicalDevice {
 		&self.device
 	}
+}
 
-	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
-		crate::resource::traits::name_resource(
-			debug_utils,
-			self.handle.as_raw(),
-			vk::ObjectType::SAMPLER,
-			name,
-		)?;
+impl Nameable for Sampler {
+	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::SAMPLER;
+	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
+		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
 		self.name = Some(name.to_string());
 		Ok(())
 	}

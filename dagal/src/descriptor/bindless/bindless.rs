@@ -13,13 +13,12 @@ use crate::traits::Destructible;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
 
-
 #[derive(Clone, Derivative, Debug)]
 pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
 	device: crate::device::LogicalDevice,
 	pool: crate::descriptor::DescriptorPool,
 	set_layout: crate::descriptor::DescriptorSetLayout,
-	descriptor_set: vk::DescriptorSet,
+	descriptor_set: crate::descriptor::DescriptorSet,
 	address_buffer: resource::Buffer<A>,
 
 	// Storage for the underlying resources
@@ -46,22 +45,30 @@ pub enum ResourceInput<'a, T: Resource<'a>> {
 
 impl<A: Allocator> GPUResourceTable<A> {
 	pub fn new(device: crate::device::LogicalDevice, allocator: &mut SlotMapMemoryAllocator<A>) -> Result<Self> {
-		let pool_sizes = [
-			crate::descriptor::PoolSize::default()
-				.descriptor_type(vk::DescriptorType::SAMPLER)
+		let pool_sizes = vec![
+			vk::DescriptorPoolSize::default()
+				.ty(vk::DescriptorType::SAMPLER)
 				.descriptor_count(MAX_SAMPLER_RESOURCES),
-			crate::descriptor::PoolSize::default()
-				.descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+			vk::DescriptorPoolSize::default()
+				.ty(vk::DescriptorType::SAMPLED_IMAGE)
 				.descriptor_count(MAX_IMAGE_RESOURCES),
-			crate::descriptor::PoolSize::default()
-				.descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+			vk::DescriptorPoolSize::default()
+				.ty(vk::DescriptorType::STORAGE_IMAGE)
 				.descriptor_count(MAX_IMAGE_RESOURCES),
-			crate::descriptor::PoolSize::default()
-				.descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+			vk::DescriptorPoolSize::default()
+				.ty(vk::DescriptorType::STORAGE_BUFFER)
 				.descriptor_count(1)
 		];
 
-		let pool = crate::descriptor::DescriptorPool::new_with_pool_sizes(device.clone(), vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND, 1, pool_sizes.as_slice())?;
+		let pool = crate::descriptor::DescriptorPool::new(
+			crate::descriptor::DescriptorPoolCreateInfo::FromPoolSizes {
+				sizes: pool_sizes,
+				flags: vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND,
+				max_sets: 1,
+				device: device.clone(),
+				name: None,
+			}
+		)?;
 		let set_layout = crate::descriptor::DescriptorSetLayoutBuilder::default()
 			.add_raw_binding(&[
 				DescriptorSetLayoutBinding::default()
@@ -89,8 +96,14 @@ impl<A: Allocator> GPUResourceTable<A> {
 					.stage_flags(vk::ShaderStageFlags::ALL)
 					.flag(vk::DescriptorBindingFlags::PARTIALLY_BOUND | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING),
 			])
-			.build(device.clone(), vk::ShaderStageFlags::ALL, ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty() )?;
-		let descriptor_set = pool.allocate(set_layout.handle())?;
+			.build(device.clone(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None)?;
+		let descriptor_set = crate::descriptor::DescriptorSet::new(
+			crate::descriptor::DescriptorSetCreateInfo::NewSet {
+				pool: &pool,
+				layout: &set_layout,
+				name: Some(String::from("GPU resource table descriptor set")),
+			}
+		)?;
 		// create a descriptor write
 		let bda_buffer: resource::Buffer<A> = resource::Buffer::new(
 			resource::buffer::BufferCreateInfo::NewEmptyBuffer {
@@ -101,29 +114,17 @@ impl<A: Allocator> GPUResourceTable<A> {
 				usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER,
 			}
 		)?;
-
-		/// bind bda buffer
-		unsafe {
-			device.get_handle().update_descriptor_sets(&[
-				vk::WriteDescriptorSet {
-					s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-					p_next: ptr::null(),
-					dst_set: descriptor_set,
-					dst_binding: BUFFER_BINDING_INDEX,
-					dst_array_element: 0,
-					descriptor_count: 1,
-					descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-					p_image_info: ptr::null(),
-					p_buffer_info: &vk::DescriptorBufferInfo {
-						buffer: bda_buffer.handle(),
-						offset: 0,
-						range: vk::WHOLE_SIZE,
-					},
-					p_texel_buffer_view: ptr::null(),
-					_marker: Default::default(),
-				}
-			], &[]);
-		};
+		descriptor_set.write(&[
+			crate::descriptor::DescriptorWriteInfo::default()
+				.ty(crate::descriptor::DescriptorType::StorageBuffer)
+				.binding(Some(BUFFER_BINDING_INDEX))
+				.slot(0)
+				.push_descriptor(crate::descriptor::DescriptorInfo::Buffer(vk::DescriptorBufferInfo {
+					buffer: bda_buffer.handle(),
+					offset: 0,
+					range: vk::WHOLE_SIZE,
+				}))
+		]);
 
 		Ok(Self {
 			device,
@@ -140,8 +141,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 
 	/// Get the underlying [`VkDescriptorSet`](vk::DescriptorSet) of the GPU resource table for
 	/// the BDA buffer
-	pub fn get_descriptor_set(&self) -> vk::DescriptorSet {
-		self.descriptor_set
+	pub fn get_descriptor_set(&self) -> crate::descriptor::DescriptorSet {
+		self.descriptor_set.clone()
 	}
 
 	/// Get the underlying [VkDevice](ash::Device)
@@ -206,7 +207,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 				vk::WriteDescriptorSet {
 					s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 					p_next: ptr::null(),
-					dst_set: self.descriptor_set,
+					dst_set: self.descriptor_set.handle(),
 					dst_binding: SAMPLER_BINDING_INDEX,
 					dst_array_element: sampler_handle.id() as u32,
 					descriptor_count: 1,
@@ -232,7 +233,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	}
 
 	pub fn new_image<'a>(&mut self, image_ci: ResourceInput<'a, resource::Image<A>>, image_view_ci: ResourceInput<'a, resource::ImageView>, image_layout: vk::ImageLayout)
-		-> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)> where A: 'a {
+	                     -> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)> where A: 'a {
 		let image_handle = match image_ci {
 			ResourceInput::Resource(image) => {
 				self.images.allocate(image)?
@@ -256,7 +257,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			write_infos.push(vk::WriteDescriptorSet {
 				s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 				p_next: ptr::null(),
-				dst_set: self.descriptor_set,
+				dst_set: self.descriptor_set.handle(),
 				dst_binding: SAMPLED_IMAGE_BINDING_INDEX,
 				dst_array_element: handle.id() as u32,
 				descriptor_count: 1,
@@ -275,7 +276,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 			write_infos.push(vk::WriteDescriptorSet {
 				s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 				p_next: ptr::null(),
-				dst_set: self.descriptor_set,
+				dst_set: self.descriptor_set.handle(),
 				dst_binding: STORAGE_IMAGE_BINDING_INDEX,
 				dst_array_element: handle.id() as u32,
 				descriptor_count: 1,
@@ -305,7 +306,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	///
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
 	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
-		-> Result<Handle<resource::Buffer<A>>> {
+	                  -> Result<Handle<resource::Buffer<A>>> {
 		/// confirm that BDA is enabled
 		match buffer_ci {
 			crate::resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
@@ -320,7 +321,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 		let handle = self.buffers.allocate(buffer)?;
 		// expand into the slot
 		unsafe {
-			let target_ptr = self.address_buffer.mapped_ptr().unwrap().as_ptr().add( mem::size_of::<vk::DeviceAddress>() * handle.id() as usize);
+			let target_ptr = self.address_buffer.mapped_ptr().unwrap().as_ptr().add(mem::size_of::<vk::DeviceAddress>() * handle.id() as usize);
 			let data_ptr = &buffer_address as *const _ as *const c_void;
 			ptr::copy_nonoverlapping(data_ptr, target_ptr, mem::size_of::<vk::DeviceAddress>());
 		}
@@ -332,7 +333,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	}
 
 	pub fn new_typed_buffer<T: Sized>(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
-	-> Result<Handle<resource::TypedBuffer<T, A>>> {
+	                                  -> Result<Handle<resource::TypedBuffer<T, A>>> {
 		let handle = self.new_buffer(buffer_ci)?;
 		let handle: Handle<resource::TypedBuffer<T, A>> = Handle::new(handle.id());
 		Ok(handle)

@@ -1,9 +1,9 @@
-
+use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
-use crate::resource::traits::Resource;
+
+use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
-use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct AccelerationStructure {
@@ -66,14 +66,12 @@ impl Resource<'_> for AccelerationStructure {
 	fn get_device(&self) -> &crate::device::LogicalDevice {
 		&self.device
 	}
+}
 
+impl Nameable for AccelerationStructure {
+	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::ACCELERATION_STRUCTURE_KHR;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
-		crate::resource::traits::name_resource(
-			debug_utils,
-			self.handle.as_raw(),
-			vk::ObjectType::ACCELERATION_STRUCTURE_KHR,
-			name,
-		)?;
+		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
 		self.name = Some(name.to_string());
 		Ok(())
 	}

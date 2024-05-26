@@ -1,7 +1,11 @@
 use std::ptr;
 
+use anyhow::Result;
 use ash::vk;
+use ash::vk::Handle;
 use derivative::Derivative;
+
+use crate::resource::traits::{Nameable, Resource};
 
 #[derive(Copy, Clone, Debug)]
 pub enum DescriptorInfo {
@@ -46,21 +50,108 @@ impl DescriptorType {
 #[derive(Clone, Default, Derivative)]
 #[derivative(Debug)]
 pub struct DescriptorWriteInfo {
-	slot: u32,
-	binding: Option<u32>,
-	ty: DescriptorType,
+	pub slot: u32,
+	pub binding: Option<u32>,
+	pub ty: DescriptorType,
 	#[derivative(Debug = "ignore")]
-	descriptors: Vec<DescriptorInfo>,
+	pub descriptors: Vec<DescriptorInfo>,
+}
+
+impl DescriptorWriteInfo {
+	pub fn slot(mut self, slot: u32) -> Self {
+		self.slot = slot;
+		self
+	}
+
+	pub fn binding(mut self, binding: Option<u32>) -> Self {
+		self.binding = binding;
+		self
+	}
+
+	pub fn ty(mut self, ty: DescriptorType) -> Self {
+		self.ty = ty;
+		self
+	}
+
+	pub fn descriptors(mut self, descriptors: Vec<DescriptorInfo>) -> Self {
+		self.descriptors = descriptors;
+		self
+	}
+
+	pub fn push_descriptor(mut self, descriptor: DescriptorInfo) -> Self {
+		self.descriptors.push(descriptor);
+		self
+	}
+
+	pub fn push_descriptors(mut self, mut descriptor: Vec<DescriptorInfo>) -> Self {
+		self.descriptors.append(&mut descriptor);
+		self
+	}
 }
 
 #[derive(Debug, Clone)]
 pub struct DescriptorSet {
 	handle: vk::DescriptorSet,
 	device: crate::device::LogicalDevice,
+	name: Option<String>,
+}
+
+pub enum DescriptorSetCreateInfo<'a> {
+	FromVk {
+		handle: vk::DescriptorSet,
+
+		device: crate::device::LogicalDevice,
+		name: Option<String>
+	},
+	NewSet {
+		pool: &'a crate::descriptor::DescriptorPool,
+		layout: &'a crate::descriptor::DescriptorSetLayout,
+
+		name: Option<String>,
+	}
 }
 
 
 impl DescriptorSet {
+	pub fn new(descriptor_set_ci: DescriptorSetCreateInfo) -> Result<Self> {
+		match descriptor_set_ci {
+			DescriptorSetCreateInfo::FromVk { handle, device, name } => {
+				let mut handle = Self {
+					handle,
+					device,
+					name,
+				};
+				if let Some(debug_utils) = handle.device.clone().get_debug_utils() {
+					if let Some(name) = handle.name.as_deref().map(|s| s.to_string()) {
+						handle.set_name(debug_utils, name.as_str())?;
+					}
+				}
+
+				Ok(handle)
+			},
+			DescriptorSetCreateInfo::NewSet { pool, layout, name } => {
+				let alloc_info = vk::DescriptorSetAllocateInfo {
+					s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+					p_next: ptr::null(),
+					descriptor_pool: pool.handle(),
+					descriptor_set_count: 1,
+					p_set_layouts: layout.get_handle(),
+					_marker: Default::default(),
+				};
+				let mut handle = unsafe {
+					pool.get_device()
+					    .get_handle()
+					    .allocate_descriptor_sets(&alloc_info)?
+				};
+				Self::new(DescriptorSetCreateInfo::FromVk {
+					handle: handle.pop().unwrap(),
+					device: pool.get_device().clone(),
+					name,
+				})
+			}
+		}
+	}
+
 	/// Submit writes to the current descriptor set
 	pub fn write(&self, writes: &[DescriptorWriteInfo]) {
 		let mut descriptor_writes: Vec<vk::WriteDescriptorSet> = Vec::with_capacity(writes.len());
@@ -122,5 +213,26 @@ impl DescriptorSet {
 			self.device.get_handle()
 			    .update_descriptor_sets(descriptor_writes.as_slice(), &[]);
 		}
+	}
+
+	pub fn handle(&self) -> vk::DescriptorSet {
+		self.handle
+	}
+
+	pub fn get_device(&self) -> &crate::device::LogicalDevice {
+		&self.device
+	}
+}
+
+impl Nameable for DescriptorSet {
+	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::DESCRIPTOR_SET;
+	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
+		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
+		self.name = Some(name.to_string());
+		Ok(())
+	}
+
+	fn get_name(&self) -> Option<&str> {
+		self.name.as_deref()
 	}
 }
