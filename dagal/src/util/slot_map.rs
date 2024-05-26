@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::slice::IterMut;
 
@@ -27,7 +28,7 @@ pub struct SlotMap<T: Send + Sync> {
     erase: Vec<usize>,
 
     /// A queue containing free indices
-    free_queue: Vec<usize>,
+    free_queue: VecDeque<usize>,
 }
 
 impl<T: Send + Sync> Default for SlotMap<T> {
@@ -45,7 +46,7 @@ impl<T: Send + Sync> SlotMap<T> {
             indices: Vec::new(),
             data: Vec::new(),
             erase: Vec::new(),
-            free_queue: Vec::new(),
+            free_queue: VecDeque::new(),
         }
     }
 
@@ -55,7 +56,7 @@ impl<T: Send + Sync> SlotMap<T> {
             indices: Vec::with_capacity(capacity),
             data: Vec::with_capacity(capacity),
             erase: Vec::with_capacity(capacity),
-            free_queue: Vec::with_capacity(capacity),
+            free_queue: VecDeque::with_capacity(capacity),
         }
     }
 
@@ -80,19 +81,20 @@ impl<T: Send + Sync> SlotMap<T> {
                 generation: 0,
                 _marker: Default::default(),
             });
-            self.free_queue.push(self.indices.len() - 1);
+            self.free_queue.push_front(self.indices.len() - 1);
+        } else {
         }
-        let next_free_indices = self.free_queue.remove(0);
+        let next_free_indices = self.free_queue.pop_back().unwrap();
         // generate a key to return back
         let key: &mut Slot<T> = self.indices.get_mut(next_free_indices).unwrap();
-        key.index = next_free_indices;
+        key.index = self.data.len();
 
         // create the data and update the indices index to point to it
         self.data.push(data);
-        self.indices.get_mut(next_free_indices).unwrap().index = self.data.len() - 1;
         self.erase.push(next_free_indices);
-
-        self.indices.get_mut(next_free_indices).unwrap().clone()
+        let mut out_key = self.indices.get(next_free_indices).unwrap().clone();
+        out_key.index = next_free_indices;
+        out_key
     }
 
     /// Erase data from the slot map effectively removing it entirely.
@@ -102,29 +104,26 @@ impl<T: Send + Sync> SlotMap<T> {
     pub fn erase(&mut self, slot: Slot<T>) -> Result<T> {
         // validate generation
         self.validate_slot(&slot)?;
-        // update generation
+        // update generation to invalidate any future slots
         self.indices.get_mut(slot.index).unwrap().generation += 1;
 
-        // swap the to be removed to the last element and drop the last element
+        // swap data with the last data element and update the last data element's slot to its
+        // new position
         let data_index = self.indices.get(slot.index).unwrap().index;
         let last_data_index = self.data.len() - 1;
-
-        // swap
-        assert_eq!(self.data.len(), self.erase.len());
-        if last_data_index != data_index {
+        if data_index != last_data_index {
             self.data.swap(data_index, last_data_index);
             self.erase.swap(data_index, last_data_index);
+            // update the original index
+            let last_data_index = data_index; // since we swapped them
+            let last_data_index_index = *self.erase.get(last_data_index).unwrap();
+            self.indices.get_mut(last_data_index_index).unwrap().index = last_data_index;
         }
+        // remove the last bits
         let removed_data = self.data.pop().unwrap();
         self.erase.pop();
-        if data_index != last_data_index {
-            // update the swapped elements
-            let swapped_slot_index = *self.erase.get(data_index).unwrap();
-            let swapped_slot = self.indices.get_mut(swapped_slot_index).unwrap();
-            swapped_slot.index = data_index;
-        }
-        // update the index
-        self.free_queue.push(slot.index);
+
+        self.free_queue.push_front(slot.index);
         Ok(removed_data)
     }
 
@@ -250,5 +249,28 @@ mod tests {
                 assert_eq!(v % 2, 1)
             }
         }
+    }
+
+    #[test]
+    fn newest_item_is_last() {
+        // We're testing to ensure that the newest data added will always be last
+        let mut slot_map = crate::util::slot_map::SlotMap::new();
+        let handle = slot_map.insert(1);
+        assert_eq!(1, *slot_map.get(&handle).unwrap());
+        let handle = slot_map.insert(2);
+        assert_eq!(*slot_map.data.last().unwrap(), 2i32);
+    }
+
+    #[test]
+    fn swap_correct() {
+        // We're testing to see swapping data correctly
+        let mut slot_map = crate::util::slot_map::SlotMap::new();
+        let handle = slot_map.insert(1);
+        assert_eq!(1, *slot_map.get(&handle).unwrap());
+        let handle = slot_map.insert(2);
+        let handle_gone = slot_map.insert(3);
+        let handle = slot_map.insert(4);
+        slot_map.erase(handle_gone).unwrap();
+        assert_eq!(*slot_map.data.last().unwrap(), 4i32);
     }
 }
