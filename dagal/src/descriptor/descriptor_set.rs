@@ -1,4 +1,5 @@
 use std::ptr;
+
 use ash::vk;
 use derivative::Derivative;
 
@@ -29,11 +30,13 @@ pub enum DescriptorType {
 	StorageBufferDynamic = 9,
 	InputAttachment = 10,
 }
+
 impl Default for DescriptorType {
 	fn default() -> Self {
 		Self::Sampler
 	}
 }
+
 impl DescriptorType {
 	pub fn to_vk(&self) -> vk::DescriptorType {
 		vk::DescriptorType::from_raw(*self as i32)
@@ -46,7 +49,7 @@ pub struct DescriptorWriteInfo {
 	slot: u32,
 	binding: Option<u32>,
 	ty: DescriptorType,
-	#[derivative(Debug="ignore")]
+	#[derivative(Debug = "ignore")]
 	descriptors: Vec<DescriptorInfo>,
 }
 
@@ -57,14 +60,12 @@ pub struct DescriptorSet {
 }
 
 
-
 impl DescriptorSet {
-
 	/// Submit writes to the current descriptor set
 	pub fn write(&self, writes: &[DescriptorWriteInfo]) {
 		let mut descriptor_writes: Vec<vk::WriteDescriptorSet> = Vec::with_capacity(writes.len());
 		let mut descriptor_buffer_infos: Vec<vk::DescriptorBufferInfo> = Vec::with_capacity(writes.len());
-		let mut descriptor_image_infos: Vec<vk::DescriptorImageInfo> =  Vec::with_capacity(writes.len());
+		let mut descriptor_image_infos: Vec<vk::DescriptorImageInfo> = Vec::with_capacity(writes.len());
 
 		for write in writes.iter() {
 			let dst_binding = write.binding.unwrap();
@@ -86,12 +87,9 @@ impl DescriptorSet {
 					let mut descriptor_count: u32 = 0;
 					let start: usize = descriptor_image_infos.len();
 					for descriptor in write.descriptors.iter() {
-						match descriptor {
-							DescriptorInfo::Image(descriptor) => {
-								descriptor_count += 1;
-								descriptor_image_infos.push(*descriptor)
-							},
-							_ => {},
+						if let DescriptorInfo::Image(descriptor) = descriptor {
+							descriptor_count += 1;
+							descriptor_image_infos.push(*descriptor)
 						}
 					}
 
@@ -105,12 +103,9 @@ impl DescriptorSet {
 					let mut descriptor_count: u32 = 0;
 					let start: usize = descriptor_buffer_infos.len();
 					for descriptor in write.descriptors.iter() {
-						match descriptor {
-							DescriptorInfo::Buffer(descriptor) => {
-								descriptor_count += 1;
-								descriptor_buffer_infos.push(*descriptor)
-							},
-							_ => {},
+						if let DescriptorInfo::Buffer(descriptor) = descriptor {
+							descriptor_count += 1;
+							descriptor_buffer_infos.push(*descriptor)
 						}
 					}
 
@@ -125,7 +120,7 @@ impl DescriptorSet {
 
 		unsafe {
 			self.device.get_handle()
-				.update_descriptor_sets(descriptor_writes.as_slice(), &[]);
+			    .update_descriptor_sets(descriptor_writes.as_slice(), &[]);
 		}
 	}
 }
