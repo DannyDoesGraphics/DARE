@@ -1,12 +1,23 @@
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
-use crate::traits::Destructible;
+
 use anyhow::Result;
 
-#[derive(Copy, PartialOrd, PartialEq, Eq, Debug, Hash)]
+use crate::traits::Destructible;
+
+#[derive(Copy, PartialOrd, PartialEq, Eq, Hash)]
 pub struct Handle<T> {
 	id: u64,
 	_marker: PhantomData<T>,
+}
+
+impl<T> Debug for Handle<T> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Handle")
+		 .field("id", &self.id)
+		 .finish()
+	}
 }
 
 impl<T> Clone for Handle<T> {
@@ -134,7 +145,7 @@ impl<T: Clone> FreeList<T> {
 		Ok(resource)
 	}
 
-	pub fn with_iter_mut<F: FnOnce(&mut dyn Iterator<Item = &mut Option<T>>)>(&mut self, f: F) {
+	pub fn with_iter_mut<F: FnOnce(&mut dyn Iterator<Item=&mut Option<T>>)>(&mut self, f: F) {
 		let mut guard = self.inner.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		}).unwrap();
@@ -145,7 +156,6 @@ impl<T: Clone> FreeList<T> {
 }
 
 impl<T: Clone + Destructible> FreeList<T> {
-
 	/// Performs a de-allocation but also destroys the resource
 	pub fn deallocate_destructible(&mut self, handle: Handle<T>) -> Result<()> {
 		let mut resource = self.deallocate(handle)?;
