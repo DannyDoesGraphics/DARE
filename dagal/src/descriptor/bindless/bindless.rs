@@ -307,9 +307,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
 	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
 	                  -> Result<Handle<resource::Buffer<A>>> {
-		/// confirm that BDA is enabled
 		match buffer_ci {
-			crate::resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
+			resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
 				if usage_flags & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS != vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS {
 					return Err(anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))
 				}

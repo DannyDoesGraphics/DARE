@@ -59,7 +59,6 @@ pub(crate) fn name_resource(
 	object_type: vk::ObjectType,
 	name: &str,
 ) -> Result<()> {
-	/// Set name of VkObject
 	let name = CString::new(name)?;
 	unsafe {
 		debug_utils.set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {

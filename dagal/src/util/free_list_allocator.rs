@@ -82,7 +82,7 @@ impl<T: Clone> Default for FreeList<T> {
 
 impl<T: Clone> FreeList<T> {
 	pub fn allocate(&mut self, resource: T) -> Result<Handle<T>> {
-		let mut guard = self.inner.write().map_err(|err| {
+		let mut guard = self.inner.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
 		let id: u64 = if guard.free_ids.is_empty() {
@@ -102,7 +102,7 @@ impl<T: Clone> FreeList<T> {
 		if !self.is_valid(&handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		let mut guard = self.inner.write().map_err(|err| {
+		let mut guard = self.inner.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
 		let resource: Option<T> = guard.resources.get_mut(handle.id as usize).and_then(Option::take);
@@ -123,7 +123,7 @@ impl<T: Clone> FreeList<T> {
 	}
 
 	pub(crate) unsafe fn untyped_is_valid<A>(&self, handle: &Handle<A>) -> Result<bool> {
-		if let Some(resource) = self.inner.read().map_err(|err| {
+		if let Some(resource) = self.inner.read().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?.resources.get(handle.id as usize) {
 			return Ok(resource.is_some());
@@ -136,7 +136,7 @@ impl<T: Clone> FreeList<T> {
 		if unsafe { !self.untyped_is_valid(handle)? } {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		let guard = self.inner.read().map_err(|err| {
+		let guard = self.inner.read().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
 		let resource = guard.resources.get(handle.id as usize);
