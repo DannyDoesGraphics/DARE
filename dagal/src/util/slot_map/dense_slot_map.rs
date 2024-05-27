@@ -192,7 +192,7 @@ mod tests {
 		for i in 0u32..10u32 {
 			if i % 2 == 0 {
 				slot_map
-					.erase(handles.get(i as usize).unwrap().clone())
+					.erase(*handles.get(i as usize).unwrap())
 					.unwrap();
 			}
 		}
