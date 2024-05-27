@@ -51,7 +51,7 @@ impl<T> Handle<T> {
 
 /// Free list allocator
 ///
-/// # Differences from [`SlotMap`](crate::util::SlotMap)
+/// # Differences from [`SlotMap`](crate::util::DenseSlotMap)
 /// Unlike a slot map, a free list allocator will ensure that there is a direct 1:1 mapping always
 /// from the handle's id to the resource's index.
 ///

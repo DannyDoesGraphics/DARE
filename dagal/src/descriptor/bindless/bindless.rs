@@ -5,7 +5,7 @@ use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
 
-use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
+use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource;
 use crate::resource::traits::Resource;
@@ -44,7 +44,7 @@ pub enum ResourceInput<'a, T: Resource<'a>> {
 }
 
 impl<A: Allocator> GPUResourceTable<A> {
-	pub fn new(device: crate::device::LogicalDevice, allocator: &mut SlotMapMemoryAllocator<A>) -> Result<Self> {
+	pub fn new(device: crate::device::LogicalDevice, allocator: &mut ArcAllocator<A>) -> Result<Self> {
 		let pool_sizes = vec![
 			vk::DescriptorPoolSize::default()
 				.ty(vk::DescriptorType::SAMPLER)

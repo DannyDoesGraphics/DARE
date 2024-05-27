@@ -1,11 +1,13 @@
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
+
+use anyhow::Result;
 use ash::vk;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};
-use crate::allocators::{Allocator};
-use anyhow::Result;
 use tracing::trace;
+
+use crate::allocators::Allocator;
 use crate::traits::Destructible;
 
 #[derive(Clone)]
@@ -26,9 +28,8 @@ impl Destructible for GPUAllocatorImpl {
 
 impl GPUAllocatorImpl {
 	pub fn new(allocator_ci: gpu_allocator::vulkan::AllocatorCreateDesc) -> Result<Self> {
-		let handle = unsafe {
-			gpu_allocator::vulkan::Allocator::new(&allocator_ci)
-		}?;
+		let handle = gpu_allocator::vulkan::Allocator::new(&allocator_ci)?;
+
 		Ok(Self {
 			handle: Arc::new(RwLock::new(Some(handle))),
 			memory_properties: Default::default(),
@@ -37,7 +38,7 @@ impl GPUAllocatorImpl {
 	}
 
 	fn free_impl(&self, mut allocation: <GPUAllocatorImpl as Allocator>::Allocation) -> Result<()> {
-		let mut guard = self.handle.write().map_err(|err| {
+		let mut guard = self.handle.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
 		if let Some(handle) = allocation.handle.take() {
@@ -53,7 +54,7 @@ impl Allocator for GPUAllocatorImpl {
 	type Allocation = GPUAllocatorAllocation;
 
 	fn allocate(&mut self, name: &str, requirements: &MemoryRequirements, ty: super::MemoryLocation) -> Result<Self::Allocation> {
-		let mut guard = self.handle.write().map_err(|err| {
+		let mut guard = self.handle.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
 		})?;
 		let allocate_ci = gpu_allocator::vulkan::AllocationCreateDesc {

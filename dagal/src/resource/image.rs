@@ -6,8 +6,7 @@ use ash::vk;
 use ash::vk::Handle;
 use tracing::trace;
 
-use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
-use crate::allocators::slot_map_allocator::MemoryAllocation;
+use crate::allocators::{Allocation, Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
@@ -20,7 +19,7 @@ pub struct Image<A: Allocator = GPUAllocatorImpl> {
 	usage_flags: vk::ImageUsageFlags,
 	image_type: vk::ImageType,
 	device: crate::device::LogicalDevice,
-	allocation: Option<MemoryAllocation<A>>,
+	allocation: Option<ArcAllocation<A>>,
 	name: Option<String>,
 }
 
@@ -45,7 +44,7 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
 	/// Create a new image that has allocated memory
 	NewAllocated {
 		device: crate::device::LogicalDevice,
-		allocator: &'a mut SlotMapMemoryAllocator<A>,
+		allocator: &'a mut ArcAllocator<A>,
 		location: crate::allocators::MemoryLocation,
 		image_ci: vk::ImageCreateInfo<'a>,
 		name: Option<String>,
@@ -289,7 +288,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	///         buffer_device_address: false,
 	///         allocation_sizes: Default::default(),
 	///  }).unwrap();
-	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 	/// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
 	///     device: device.clone(),
 	///     image_ci: vk::ImageCreateInfo {

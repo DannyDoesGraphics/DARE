@@ -69,7 +69,7 @@ pub enum DescriptorPoolCreateInfo {
 	///         buffer_device_address: false,
 	///         allocation_sizes: Default::default(),
 	///  }).unwrap();
-	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 	/// let pool = dagal::descriptor::DescriptorPool::new(
 	///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizes {
 	/// 		sizes: vec![
@@ -120,7 +120,7 @@ pub enum DescriptorPoolCreateInfo {
 	///         buffer_device_address: false,
 	///         allocation_sizes: Default::default(),
 	///  }).unwrap();
-	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 	/// let pool = dagal::descriptor::DescriptorPool::new(
 	///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizeRatios {
 	/// 		ratios: vec![

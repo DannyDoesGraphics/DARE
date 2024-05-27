@@ -48,7 +48,7 @@ pub enum ImageViewCreateInfo<'a> {
 	///         buffer_device_address: false,
 	///         allocation_sizes: Default::default(),
 	///  }).unwrap();
-	/// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+	/// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 	/// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
 	///     device: device.clone(),
 	///     image_ci: vk::ImageCreateInfo {

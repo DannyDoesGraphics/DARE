@@ -25,7 +25,7 @@ pub struct GPUMeshBuffer {
 
 impl GPUMeshBuffer {
 	pub fn new(
-		allocator: &mut dagal::allocators::SlotMapMemoryAllocator<GPUAllocatorImpl>,
+		allocator: &mut dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
 		immediate: &mut dagal::util::ImmediateSubmit,
 		gpu_resource_table: &mut GPUResourceTable,
 		indices: &[u32],

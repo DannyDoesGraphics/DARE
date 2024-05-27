@@ -4,7 +4,7 @@ use std::mem;
 use anyhow::Result;
 use ash::vk;
 
-use crate::allocators::{Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
+use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::device::LogicalDevice;
 use crate::resource::{Buffer, BufferCreateInfo};
 use crate::resource::traits::{Nameable, Resource};
@@ -97,7 +97,7 @@ impl<T: Sized, A: Allocator> TypedBuffer<T, A> {
 	/// Upload into the typed buffer using the type exclusively
 	pub fn upload(&mut self,
 	              immediate: &mut crate::util::ImmediateSubmit,
-	              allocator: &mut SlotMapMemoryAllocator<A>,
+	              allocator: &mut ArcAllocator<A>,
 	              content: &[T]) -> Result<()> {
 		self.handle.upload(immediate, allocator, content)?;
 		Ok(())

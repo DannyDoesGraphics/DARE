@@ -9,8 +9,7 @@ use ash::vk::Handle;
 use derivative::Derivative;
 use tracing::trace;
 
-use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl, SlotMapMemoryAllocator};
-use crate::allocators::slot_map_allocator::MemoryAllocation;
+use crate::allocators::{Allocation, Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
@@ -21,7 +20,7 @@ use crate::util::immediate_submit::ImmediateSubmitContext;
 pub struct Buffer<A: Allocator = GPUAllocatorImpl> {
 	handle: vk::Buffer,
 	device: crate::device::LogicalDevice,
-	allocation: Option<MemoryAllocation<A>>,
+	allocation: Option<ArcAllocation<A>>,
 	address: vk::DeviceAddress,
 	size: vk::DeviceSize,
 	name: Option<String>,
@@ -31,7 +30,7 @@ pub enum BufferCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
 	/// Create a buffer with a new empty buffer with the requested size
 	NewEmptyBuffer {
 		device: crate::device::LogicalDevice,
-		allocator: &'a mut SlotMapMemoryAllocator<A>,
+		allocator: &'a mut ArcAllocator<A>,
 		size: vk::DeviceSize,
 		memory_type: crate::allocators::MemoryLocation,
 		usage_flags: vk::BufferUsageFlags,
@@ -73,7 +72,7 @@ impl<A: Allocator> Buffer<A> {
 	pub fn upload<T: Sized>(
 		&mut self,
 		immediate: &mut crate::util::ImmediateSubmit,
-		allocator: &mut SlotMapMemoryAllocator<A>,
+		allocator: &mut ArcAllocator<A>,
 		content: &[T],
 	) -> Result<()> {
 		if (mem::size_of_val(content) as vk::DeviceSize) < self.size {
@@ -86,7 +85,7 @@ impl<A: Allocator> Buffer<A> {
 	pub unsafe fn upload_arbitrary<T: Sized>(
 		&mut self,
 		immediate: &mut crate::util::ImmediateSubmit,
-		allocator: &mut SlotMapMemoryAllocator<A>,
+		allocator: &mut ArcAllocator<A>,
 		content: &[T],
 	) -> Result<()> {
 		let buffer_size: vk::DeviceSize = mem::size_of_val(content) as vk::DeviceSize;

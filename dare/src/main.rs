@@ -42,7 +42,7 @@ struct RenderContext<'a> {
 	deletion_stack: dagal::util::DeletionStack<'a>,
 	wsi_deletion_stack: dagal::util::DeletionStack<'a>,
 	graphics_queue: dagal::device::Queue,
-	allocator: dagal::allocators::SlotMapMemoryAllocator<GPUAllocatorImpl>,
+	allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
 	immediate_submit: ImmediateSubmit,
 
 	surface: Option<dagal::wsi::Surface>,
@@ -191,7 +191,7 @@ impl<'a> RenderContext<'a> {
 			allocation_sizes: Default::default(),
 		}).unwrap();
 		deletion_stack.push_resource(&allocator);
-		let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
+		let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
 		assert!(!graphics_queue.borrow().get_queues().is_empty());
 		let graphics_queue = graphics_queue.borrow().get_queues()[0];
