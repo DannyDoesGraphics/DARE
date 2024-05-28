@@ -1,4 +1,3 @@
-use std::mem::ManuallyDrop;
 use std::ptr;
 
 use anyhow::Result;

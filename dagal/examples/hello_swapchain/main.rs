@@ -57,7 +57,7 @@ impl RenderContext {
 			instance = instance.add_extension(*layer);
 		}
 		let instance = instance.build().unwrap();
-		let mut debug_messenger =
+		let debug_messenger =
 			dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
 				.unwrap();
 

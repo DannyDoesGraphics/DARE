@@ -69,6 +69,6 @@ impl<'a, T: Sized, A: Allocator> TypedBufferView<'a, T, A> {
 
 	/// Get reference to underlying untyped buffer
 	pub fn get_untyped_buffer(&self) -> &Buffer<A> {
-		&self.buffer
+		self.buffer
 	}
 }

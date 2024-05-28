@@ -95,7 +95,7 @@ impl<A: Allocator> Buffer<A> {
 		content: &[T],
 	) -> Result<()> {
 		let buffer_size: vk::DeviceSize = mem::size_of_val(content) as vk::DeviceSize;
-		let mut staging_buffer = Self::new(BufferCreateInfo::NewEmptyBuffer {
+		let staging_buffer = Self::new(BufferCreateInfo::NewEmptyBuffer {
 			device: self.device.clone(),
 			allocator,
 			size: buffer_size,
