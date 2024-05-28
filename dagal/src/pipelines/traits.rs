@@ -6,9 +6,9 @@ use ash::vk;
 
 use crate::traits::Destructible;
 
-pub trait Pipeline: Destructible + Debug + Clone {
+pub trait Pipeline: Destructible + Debug {
 	/// Get a copy to the underlying handle of the struct
-	fn handle(&mut self) -> vk::Pipeline;
+	fn handle(&self) -> vk::Pipeline;
 
 	/// Get a copy of the pipeline layout
 	fn layout(&self) -> vk::PipelineLayout;

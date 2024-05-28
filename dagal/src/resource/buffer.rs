@@ -9,14 +9,13 @@ use ash::vk::Handle;
 use derivative::Derivative;
 use tracing::trace;
 
-use crate::allocators::{Allocation, Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
+use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Derivative, Debug)]
-#[derivative(Clone)]
 pub struct Buffer<A: Allocator = GPUAllocatorImpl> {
 	handle: vk::Buffer,
 	device: crate::device::LogicalDevice,
@@ -48,6 +47,13 @@ impl<A: Allocator> Destructible for Buffer<A> {
 				allocation.destroy();
 			}
 		}
+	}
+}
+
+#[cfg(feature = "raii")]
+impl<A: Allocator> Drop for Buffer<A> {
+	fn drop(&mut self) {
+		self.destroy();
 	}
 }
 
@@ -124,20 +130,23 @@ impl<A: Allocator> Buffer<A> {
 				}
 			}))
 		}
-		staging_buffer.destroy();
+		drop(staging_buffer);
 		Ok(())
 	}
 
 	/// Write to a mapped pointer if one exists
-	pub fn write<T: Sized>(&mut self, offset: vk::DeviceSize, data: &[T]) -> Result<()> {
-		if offset + (mem::size_of_val(data) as vk::DeviceSize) < self.size {
+	///
+	/// Offset is in bytes
+	pub fn write<T: Sized>(&mut self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<()> {
+		if offset_bytes + (mem::size_of_val(data) as vk::DeviceSize) > self.size {
 			return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
 		}
 		if let Some(mapped_ptr) = self.mapped_ptr() {
+			// SAFETY: Known that size_of_val(data) + offset < buffer.size
 			unsafe {
 				let data_ptr = data.as_ptr() as *const _ as *const c_void;
-				let mapped_ptr = mapped_ptr.as_ptr().add(offset as usize);
-				ptr::copy_nonoverlapping(data_ptr, mapped_ptr, data.len());
+				let mapped_ptr = mapped_ptr.as_ptr().add(offset_bytes as usize);
+				ptr::copy_nonoverlapping(data_ptr, mapped_ptr, mem::size_of_val(data));
 			}
 			Ok(())
 		} else {
@@ -242,15 +251,11 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
 	}
 }
 
-impl Nameable for Buffer {
+impl<A: Allocator> Nameable for Buffer<A> {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::BUFFER;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
 		self.name = Some(name.to_string());
 		Ok(())
-	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
 	}
 }

@@ -78,11 +78,11 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
 	/// use dagal::gpu_allocator;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-	///     instance: instance.get_instance().clone(),
-	///     device: device.get_handle().clone(),
-	///     physical_device: physical_device.handle().clone(),
+	///     instance: test_vulkan.instance.get_instance().clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
+	///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
 	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
 	///         log_memory_information: false,
 	///             log_leaks_on_shutdown: true,
@@ -96,9 +96,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 	///  }).unwrap();
 	/// let descriptor_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
 	/// .add_binding(0, vk::DescriptorType::SAMPLER)
-	/// .build(device.clone(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None).unwrap();
-	/// deletion_stack.push_resource(&descriptor_set_layout);
-	/// deletion_stack.flush();
+	/// .build(test_vulkan.device.as_ref().unwrap().clone(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None).unwrap();
+	/// drop(descriptor_set_layout);
 	/// ```
 	pub fn build(
 		self,
@@ -141,7 +140,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 		crate::descriptor::DescriptorSetLayout::new(crate::descriptor::DescriptorSetLayoutCreateInfo::FromVk {
 			handle,
 			device,
-			name,
+			name: name.as_deref(),
 		})
 	}
 }

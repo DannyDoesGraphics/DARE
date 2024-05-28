@@ -8,7 +8,7 @@ use tracing::trace;
 use crate::pipelines::traits::PipelineBuilder;
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ComputePipeline {
 	device: crate::device::LogicalDevice,
 	handle: vk::Pipeline,
@@ -32,7 +32,7 @@ impl Destructible for ComputePipeline {
 }
 
 impl super::Pipeline for ComputePipeline {
-	fn handle(&mut self) -> vk::Pipeline {
+	fn handle(&self) -> vk::Pipeline {
 		self.handle
 	}
 
@@ -68,8 +68,8 @@ impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
 		stages: vk::ShaderStageFlags,
 	) -> Self {
 		if stages & vk::ShaderStageFlags::COMPUTE == vk::ShaderStageFlags::COMPUTE {
-			if let Some(mut shader) = self.compute_shader.take() {
-				shader.destroy();
+			if let Some(shader) = self.compute_shader.take() {
+				drop(shader)
 			}
 			self.compute_shader = Some(compute_shader);
 			self
@@ -104,11 +104,17 @@ impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
 				.pop()
 				.unwrap()
 		};
-		self.compute_shader.as_mut().unwrap().destroy();
 		Ok(ComputePipeline {
 			device,
 			handle: pipeline,
 			layout: self.layout.unwrap(),
 		})
+	}
+}
+
+#[cfg(feature = "raii")]
+impl Drop for ComputePipeline {
+	fn drop(&mut self) {
+		self.destroy();
 	}
 }

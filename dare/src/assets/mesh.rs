@@ -1,14 +1,15 @@
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 
 #[derive(Debug)]
-pub struct Mesh {
+pub struct Mesh<A: Allocator = GPUAllocatorImpl> {
 	name: Option<String>,
 	position: glam::Vec3,
 	scale: glam::Vec3,
-	vertex_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
-	normal_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
-	tangent_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
-	index_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
-	uv_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer>,
+	vertex_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
+	normal_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
+	tangent_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
+	index_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
+	uv_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
 }
 
 #[repr(C)]

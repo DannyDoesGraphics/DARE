@@ -93,7 +93,6 @@ impl DescriptorWriteInfo {
 pub struct DescriptorSet {
 	handle: vk::DescriptorSet,
 	device: crate::device::LogicalDevice,
-	name: Option<String>,
 }
 
 pub enum DescriptorSetCreateInfo<'a> {
@@ -101,13 +100,13 @@ pub enum DescriptorSetCreateInfo<'a> {
 		handle: vk::DescriptorSet,
 
 		device: crate::device::LogicalDevice,
-		name: Option<String>
+		name: Option<&'a str>
 	},
 	NewSet {
 		pool: &'a crate::descriptor::DescriptorPool,
 		layout: &'a crate::descriptor::DescriptorSetLayout,
 
-		name: Option<String>,
+		name: Option<&'a str>,
 	}
 }
 
@@ -119,11 +118,10 @@ impl DescriptorSet {
 				let mut handle = Self {
 					handle,
 					device,
-					name,
 				};
 				if let Some(debug_utils) = handle.device.clone().get_debug_utils() {
-					if let Some(name) = handle.name.as_deref().map(|s| s.to_string()) {
-						handle.set_name(debug_utils, name.as_str())?;
+					if let Some(name) = name {
+						handle.set_name(debug_utils, name)?;
 					}
 				}
 
@@ -227,11 +225,6 @@ impl Nameable for DescriptorSet {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::DESCRIPTOR_SET;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
-		self.name = Some(name.to_string());
 		Ok(())
-	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
 	}
 }

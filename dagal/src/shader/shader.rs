@@ -6,7 +6,7 @@ use tracing::trace;
 
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Shader {
 	handle: vk::ShaderModule,
 	device: crate::device::LogicalDevice,

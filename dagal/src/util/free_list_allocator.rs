@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
+use derivative::Derivative;
 
+use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 
 #[derive(Copy, PartialOrd, PartialEq, Eq, Hash)]
@@ -58,18 +60,29 @@ impl<T> Handle<T> {
 /// Slot maps will frequently swap resources around to ensure more efficient iteration of memory, but
 /// in cases where we value coherent 1:1 resource id to resource index mappings, free list allocators
 /// make more sense.
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct FreeListInner<T> {
+	#[derivative(Debug = "ignore")]
 	resources: Vec<Option<T>>,
 	free_ids: Vec<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FreeList<T> {
 	inner: Arc<RwLock<FreeListInner<T>>>,
 }
 
-impl<T: Clone> Default for FreeList<T> {
+impl<T> Clone for FreeList<T> {
+	fn clone(&self) -> Self {
+		Self {
+			inner: self.inner.clone()
+		}
+	}
+}
+
+
+impl<T> Default for FreeList<T> {
 	fn default() -> Self {
 		Self {
 			inner: Arc::new(RwLock::new(FreeListInner {
@@ -80,7 +93,7 @@ impl<T: Clone> Default for FreeList<T> {
 	}
 }
 
-impl<T: Clone> FreeList<T> {
+impl<T> FreeList<T> {
 	pub fn allocate(&mut self, resource: T) -> Result<Handle<T>> {
 		let mut guard = self.inner.write().map_err(|_| {
 			anyhow::Error::from(crate::DagalError::PoisonError)
@@ -110,9 +123,15 @@ impl<T: Clone> FreeList<T> {
 		Ok(resource.unwrap())
 	}
 
-	pub fn get(&self, handle: &Handle<T>) -> Result<T> {
+	pub fn with_handle<R, F: FnOnce(&T) -> R>(&self, handle: &Handle<T>, f: F) -> Result<R> {
 		unsafe {
-			self.untyped_get(handle)
+			self.untyped_with_handle(handle, f)
+		}
+	}
+
+	pub fn with_handle_mut<R, F: FnOnce(&mut T) -> R>(&self, handle: &Handle<T>, f: F) -> Result<R> {
+		unsafe {
+			self.untyped_with_handle_mut(handle, f)
 		}
 	}
 
@@ -131,35 +150,70 @@ impl<T: Clone> FreeList<T> {
 		Ok(false)
 	}
 
-	/// Get the underlying values regardless of handle type
-	pub(crate) unsafe fn untyped_get<A>(&self, handle: &Handle<A>) -> Result<T> {
-		if unsafe { !self.untyped_is_valid(handle)? } {
+	/// Execute with a handle's underlying resource
+	///
+	/// Result returned if the lambda's return type. Any error in the Result indicates an error
+	/// found with the handle.
+	pub unsafe fn untyped_with_handle<A, R, F: FnOnce(&T) -> R>(&self, handle: &Handle<A>, f: F) -> Result<R> {
+		if !self.untyped_is_valid(handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		let guard = self.inner.read().map_err(|_| {
-			anyhow::Error::from(crate::DagalError::PoisonError)
-		})?;
-		let resource = guard.resources.get(handle.id as usize);
-		let resource = resource.unwrap().as_ref().cloned().unwrap();
-
-		Ok(resource)
+		self
+			.inner
+			.read()
+			.map_err(|_| {
+				anyhow::Error::from(crate::DagalError::PoisonError)
+			})?
+			.resources.get(handle.id as usize)
+			.unwrap()
+			.as_ref()
+			.map_or(Err(anyhow::Error::from(crate::DagalError::PoisonError)), |data| Ok(f(data)))
 	}
 
-	pub fn with_iter_mut<F: FnOnce(&mut dyn Iterator<Item=&mut Option<T>>)>(&mut self, f: F) {
-		let mut guard = self.inner.write().map_err(|_| {
-			anyhow::Error::from(crate::DagalError::PoisonError)
-		}).unwrap();
-
-		let mut iter = guard.resources.iter_mut();
-		f(&mut iter);
+	/// Execute with a handle's underlying resource
+	///
+	/// Result returned if the lambda's return type. Any error in the Result indicates an error
+	/// found with the handle.
+	pub unsafe fn untyped_with_handle_mut<A, R, F: FnOnce(&mut T) -> R>(&self, handle: &Handle<A>, f: F) -> Result<R> {
+		if !self.untyped_is_valid(handle)? {
+			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+		}
+		self
+			.inner
+			.write()
+			.map_err(|_| {
+				anyhow::Error::from(crate::DagalError::PoisonError)
+			})?
+			.resources.get_mut(handle.id as usize)
+			.unwrap()
+			.as_mut()
+			.map_or(Err(anyhow::Error::from(crate::DagalError::PoisonError)), |data| Ok(f(data)))
 	}
 }
 
-impl<T: Clone + Destructible> FreeList<T> {
-	/// Performs a de-allocation but also destroys the resource
+impl<'a, T: Resource<'a>> FreeList<T> {
+	/// If you're simply acquiring a resource's handle
+	pub fn get_resource_handle(&self, handle: &Handle<T>) -> Result<T::HandleType> {
+		if !self.is_valid(handle)? {
+			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+		}
+		Ok(self.inner
+		       .read()
+		       .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+			.resources
+			.get(handle.id as usize)
+			.unwrap()
+			.as_ref()
+			.unwrap()
+			.handle())
+	}
+}
+
+impl<T: Destructible> FreeList<T> {
+	/// Deallocates the handle's resource as well calls destroy automatically
 	pub fn deallocate_destructible(&mut self, handle: Handle<T>) -> Result<()> {
-		let mut resource = self.deallocate(handle)?;
-		resource.destroy();
+		let res = self.deallocate(handle)?;
+		drop(res);
 		Ok(())
 	}
 }

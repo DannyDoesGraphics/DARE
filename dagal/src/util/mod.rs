@@ -1,12 +1,10 @@
 use std::ffi::{c_char, CStr, CString};
 
-pub use deletion_stack::DeletionStack;
 pub use free_list_allocator::FreeList;
 pub use immediate_submit::ImmediateSubmit;
 pub use slot_map::*;
 
 /// Utility functions commonly used
-pub mod deletion_stack;
 pub mod immediate_submit;
 pub mod tests;
 pub mod free_list_allocator;

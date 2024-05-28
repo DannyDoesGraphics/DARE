@@ -9,11 +9,10 @@ use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 
 /// Allocates descriptor set layouts
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DescriptorPool {
 	handle: vk::DescriptorPool,
 	device: crate::device::LogicalDevice,
-	name: Option<String>,
 }
 
 /// If you want to allocate descriptors based on a ratio
@@ -35,12 +34,12 @@ impl PoolSizeRatio {
 }
 
 /// Create information for a [`DescriptorPool`].
-pub enum DescriptorPoolCreateInfo {
+pub enum DescriptorPoolCreateInfo<'a> {
 	FromVk {
 		handle: vk::DescriptorPool,
 
 		device: crate::device::LogicalDevice,
-		name: Option<String>,
+		name: Option<&'a str>,
 	},
 
 	/// Allocate a pool from descriptor pool sizes
@@ -53,11 +52,11 @@ pub enum DescriptorPoolCreateInfo {
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
 	/// use dagal::gpu_allocator;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-	///     instance: instance.get_instance().clone(),
-	///     device: device.get_handle().clone(),
-	///     physical_device: physical_device.handle().clone(),
+	///     instance: test_vulkan.instance.get_instance().clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
+	///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
 	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
 	///         log_memory_information: false,
 	///             log_leaks_on_shutdown: true,
@@ -79,11 +78,10 @@ pub enum DescriptorPoolCreateInfo {
 	///         ],
 	/// 		flags: Default::default(),
 	/// 		max_sets: 1,
-	/// 		device: device.clone(),
+	/// 		device: test_vulkan.device.as_ref().unwrap().clone(),
 	/// 		name: None,
 	/// 	}).unwrap();
-	/// deletion_stack.push_resource(&pool);
-	/// deletion_stack.flush();
+	/// drop(pool);
 	/// ```
 	FromPoolSizes {
 		sizes: Vec<vk::DescriptorPoolSize>,
@@ -91,7 +89,7 @@ pub enum DescriptorPoolCreateInfo {
 		max_sets: u32,
 
 		device: crate::device::LogicalDevice,
-		name: Option<String>,
+		name: Option<&'a str>,
 	},
 
 	/// All ratios inputted will be scaled by `count`. The actual scaling is rounded.
@@ -104,11 +102,11 @@ pub enum DescriptorPoolCreateInfo {
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
 	/// use dagal::gpu_allocator;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-	///     instance: instance.get_instance().clone(),
-	///     device: device.get_handle().clone(),
-	///     physical_device: physical_device.handle().clone(),
+	///     instance: test_vulkan.instance.get_instance().clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
+	///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
 	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
 	///         log_memory_information: false,
 	///             log_leaks_on_shutdown: true,
@@ -136,11 +134,10 @@ pub enum DescriptorPoolCreateInfo {
 	/// 		count: 10,
 	/// 		flags: Default::default(),
 	/// 		max_sets: 1,
-	/// 		device: device.clone(),
+	/// 		device: test_vulkan.device.as_ref().unwrap().clone(),
 	/// 		name: None,
 	/// 	}).unwrap();
-	/// deletion_stack.push_resource(&pool);
-	/// deletion_stack.flush();
+	/// drop(pool);
 	/// ```
 	FromPoolSizeRatios {
 		ratios: Vec<PoolSizeRatio>,
@@ -150,12 +147,12 @@ pub enum DescriptorPoolCreateInfo {
 		max_sets: u32,
 
 		device: crate::device::LogicalDevice,
-		name: Option<String>,
+		name: Option<&'a str>,
 	}
 }
 
 impl<'a> Resource<'a> for DescriptorPool {
-	type CreateInfo = DescriptorPoolCreateInfo;
+	type CreateInfo = DescriptorPoolCreateInfo<'a>;
 	type HandleType = vk::DescriptorPool;
 
 	fn new(create_info: Self::CreateInfo) -> Result<Self> where Self: Sized {
@@ -164,9 +161,8 @@ impl<'a> Resource<'a> for DescriptorPool {
 				let mut handle = Self {
 					handle,
 					device,
-					name
 				};
-				crate::resource::traits::update_name(&mut handle);
+				crate::resource::traits::update_name(&mut handle, name);
 				Ok(handle)
 			}
 			DescriptorPoolCreateInfo::FromPoolSizes { sizes, flags, max_sets, device, name } => {
@@ -183,8 +179,8 @@ impl<'a> Resource<'a> for DescriptorPool {
 				let handle = unsafe { device.get_handle().create_descriptor_pool(&pool_ci, None)? };
 				#[cfg(feature = "log-lifetimes")]
 				trace!("Creating VkDescriptorPool {:p}", handle);
-				let mut handle = Self { handle, device, name };
-				crate::resource::traits::update_name(&mut handle);
+				let mut handle = Self { handle, device };
+				crate::resource::traits::update_name(&mut handle, name);
 				Ok(handle)
 			}
 			DescriptorPoolCreateInfo::FromPoolSizeRatios { ratios, count, flags, max_sets, device, name } => {
@@ -222,12 +218,7 @@ impl Nameable for DescriptorPool {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::DESCRIPTOR_POOL;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
-		self.name = Some(name.to_string());
 		Ok(())
-	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
 	}
 }
 

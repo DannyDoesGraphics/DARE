@@ -1,31 +1,36 @@
 use std::{mem, ptr};
-use std::ffi::c_void;
+use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use ash::vk;
-use derivative::Derivative;
 
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use crate::DagalError::PoisonError;
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource;
 use crate::resource::traits::Resource;
-use crate::traits::Destructible;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
 
-#[derive(Clone, Derivative, Debug)]
-pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
-	device: crate::device::LogicalDevice,
+#[derive(Debug)]
+struct GPUResourceTableInner<A: Allocator = GPUAllocatorImpl> {
 	pool: crate::descriptor::DescriptorPool,
 	set_layout: crate::descriptor::DescriptorSetLayout,
 	descriptor_set: crate::descriptor::DescriptorSet,
 	address_buffer: resource::Buffer<A>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GPUResourceTable<A: Allocator = GPUAllocatorImpl> {
+	inner: Arc<RwLock<GPUResourceTableInner<A>>>,
 
 	// Storage for the underlying resources
 	images: FreeList<resource::Image<A>>,
 	image_views: FreeList<resource::ImageView>,
 	buffers: FreeList<resource::Buffer<A>>,
 	samplers: FreeList<resource::Sampler>,
+
+	device: crate::device::LogicalDevice,
 }
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
@@ -101,15 +106,15 @@ impl<A: Allocator> GPUResourceTable<A> {
 			crate::descriptor::DescriptorSetCreateInfo::NewSet {
 				pool: &pool,
 				layout: &set_layout,
-				name: Some(String::from("GPU resource table descriptor set")),
+				name: Some("GPU resource table descriptor set"),
 			}
 		)?;
 		// create a descriptor write
 		let bda_buffer: resource::Buffer<A> = resource::Buffer::new(
-			resource::buffer::BufferCreateInfo::NewEmptyBuffer {
+			resource::BufferCreateInfo::NewEmptyBuffer {
 				device: device.clone(),
 				allocator,
-				size: MAX_BUFFER_RESOURCES as u64,
+				size: ((MAX_BUFFER_RESOURCES as usize) * mem::size_of::<vk::DeviceSize>()) as u64,
 				memory_type: crate::allocators::MemoryLocation::CpuToGpu,
 				usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER,
 			}
@@ -127,22 +132,29 @@ impl<A: Allocator> GPUResourceTable<A> {
 		]);
 
 		Ok(Self {
-			device,
-			pool,
-			set_layout,
-			descriptor_set,
-			address_buffer: bda_buffer,
+			inner: Arc::new(RwLock::new(GPUResourceTableInner {
+				pool,
+				set_layout,
+				descriptor_set,
+				address_buffer: bda_buffer,
+			})),
 			images: FreeList::default(),
 			image_views: FreeList::default(),
 			buffers: FreeList::default(),
 			samplers: FreeList::default(),
+			device,
 		})
 	}
 
 	/// Get the underlying [`VkDescriptorSet`](vk::DescriptorSet) of the GPU resource table for
 	/// the BDA buffer
-	pub fn get_descriptor_set(&self) -> crate::descriptor::DescriptorSet {
-		self.descriptor_set.clone()
+	pub fn with_descriptor_set<R, F: FnOnce(&crate::descriptor::DescriptorSet) -> R>(&self, f: F) -> Result<R> {
+		let descriptor_set = &self.inner.read().map_err(|_| anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))?.descriptor_set;
+		Ok(f(descriptor_set))
+	}
+
+	pub fn get_descriptor_set(&self) -> Result<vk::DescriptorSet> {
+		Ok(self.inner.read().map_err(|_| anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))?.descriptor_set.handle())
 	}
 
 	/// Get the underlying [VkDevice](ash::Device)
@@ -150,8 +162,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 		&self.device
 	}
 
-	pub fn get_descriptor_layout(&self) -> vk::DescriptorSetLayout {
-		self.set_layout.handle()
+	pub fn get_descriptor_layout(&self) -> Result<vk::DescriptorSetLayout> {
+		Ok(self.inner.read().map_err(|_| anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))?.set_layout.handle())
 	}
 
 	/// Create a new image view
@@ -172,9 +184,8 @@ impl<A: Allocator> GPUResourceTable<A> {
 		self.image_views.deallocate_destructible(handle)
 	}
 
-	/// Get an image view
-	pub fn get_image_view(&self, image_view: &Handle<resource::ImageView>) -> Result<resource::ImageView> {
-		self.image_views.get(image_view)
+	pub fn with_image_view<R, F: FnOnce(&resource::ImageView) -> R>(&self, handle: &Handle<resource::ImageView>, f: F) -> Result<R> {
+		self.image_views.with_handle(handle, f)
 	}
 
 	/// Get a new sampler
@@ -196,35 +207,37 @@ impl<A: Allocator> GPUResourceTable<A> {
 			}
 			_ => unimplemented!()
 		}?;
-		let sampler = self.samplers.get(&sampler_handle)?;
+		let sampler = self.samplers.get_resource_handle(&sampler_handle)?;
 		let p_image_info = vk::DescriptorImageInfo {
-			sampler: sampler.handle(),
+			sampler,
 			image_view: vk::ImageView::null(),
 			image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
 		};
 		unsafe {
-			self.device.get_handle().update_descriptor_sets(&[
-				vk::WriteDescriptorSet {
-					s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-					p_next: ptr::null(),
-					dst_set: self.descriptor_set.handle(),
-					dst_binding: SAMPLER_BINDING_INDEX,
-					dst_array_element: sampler_handle.id() as u32,
-					descriptor_count: 1,
-					descriptor_type: vk::DescriptorType::SAMPLER,
-					p_image_info: &p_image_info,
-					p_buffer_info: ptr::null(),
-					p_texel_buffer_view: ptr::null(),
-					_marker: Default::default(),
-				}], &[]);
+			self.with_descriptor_set(|descriptor_set| {
+				self.device.get_handle().update_descriptor_sets(&[
+					vk::WriteDescriptorSet {
+						s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+						p_next: ptr::null(),
+						dst_set: descriptor_set.handle(),
+						dst_binding: SAMPLER_BINDING_INDEX,
+						dst_array_element: sampler_handle.id() as u32,
+						descriptor_count: 1,
+						descriptor_type: vk::DescriptorType::SAMPLER,
+						p_image_info: &p_image_info,
+						p_buffer_info: ptr::null(),
+						p_texel_buffer_view: ptr::null(),
+						_marker: Default::default(),
+					}], &[]);
+			})?;
 		}
 
 		Ok(sampler_handle)
 	}
 
 	/// Get a sampler from is handle
-	pub fn get_sampler(&self, sampler: &Handle<resource::Sampler>) -> Result<resource::Sampler> {
-		self.samplers.get(sampler)
+	pub fn with_sampler<R, F: FnOnce(&resource::Sampler) -> R>(&self, sampler: &Handle<resource::Sampler>, f: F) -> Result<R> {
+		self.samplers.with_handle(sampler, f)
 	}
 
 	/// Free a list sampler from the gpu resource table
@@ -246,25 +259,25 @@ impl<A: Allocator> GPUResourceTable<A> {
 				handle
 			}
 		};
-		let image = self.images.get(&image_handle).unwrap();
 		let image_view_handle = self.new_image_view(image_view_ci)?;
-		let image_view = self.image_views.get(&image_view_handle)?;
+		let image_view = self.image_views.get_resource_handle(&image_view_handle)?;
 
-		let flags: vk::ImageUsageFlags = image.usage_flags();
-		let handle = self.images.allocate(image)?;
+		let image_flags: vk::ImageUsageFlags = self.images.with_handle(&image_handle, |image| {
+			image.usage_flags()
+		})?;
 		let mut write_infos: Vec<vk::WriteDescriptorSet> = Vec::new();
-		if flags & vk::ImageUsageFlags::SAMPLED == vk::ImageUsageFlags::SAMPLED {
+		if image_flags & vk::ImageUsageFlags::SAMPLED == vk::ImageUsageFlags::SAMPLED {
 			write_infos.push(vk::WriteDescriptorSet {
 				s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 				p_next: ptr::null(),
-				dst_set: self.descriptor_set.handle(),
+				dst_set: self.get_descriptor_set()?,
 				dst_binding: SAMPLED_IMAGE_BINDING_INDEX,
-				dst_array_element: handle.id() as u32,
+				dst_array_element: image_handle.id() as u32,
 				descriptor_count: 1,
 				descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
 					sampler: vk::Sampler::null(),
-					image_view: image_view.handle(),
+					image_view,
 					image_layout,
 				},
 				p_buffer_info: ptr::null(),
@@ -272,18 +285,18 @@ impl<A: Allocator> GPUResourceTable<A> {
 				_marker: Default::default(),
 			});
 		}
-		if flags & vk::ImageUsageFlags::STORAGE == vk::ImageUsageFlags::STORAGE {
+		if image_flags & vk::ImageUsageFlags::STORAGE == vk::ImageUsageFlags::STORAGE {
 			write_infos.push(vk::WriteDescriptorSet {
 				s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
 				p_next: ptr::null(),
-				dst_set: self.descriptor_set.handle(),
+				dst_set: self.get_descriptor_set()?,
 				dst_binding: STORAGE_IMAGE_BINDING_INDEX,
-				dst_array_element: handle.id() as u32,
+				dst_array_element: image_handle.id() as u32,
 				descriptor_count: 1,
 				descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
 				p_image_info: &vk::DescriptorImageInfo {
 					sampler: vk::Sampler::null(),
-					image_view: image_view.handle(),
+					image_view,
 					image_layout,
 				},
 				p_buffer_info: ptr::null(),
@@ -305,7 +318,7 @@ impl<A: Allocator> GPUResourceTable<A> {
 	/// Create a new buffer and put it into the bindless buffer
 	///
 	/// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
-	pub fn new_buffer(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
+	pub fn new_buffer(&mut self, buffer_ci: resource::BufferCreateInfo<A>)
 	                  -> Result<Handle<resource::Buffer<A>>> {
 		match buffer_ci {
 			resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
@@ -318,12 +331,10 @@ impl<A: Allocator> GPUResourceTable<A> {
 		let buffer: resource::Buffer<A> = resource::Buffer::new(buffer_ci)?;
 		let buffer_address = buffer.address();
 		let handle = self.buffers.allocate(buffer)?;
-		// expand into the slot
-		unsafe {
-			let target_ptr = self.address_buffer.mapped_ptr().unwrap().as_ptr().add(mem::size_of::<vk::DeviceAddress>() * handle.id() as usize);
-			let data_ptr = &buffer_address as *const _ as *const c_void;
-			ptr::copy_nonoverlapping(data_ptr, target_ptr, mem::size_of::<vk::DeviceAddress>());
-		}
+		self.inner.write().map_err(|_| anyhow::Error::from(PoisonError))?.address_buffer.write(
+			(mem::size_of::<vk::DeviceMemory>() * handle.id() as usize) as vk::DeviceSize,
+			&[buffer_address]
+		)?;
 		Ok(handle)
 	}
 
@@ -331,49 +342,29 @@ impl<A: Allocator> GPUResourceTable<A> {
 		self.buffers.deallocate_destructible(handle)
 	}
 
-	pub fn new_typed_buffer<T: Sized>(&mut self, buffer_ci: crate::resource::BufferCreateInfo<A>)
-	                                  -> Result<Handle<resource::TypedBuffer<T, A>>> {
-		let handle = self.new_buffer(buffer_ci)?;
-		let handle: Handle<resource::TypedBuffer<T, A>> = Handle::new(handle.id());
-		Ok(handle)
-	}
-
-	pub fn free_typed_buffer<T: Sized>(&mut self, handle: Handle<resource::TypedBuffer<T>>) -> Result<()> {
-		let handle = Handle::new(handle.id());
-		self.buffers.deallocate_destructible(handle)
-	}
-
 	/// Get buffer
-	pub fn get_buffer(&self, handle: &Handle<resource::Buffer<A>>) -> Result<resource::Buffer<A>> {
-		self.buffers.get(handle)
+	pub fn with_buffer<R, F: FnOnce(&resource::Buffer<A>) -> R>(&self, handle: &Handle<resource::Buffer<A>>, f: F) -> Result<R> {
+		self.buffers.with_handle(handle, f)
+	}
+
+	pub fn with_buffer_mut<R, F: FnOnce(&mut resource::Buffer<A>) -> R>(&mut self, handle: &Handle<resource::Buffer<A>>, f: F) -> Result<R> {
+		self.buffers.with_handle_mut(handle, f)
 	}
 
 	/// Get typed buffer
-	pub fn get_typed_buffer<T: Sized>(&self, handle: &Handle<resource::TypedBuffer<T, A>>) -> Result<resource::TypedBuffer<T, A>> {
-		let buffer = unsafe { self.buffers.untyped_get(handle)? };
-		let buffer: Result<resource::TypedBuffer<T, A>> = resource::TypedBuffer::new(resource::TypedBufferCreateInfo::FromDagalBuffer {
-			handle: buffer
-		});
-		buffer
+	pub fn with_typed_buffer<T: Sized, R, F: FnOnce(resource::TypedBufferView<T, A>) -> R>(&mut self, handle: &Handle<resource::TypedBufferView<T, A>>, f: F) -> Result<R> {
+		unsafe {
+			self.buffers.untyped_with_handle_mut(handle, move |buffer| {
+				let typed_buffer = resource::TypedBufferView::new(resource::TypedBufferCreateInfo::FromDagalBuffer {
+					buffer,
+				}).unwrap();
+				f(typed_buffer)
+			})
+		}
 	}
 
 	/// Get even more images
-	pub fn get_image(&self, handle: &Handle<resource::Image<A>>) -> Result<resource::Image<A>> {
-		self.images.get(handle)
-	}
-}
-
-impl Destructible for GPUResourceTable {
-	fn destroy(&mut self) {
-		self.pool.destroy();
-		self.set_layout.destroy();
-		self.address_buffer.destroy();
-	}
-}
-
-#[cfg(feature = "raii")]
-impl Drop for GPUResourceTable {
-	fn drop(&mut self) {
-		self.destroy();
+	pub fn with_image<R, F: FnOnce(&resource::Image<A>) -> R>(&self, handle: &Handle<resource::Image<A>>, f: F) -> Result<R> {
+		self.images.with_handle(handle, f)
 	}
 }

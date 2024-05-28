@@ -6,25 +6,25 @@ authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
 ash = "0.38.0"
-ash-window = {version = "0.13.0", optional = false}
+ash-window = { version = "0.13.0", optional = false }
 gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", branch = "ash-0.38", features = ["default", "vulkan"], optional = true }
-winit = {version = "0.30.0", optional = true}
-raw-window-handle = {version = "0.6.2", optional = false}
-vk-mem = {version = "0.4.0", optional = true }
+winit = { version = "0.30.0", optional = true }
+raw-window-handle = { version = "0.6.2", optional = false }
+vk-mem = { version = "0.4.0", optional = true }
 derivative = "2.2.0"
 anyhow = "1.0.86"
 thiserror = "1.0.61"
 tracing = "0.1.40"
 
 # Shader dependencies
-shaderc = { version = "0.8.3", optional = true   }
+shaderc = { version = "0.8.3", optional = true }
 glam = "0.27.0"
 
 [dev-dependencies]
-winit = {version = "0.30.0", optional = false}
+winit = { version = "0.30.0", optional = false }
 
 [features]
-default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc"]
+default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc", "raii"]
 # Adds support for winit into dagal
 winit = ["dep:winit"]
 # Adds support for gpu-allocator for the primary allocation

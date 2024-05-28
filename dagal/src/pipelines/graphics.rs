@@ -8,7 +8,7 @@ use tracing::trace;
 
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GraphicsPipeline {
 	handle: vk::Pipeline,
 	device: crate::device::LogicalDevice,
@@ -31,8 +31,15 @@ impl Destructible for GraphicsPipeline {
 	}
 }
 
+#[cfg(feature = "raii")]
+impl Drop for GraphicsPipeline {
+	fn drop(&mut self) {
+		self.destroy();
+	}
+}
+
 impl super::Pipeline for GraphicsPipeline {
-	fn handle(&mut self) -> vk::Pipeline {
+	fn handle(&self) -> vk::Pipeline {
 		self.handle
 	}
 
@@ -104,8 +111,8 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
 		shader: crate::shader::Shader,
 		stage: vk::ShaderStageFlags,
 	) -> Self {
-		if let Some(mut shader) = self.shaders.remove(&stage) {
-			shader.destroy();
+		if let Some(shader) = self.shaders.remove(&stage) {
+			drop(shader);
 		}
 		self.shaders.insert(stage, shader);
 		self
@@ -201,8 +208,8 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
 			.pop()
 			.unwrap();
 		// Clean up shaders
-		for mut shader in self.shaders.into_values() {
-			shader.destroy();
+		for shader in self.shaders.into_values() {
+			drop(shader)
 		}
 
 		Ok(Self::BuildTo {

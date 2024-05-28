@@ -11,7 +11,7 @@ use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Image<A: Allocator = GPUAllocatorImpl> {
 	handle: vk::Image,
 	format: vk::Format,
@@ -20,7 +20,7 @@ pub struct Image<A: Allocator = GPUAllocatorImpl> {
 	image_type: vk::ImageType,
 	device: crate::device::LogicalDevice,
 	allocation: Option<ArcAllocation<A>>,
-	name: Option<String>,
+	image_managed: bool,
 }
 
 pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
@@ -33,13 +33,13 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
 		extent: vk::Extent3D,
 		usage_flags: vk::ImageUsageFlags,
 		image_type: vk::ImageType,
-		name: Option<String>,
+		name: Option<&'a str>,
 	},
 	/// Create a new image without any allocation made
 	NewUnallocated {
 		device: crate::device::LogicalDevice,
 		image_ci: vk::ImageCreateInfo<'a>,
-		name: Option<String>,
+		name: Option<&'a str>,
 	},
 	/// Create a new image that has allocated memory
 	NewAllocated {
@@ -47,7 +47,7 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
 		allocator: &'a mut ArcAllocator<A>,
 		location: crate::allocators::MemoryLocation,
 		image_ci: vk::ImageCreateInfo<'a>,
-		name: Option<String>,
+		name: Option<&'a str>,
 	},
 }
 
@@ -234,9 +234,9 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	/// use ash::vk;
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewUnallocated {
-	///     device: device.clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().clone(),
 	///     image_ci:vk::ImageCreateInfo {
 	///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
 	///         p_next: ptr::null(),
@@ -255,14 +255,13 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
 	///         sharing_mode: vk::SharingMode::EXCLUSIVE,
 	///         queue_family_index_count: 1,
-	///         p_queue_family_indices: &queue.get_family_index(),
+	///         p_queue_family_indices: &test_vulkan.compute_queue.as_ref().unwrap().get_family_index(),
 	///         initial_layout: vk::ImageLayout::UNDEFINED,
 	///         _marker: Default::default(),
 	///     },
 	///     name: None,
 	/// }).unwrap();
-	/// deletion_stack.push_resource(&image);
-	/// deletion_stack.flush();
+	/// drop(image);
 	/// ```
 	/// Creating an image with an allocation
 	/// ```
@@ -272,11 +271,11 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
 	/// use dagal::gpu_allocator;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-	///     instance: instance.get_instance().clone(),
-	///     device: device.get_handle().clone(),
-	///     physical_device: physical_device.handle().clone(),
+	///     instance: test_vulkan.instance.get_instance().clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
+	///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
 	///     debug_settings: gpu_allocator::AllocatorDebugSettings {
 	///         log_memory_information: false,
 	///             log_leaks_on_shutdown: true,
@@ -290,7 +289,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	///  }).unwrap();
 	/// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 	/// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
-	///     device: device.clone(),
+	///     device: test_vulkan.device.as_ref().unwrap().clone(),
 	///     image_ci: vk::ImageCreateInfo {
 	///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
 	///         p_next: ptr::null(),
@@ -309,7 +308,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
 	///         sharing_mode: vk::SharingMode::EXCLUSIVE,
 	///         queue_family_index_count: 1,
-	///         p_queue_family_indices: &queue.get_family_index(),
+	///         p_queue_family_indices: &test_vulkan.compute_queue.as_ref().unwrap().get_family_index(),
 	///         initial_layout: vk::ImageLayout::UNDEFINED,
 	///         _marker: Default::default(),
 	///     },
@@ -317,8 +316,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 	///     location: dagal::allocators::MemoryLocation::GpuOnly,
 	///     name: None,
 	/// }).unwrap();
-	/// deletion_stack.push_resource(&image);
-	/// deletion_stack.flush();
+	/// drop(image);
 	/// ```
 	fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
 	       where
@@ -342,28 +340,29 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 					usage_flags,
 					image_type,
 					allocation: None,
-					name,
+					image_managed: false,
 				};
-				if let Some(debug_utils) = res.device.clone().get_debug_utils() {
-					if let Some(name) = res.name.clone() {
-						res.set_name(debug_utils, name.as_str())?;
-					}
-				}
+				crate::resource::traits::update_name(&mut res, name).unwrap_or(Ok(()))?;
 				Ok(res)
 			},
 			ImageCreateInfo::NewUnallocated { device, image_ci, name } => {
 				let handle = unsafe { device.get_handle().create_image(&image_ci, None)? };
 				#[cfg(feature = "log-lifetimes")]
 				trace!("Created VkImage {:p}", handle);
-				Ok(Self::new(ImageCreateInfo::FromVkNotManaged {
-					device,
-					image: handle,
+
+				let mut handle = Self {
+					handle,
 					format: image_ci.format,
 					extent: image_ci.extent,
 					usage_flags: image_ci.usage,
 					image_type: image_ci.image_type,
-					name,
-				})?)
+					device,
+					allocation: None,
+					image_managed: true,
+				};
+				crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
+
+				Ok(handle)
 			}
 			ImageCreateInfo::NewAllocated {
 				device,
@@ -379,7 +378,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
 						.get_handle()
 						.get_image_memory_requirements(image.handle)
 				};
-				let allocation = allocator.allocate(image.name.as_deref().unwrap_or(""), &memory_requirements, location)?;
+				let allocation = allocator.allocate(name.unwrap_or(""), &memory_requirements, location)?;
 				unsafe {
 					image.device.get_handle().bind_image_memory(
 						image.handle,
@@ -410,148 +409,9 @@ impl<A: Allocator> Nameable for Image<A> {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::IMAGE;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
-		self.name = Some(name.to_string());
 		Ok(())
 	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
-	}
 }
-
-/*
-impl<A: Allocator> Image<A> {
-    /// Create a new image with no memory bounded
-    /// # Examples
-    /// ```
-    /// use std::ptr;
-    /// use ash::vk;
-    /// use dagal::util::tests::TestSettings;
-    /// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let image: dagal::resource::Image = dagal::resource::Image::new_empty(device.clone() ,&vk::ImageCreateInfo {
-    ///     s_type: vk::StructureType::IMAGE_CREATE_INFO,
-    ///     p_next: ptr::null(),
-    ///     flags: vk::ImageCreateFlags::empty(),
-    ///     image_type: vk::ImageType::TYPE_2D,
-    ///     format: vk::Format::R8G8B8A8_SRGB,
-    ///     extent: vk::Extent3D {
-    ///         width: 10,
-    ///         height: 10,
-    ///         depth: 1,
-    ///     },
-    ///     mip_levels: 1,
-    ///     array_layers: 1,
-    ///     samples: vk::SampleCountFlags::TYPE_1,
-    ///     tiling: vk::ImageTiling::LINEAR,
-    ///     usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
-    ///     sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///     queue_family_index_count: 1,
-    ///     p_queue_family_indices: &queue.get_family_index(),
-    ///     initial_layout: vk::ImageLayout::UNDEFINED,
-    ///     _marker: Default::default(),
-    /// }).unwrap();
-    /// deletion_stack.push_resource(&image);
-    /// deletion_stack.flush();
-    /// ```
-    pub fn new_empty(
-        device: crate::device::LogicalDevice,
-        image_ci: &vk::ImageCreateInfo,
-    ) -> Result<Self> {
-        let handle: vk::Image = unsafe { device.get_handle().create_image(image_ci, None)? };
-
-        #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkImage with no memory {:p}", handle);
-
-        Ok(Self {
-            handle,
-            format: image_ci.format,
-            extent: image_ci.extent,
-            device,
-            allocation: None,
-            name: None,
-        })
-    }
-
-    /// Binds data to already existing memory
-    pub fn new_with_memory(
-        device: crate::device::LogicalDevice,
-        image_ci: &vk::ImageCreateInfo,
-        allocation: MemoryAllocation<A>,
-    ) -> Result<Self> {
-        let mut handle = Self::new_empty(device, image_ci)?;
-        handle.allocation = Some(allocation);
-
-        #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkImage with existing memory {:p}", handle.handle);
-
-        Ok(handle)
-    }
-
-    /// Allocates a new image with new memory allocated for it
-    /// # Examples
-    /// ```
-    /// use std::ptr;
-    /// use ash::vk;
-    /// use dagal::util::tests::TestSettings;
-    /// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = dagal::allocators::VkMemAllocator::new(instance.get_instance(), device.get_handle(), physical_device.handle()).unwrap();
-    /// let mut allocator = dagal::allocators::SlotMapMemoryAllocator::new(allocator);
-    /// let image: dagal::resource::Image = dagal::resource::Image::new_with_new_memory(device.clone() ,&vk::ImageCreateInfo {
-    ///     s_type: vk::StructureType::IMAGE_CREATE_INFO,
-    ///     p_next: ptr::null(),
-    ///     flags: vk::ImageCreateFlags::empty(),
-    ///     image_type: vk::ImageType::TYPE_2D,
-    ///     format: vk::Format::R8G8B8A8_SRGB,
-    ///     extent: vk::Extent3D {
-    ///         width: 10,
-    ///         height: 10,
-    ///         depth: 1,
-    ///     },
-    ///     mip_levels: 1,
-    ///     array_layers: 1,
-    ///     samples: vk::SampleCountFlags::TYPE_1,
-    ///     tiling: vk::ImageTiling::LINEAR,
-    ///     usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
-    ///     sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///     queue_family_index_count: 1,
-    ///     p_queue_family_indices: &queue.get_family_index(),
-    ///     initial_layout: vk::ImageLayout::UNDEFINED,
-    ///     _marker: Default::default(),
-    /// }, &mut allocator, dagal::allocators::MemoryLocation::GpuOnly, "new_with_new_memory TEST").unwrap();
-    /// deletion_stack.push_resource(&image);
-    /// deletion_stack.flush();
-    /// ```
-    pub fn new_with_new_memory(
-        device: crate::device::LogicalDevice,
-        image_ci: &vk::ImageCreateInfo,
-        allocator: &mut SlotMapMemoryAllocator<A>,
-        memory_type: crate::allocators::MemoryLocation,
-        name: &str,
-    ) -> Result<Self> {
-        let mut handle = Self::new_empty(device.clone(), image_ci)?;
-
-        let memory_requirements = unsafe {
-            device
-                .get_handle()
-                .get_image_memory_requirements(handle.handle)
-        };
-        let allocation = allocator.allocate(name, &memory_requirements, memory_type)?;
-        unsafe {
-            device.get_handle().bind_image_memory(
-                handle.handle,
-                allocation.memory()?,
-                allocation.offset()?,
-            )?
-        }
-        handle.allocation = Some(allocation);
-
-        #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkImage with new memory {:p}", handle.handle);
-
-        Ok(handle)
-    }
-}
-*/
 
 impl<A: Allocator> Destructible for Image<A> {
 	fn destroy(&mut self) {
@@ -562,14 +422,16 @@ impl<A: Allocator> Destructible for Image<A> {
 			allocation.destroy();
 			drop(allocation);
 		}
-		unsafe {
-			self.device.get_handle().destroy_image(self.handle, None);
+		if self.image_managed {
+			unsafe {
+				self.device.get_handle().destroy_image(self.handle, None);
+			}
 		}
 	}
 }
 
 #[cfg(feature = "raii")]
-impl<A: crate::allocators::Allocator> Drop for Image<A> {
+impl<A: Allocator> Drop for Image<A> {
 	fn drop(&mut self) {
 		self.destroy();
 	}

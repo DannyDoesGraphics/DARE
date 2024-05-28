@@ -6,11 +6,10 @@ use tracing::trace;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Sampler {
 	handle: vk::Sampler,
 	device: crate::device::LogicalDevice,
-	name: Option<String>,
 }
 
 impl Destructible for Sampler {
@@ -23,6 +22,13 @@ impl Destructible for Sampler {
 	}
 }
 
+#[cfg(feature = "raii")]
+impl Drop for Sampler {
+	fn drop(&mut self) {
+		self.destroy();
+	}
+}
+
 pub enum SamplerCreateInfo<'a> {
 	/// Creates a sampler from an existing [`VkSamplerCreateInfo`](vk::SamplerCreateInfo).
 	///
@@ -32,10 +38,10 @@ pub enum SamplerCreateInfo<'a> {
 	/// use ash::vk;
 	/// use dagal::resource::traits::Resource;
 	/// use dagal::util::tests::TestSettings;
-	/// let (instance, physical_device, device, queue, mut deletion_stack) = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+	/// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
 	/// let sampler = dagal::resource::Sampler::new(
 	///     dagal::resource::SamplerCreateInfo::FromCreateInfo {
-	///         device: device.clone(),
+	///         device: test_vulkan.device.as_ref().unwrap().clone(),
 	/// 		create_info: vk::SamplerCreateInfo {
 	///             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
 	/// 			p_next: ptr::null(),
@@ -43,13 +49,12 @@ pub enum SamplerCreateInfo<'a> {
 	/// 		},
 	/// 		name: None,
 	/// }).unwrap();
-	/// deletion_stack.push_resource(&sampler);
-	/// deletion_stack.flush();
+	/// drop(sampler);
 	/// ```
 	FromCreateInfo {
 		device: crate::device::LogicalDevice,
 		create_info: vk::SamplerCreateInfo<'a>,
-		name: Option<String>,
+		name: Option<&'a str>,
 	}
 }
 
@@ -69,13 +74,8 @@ impl<'a> Resource<'a> for Sampler {
 				let mut handle = Self {
 					handle,
 					device,
-					name,
 				};
-				if let Some(debug_utils) = handle.device.clone().get_debug_utils() {
-					if let Some(name) = handle.name.clone() {
-						handle.set_name(debug_utils, name.as_str())?;
-					}
-				}
+				crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
 
 				Ok(handle)
 			}
@@ -99,11 +99,6 @@ impl Nameable for Sampler {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::SAMPLER;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
-		self.name = Some(name.to_string());
 		Ok(())
-	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
 	}
 }

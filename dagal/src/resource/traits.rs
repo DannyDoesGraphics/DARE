@@ -4,13 +4,11 @@ use std::ptr;
 use anyhow::Result;
 use ash::vk;
 
-use crate::traits::Destructible;
-
 /// Every resource in Vulkan is expected to have a lifetime + debuggable
-pub trait Resource<'a>: Destructible + Sized {
+pub trait Resource<'a>: Sized {
 	/// Necessary create info
 	type CreateInfo: 'a;
-	/// Type of underlyin where Self::CreateInfo<'a>: 'a;g VkObject the struct is representing
+	/// Type of underlying where Self::CreateInfo<'a>: 'a;g VkObject the struct is representing
 	type HandleType;
 
 	/// Attempt to create a new resource given the [`Self::CreateInfo`] struct
@@ -34,19 +32,16 @@ pub trait Nameable {
 
 	/// Set the name of the resource
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()>;
-
-	/// Get the name of the resource
-	fn get_name(&self) -> Option<&str>;
 }
 
 pub(crate) fn name_nameable<T: Nameable>(debug_utils: &ash::ext::debug_utils::Device, raw_handle: u64, name: &str) -> Result<()> {
 	name_resource(debug_utils, raw_handle, T::OBJECT_TYPE, name)
 }
 
-pub(crate) fn update_name<'a, T: Resource<'a> + Nameable>(resource: &mut T) -> Option<Result<()>> {
-	if let Some(debug_utils) = resource.get_device().clone().get_debug_utils() {
-		if let Some(name) = resource.get_name().map(|s| s.to_string()) {
-			return Some(resource.set_name(debug_utils, name.as_str()));
+pub(crate) fn update_name<'a, T: Resource<'a> + Nameable>(resource: &mut T, name: Option<&str>) -> Option<Result<()>> {
+	if let Some(name) = name {
+		if let Some(debug_utils) = resource.get_device().clone().get_debug_utils() {
+			return Some(resource.set_name(debug_utils, name));
 		}
 	}
 	None

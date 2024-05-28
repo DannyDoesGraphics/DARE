@@ -5,34 +5,34 @@ use tracing::trace;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DescriptorSetLayout {
 	handle: vk::DescriptorSetLayout,
 	device: crate::device::LogicalDevice,
-	name: Option<String>,
 }
 
-pub enum DescriptorSetLayoutCreateInfo {
+pub enum DescriptorSetLayoutCreateInfo<'a> {
 	/// Create a descriptor set layout from vk
 	FromVk {
 		handle: vk::DescriptorSetLayout,
 		device: crate::device::LogicalDevice,
-		name: Option<String>,
+		name: Option<&'a str>,
 	}
 }
 
 impl<'a> Resource<'a> for DescriptorSetLayout {
-	type CreateInfo = DescriptorSetLayoutCreateInfo;
+	type CreateInfo = DescriptorSetLayoutCreateInfo<'a>;
 	type HandleType = vk::DescriptorSetLayout;
 
 	fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self> where Self: Sized {
 		match create_info {
 			DescriptorSetLayoutCreateInfo::FromVk { handle, device, name } => {
-				Ok(Self {
+				let mut handle = Self {
 					handle,
 					device,
-					name
-				})
+				};
+				crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
+				Ok(handle)
 			}
 		}
 	}
@@ -55,12 +55,7 @@ impl Nameable for DescriptorSetLayout {
 	const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::DESCRIPTOR_SET_LAYOUT;
 	fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> anyhow::Result<()> {
 		crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
-		self.name = Some(name.to_string());
 		Ok(())
-	}
-
-	fn get_name(&self) -> Option<&str> {
-		self.name.as_deref()
 	}
 }
 

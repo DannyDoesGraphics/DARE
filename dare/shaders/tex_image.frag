@@ -18,7 +18,7 @@ layout(set = 0, binding = 3) readonly buffer BDA {
 
 void main()
 {
-    vec4 col = texture(sampler2D(sampled_images[7], samplers[0]), inUV);
+    vec4 col = texture(sampler2D(sampled_images[3], samplers[0]), inUV);
     outFragColor = vec4(col);
     //outFragColor = vec4(1.0);
 }

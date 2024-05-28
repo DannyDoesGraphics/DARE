@@ -5,42 +5,38 @@ use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::resource::traits::Resource;
-use dagal::traits::Destructible;
 use dagal::winit;
 use dagal::wsi::WindowDimensions;
 
 const FRAME_OVERLAP: usize = 2;
 
 #[derive(Default)]
-struct App<'a> {
+struct App {
 	window: Option<winit::window::Window>,
-	render_context: Option<RenderContext<'a>>,
+	render_context: Option<RenderContext>,
 }
 
-struct RenderContext<'a> {
-	instance: dagal::core::Instance,
-	physical_device: dagal::device::PhysicalDevice,
-	device: dagal::device::LogicalDevice,
-	deletion_stack: dagal::util::DeletionStack<'a>,
-	wsi_deletion_stack: dagal::util::DeletionStack<'a>,
-	graphics_queue: dagal::device::Queue,
-	allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-
-	surface: Option<dagal::wsi::Surface>,
-	swapchain: Option<dagal::wsi::Swapchain>,
-	swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>>,
-	swapchain_image_views: Vec<dagal::resource::ImageView>,
-	resize_requested: bool, // Whether frame needs to be resized
-
-	frame_number: usize,
-	frames: Vec<Frame<'a>>,
-
-	draw_image: Option<dagal::resource::Image<GPUAllocatorImpl>>,
+struct RenderContext {
 	draw_image_view: Option<dagal::resource::ImageView>,
+	draw_image: Option<dagal::resource::Image<GPUAllocatorImpl>>,
+
+	frames: Vec<Frame>,
+	frame_number: usize,
+
+	resize_requested: bool, // Whether frame needs to be resized
+	swapchain_image_views: Vec<dagal::resource::ImageView>,
+	swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>>,
+	swapchain: Option<dagal::wsi::Swapchain>,
+	surface: Option<dagal::wsi::Surface>,
+
+	allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+	graphics_queue: dagal::device::Queue,
+	device: dagal::device::LogicalDevice,
+	physical_device: dagal::device::PhysicalDevice,
+	instance: dagal::core::Instance,
 }
 
-struct Frame<'a> {
-	deletion_stack: dagal::util::DeletionStack<'a>,
+struct Frame {
 	command_pool: dagal::command::CommandPool,
 	command_buffer: dagal::command::CommandBuffer,
 
@@ -49,9 +45,8 @@ struct Frame<'a> {
 	render_fence: dagal::sync::Fence,
 }
 
-impl<'a> RenderContext<'a> {
+impl RenderContext {
 	fn new(rdh: dagal::raw_window_handle::RawDisplayHandle) -> Self {
-		let mut deletion_stack = dagal::util::DeletionStack::new();
 		let mut instance = dagal::bootstrap::InstanceBuilder::new()
 			.set_vulkan_version((1, 3, 0))
 			.set_validation(true);
@@ -62,13 +57,9 @@ impl<'a> RenderContext<'a> {
 			instance = instance.add_extension(*layer);
 		}
 		let instance = instance.build().unwrap();
-		deletion_stack.push_resource(&instance);
 		let mut debug_messenger =
 			dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
 				.unwrap();
-		deletion_stack.push(move || {
-			debug_messenger.destroy();
-		});
 
 		let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true);
 		let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
@@ -90,7 +81,6 @@ impl<'a> RenderContext<'a> {
 			})
 			.build(&instance)
 			.unwrap();
-		deletion_stack.push_resource(&device);
 
 		let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
 			instance: instance.get_instance().clone(),
@@ -107,14 +97,13 @@ impl<'a> RenderContext<'a> {
 			buffer_device_address: true,
 			allocation_sizes: Default::default(),
 		}).unwrap();
-		deletion_stack.push_resource(&allocator);
 		let allocator = dagal::allocators::ArcAllocator::new(allocator);
 
 		assert!(!graphics_queue.borrow().get_queues().is_empty());
 		let graphics_queue = graphics_queue.borrow().get_queues()[0];
 		let physical_device: dagal::device::PhysicalDevice = physical_device.into();
 
-		let frames: Vec<Frame<'a>> = (0..FRAME_OVERLAP)
+		let frames: Vec<Frame> = (0..FRAME_OVERLAP)
 			.map(|_| {
 				let command_pool = dagal::command::CommandPool::new(
 					device.clone(),
@@ -122,7 +111,6 @@ impl<'a> RenderContext<'a> {
 					vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
 				)
 					.unwrap();
-				deletion_stack.push_resource(&command_pool);
 
 				let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
 				let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
@@ -130,20 +118,16 @@ impl<'a> RenderContext<'a> {
 					vk::SemaphoreCreateFlags::empty(),
 				)
 					.unwrap();
-				deletion_stack.push_resource(&swapchain_semaphore);
 				let render_semaphore = dagal::sync::BinarySemaphore::new(
 					device.clone(),
 					vk::SemaphoreCreateFlags::empty(),
 				)
 					.unwrap();
-				deletion_stack.push_resource(&render_semaphore);
 				let render_fence =
 					dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
 						.unwrap();
-				deletion_stack.push_resource(&render_fence);
 
 				Frame {
-					deletion_stack: dagal::util::DeletionStack::new(),
 					command_pool,
 					command_buffer,
 					swapchain_semaphore,
@@ -158,8 +142,6 @@ impl<'a> RenderContext<'a> {
 			physical_device,
 			device,
 			graphics_queue,
-			deletion_stack,
-			wsi_deletion_stack: dagal::util::DeletionStack::new(),
 			allocator,
 
 			surface: None,
@@ -187,7 +169,6 @@ impl<'a> RenderContext<'a> {
 		surface
 			.query_details(self.physical_device.handle())
 			.unwrap();
-		self.wsi_deletion_stack.push_resource(&surface);
 		self.surface = Some(surface);
 	}
 
@@ -206,7 +187,6 @@ impl<'a> RenderContext<'a> {
 			.image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
 			.build(self.instance.get_instance(), self.device.clone())
 			.unwrap();
-		self.wsi_deletion_stack.push_resource(&swapchain);
 		self.swapchain = Some(swapchain);
 		// get images + image views
 		self.swapchain_images = self.swapchain.as_ref().unwrap().get_images().unwrap();
@@ -223,8 +203,6 @@ impl<'a> RenderContext<'a> {
 				    .as_slice(),
 			)
 			.unwrap();
-		self.wsi_deletion_stack
-		    .push_resources(self.swapchain_image_views.as_slice());
 	}
 
 	fn create_draw_image(&mut self) {
@@ -257,7 +235,7 @@ impl<'a> RenderContext<'a> {
 			},
 			allocator: &mut self.allocator,
 			location: dagal::allocators::MemoryLocation::GpuOnly,
-			name: Some(String::from("Draw Image")),
+			name: Some("Draw Image"),
 		})
 			.unwrap();
 		let image_view =
@@ -283,7 +261,6 @@ impl<'a> RenderContext<'a> {
 			})
 				.unwrap();
 		self.draw_image = Some(image);
-		self.wsi_deletion_stack.push_resource(&image_view);
 		self.draw_image_view = Some(image_view);
 	}
 
@@ -303,10 +280,6 @@ impl<'a> RenderContext<'a> {
 				    .wait_for_fences(fences.as_slice(), true, 1_000_000_000)
 				    .unwrap_unchecked();
 			}
-		}
-		self.wsi_deletion_stack.flush();
-		if let Some(mut draw_image) = self.draw_image.take() {
-			draw_image.destroy()
 		}
 		self.swapchain = None;
 		self.surface = None;
@@ -342,12 +315,6 @@ impl<'a> RenderContext<'a> {
 
 	// Deals with drawing
 	fn draw(&mut self) {
-		// clear out last frame
-		self.frames
-		    .get_mut(self.frame_number % FRAME_OVERLAP)
-		    .unwrap()
-		    .deletion_stack
-		    .flush();
 		let swapchain_frame = self
 			.frames
 			.get_mut(self.frame_number % FRAME_OVERLAP)
@@ -358,7 +325,6 @@ impl<'a> RenderContext<'a> {
 				.render_fence
 				.wait(1000000000)
 				.unwrap_unchecked();
-			swapchain_frame.deletion_stack.flush();
 			swapchain_frame.render_fence.reset().unwrap();
 		}
 		// check if we can even render
@@ -374,7 +340,7 @@ impl<'a> RenderContext<'a> {
 			.unwrap()
 			.next_image_index(
 				1000000000,
-				Some(swapchain_frame.swapchain_semaphore.clone()),
+				Some(&swapchain_frame.swapchain_semaphore),
 				None,
 			)
 			.unwrap();
@@ -478,20 +444,15 @@ impl<'a> RenderContext<'a> {
 	}
 }
 
-impl<'a> Drop for RenderContext<'a> {
+impl Drop for RenderContext {
 	fn drop(&mut self) {
 		unsafe {
 			self.device.get_handle().device_wait_idle().unwrap();
 		}
-		self.wsi_deletion_stack.flush();
-		if let Some(mut draw_image) = self.draw_image.take() {
-			draw_image.destroy();
-		}
-		self.deletion_stack.flush();
 	}
 }
 
-impl<'a> winit::application::ApplicationHandler for App<'a> {
+impl winit::application::ApplicationHandler for App {
 	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
 		self.window = Some(
 			event_loop
