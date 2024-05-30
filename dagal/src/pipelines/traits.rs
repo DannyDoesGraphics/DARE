@@ -10,6 +10,8 @@ pub trait Pipeline: Destructible + Debug {
 	/// Get a copy to the underlying handle of the struct
 	fn handle(&self) -> vk::Pipeline;
 
+	fn get_device(&self) -> &crate::device::LogicalDevice;
+
 	/// Get a copy of the pipeline layout
 	fn layout(&self) -> vk::PipelineLayout;
 }

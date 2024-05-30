@@ -38,6 +38,10 @@ impl super::Pipeline for ComputePipeline {
 		self.handle
 	}
 
+	fn get_device(&self) -> &crate::device::LogicalDevice {
+		&self.device
+	}
+
 	fn layout(&self) -> vk::PipelineLayout {
 		self.layout
 	}

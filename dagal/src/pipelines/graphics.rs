@@ -46,6 +46,10 @@ impl super::Pipeline for GraphicsPipeline {
 		self.handle
 	}
 
+	fn get_device(&self) -> &crate::device::LogicalDevice {
+		&self.device
+	}
+
 	fn layout(&self) -> vk::PipelineLayout {
 		self.layout
 	}
