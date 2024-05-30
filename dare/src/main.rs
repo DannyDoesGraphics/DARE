@@ -23,16 +23,16 @@ use dagal::wsi::WindowDimensions;
 
 use crate::primitives::{GeometrySurface, GPUMeshBuffer, MeshAsset, Vertex};
 
-mod primitives;
 mod assets;
+mod primitives;
 mod ray_tracing;
 
 const FRAME_OVERLAP: usize = 2;
 
 #[derive(Default)]
 struct App {
-	window: Option<winit::window::Window>,
-	render_context: Option<RenderContext>,
+	pub window: Option<winit::window::Window>,
+	pub render_context: Option<RenderContext>,
 }
 
 struct RenderContext {
@@ -103,7 +103,9 @@ struct AllocatedImage<A: Allocator = GPUAllocatorImpl> {
 impl<A: Allocator> Destructible for AllocatedImage<A> {
 	fn destroy(&mut self) {
 		self.gpu_rt.free_image(self.image.clone()).unwrap();
-		self.gpu_rt.free_image_view(self.image_view.clone()).unwrap();
+		self.gpu_rt
+		    .free_image_view(self.image_view.clone())
+		    .unwrap();
 	}
 }
 
@@ -133,7 +135,8 @@ impl RenderContext {
 		if VALIDATION {
 			debug_messenger = Some(
 				dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())
-					.unwrap());
+					.unwrap(),
+			);
 		}
 
 		let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true);
@@ -184,7 +187,8 @@ impl RenderContext {
 			},
 			buffer_device_address: true,
 			allocation_sizes: Default::default(),
-		}).unwrap();
+		})
+			.unwrap();
 		let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
 		assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -230,18 +234,17 @@ impl RenderContext {
 
 		let global_descriptor_pool = dagal::descriptor::DescriptorPool::new(
 			dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizeRatios {
-				ratios: vec![
-					dagal::descriptor::PoolSizeRatio::default()
-						.descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-						.ratio(1.0)
-				],
+				ratios: vec![dagal::descriptor::PoolSizeRatio::default()
+					.descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+					.ratio(1.0)],
 				count: 10,
 				flags: vk::DescriptorPoolCreateFlags::empty(),
 				max_sets: 1,
 				device: device.clone(),
 				name: None,
-			}
-		).unwrap();
+			},
+		)
+			.unwrap();
 
 		let compiler = dagal::shader::ShaderCCompiler::new();
 		let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -347,34 +350,59 @@ impl RenderContext {
 		};
 		// create default images
 		// create default texture data
-		app.sampler = Some(app.gpu_resource_table.new_sampler(ResourceInput::ResourceCI(
-			resource::SamplerCreateInfo::FromCreateInfo {
-				device: app.device.clone(),
-				create_info: vk::SamplerCreateInfo::default()
-					.mag_filter(vk::Filter::NEAREST)
-					.min_filter(vk::Filter::NEAREST),
-				name: None,
-			}
-		)).unwrap());
+		app.sampler = Some(
+			app.gpu_resource_table
+			   .new_sampler(ResourceInput::ResourceCI(
+				   resource::SamplerCreateInfo::FromCreateInfo {
+					   device: app.device.clone(),
+					   create_info: vk::SamplerCreateInfo::default()
+						   .mag_filter(vk::Filter::NEAREST)
+						   .min_filter(vk::Filter::NEAREST),
+					   name: None,
+				   },
+			   ))
+			   .unwrap(),
+		);
 
 		let white = [255u8, 255u8, 255u8, 255u8];
-		app.white_image = Some(app.create_image_with_data(white.as_slice(), vk::Extent3D {
-			width: 1,
-			height: 1,
-			depth: 1,
-		}, vk::Format::R8G8B8A8_UNORM, vk::ImageUsageFlags::SAMPLED, Some("White"), false));
+		app.white_image = Some(app.create_image_with_data(
+			white.as_slice(),
+			vk::Extent3D {
+				width: 1,
+				height: 1,
+				depth: 1,
+			},
+			vk::Format::R8G8B8A8_UNORM,
+			vk::ImageUsageFlags::SAMPLED,
+			Some("White"),
+			false,
+		));
 		let grey = [168u8, 168u8, 168u8, 255u8];
-		app.grey_image = Some(app.create_image_with_data(grey.as_slice(), vk::Extent3D {
-			width: 1,
-			height: 1,
-			depth: 1,
-		}, vk::Format::R8G8B8A8_UNORM, vk::ImageUsageFlags::SAMPLED, Some("Gray"), false));
+		app.grey_image = Some(app.create_image_with_data(
+			grey.as_slice(),
+			vk::Extent3D {
+				width: 1,
+				height: 1,
+				depth: 1,
+			},
+			vk::Format::R8G8B8A8_UNORM,
+			vk::ImageUsageFlags::SAMPLED,
+			Some("Gray"),
+			false,
+		));
 		let black = [0u8, 0u8, 0u8, 255u8];
-		app.black_image = Some(app.create_image_with_data(black.as_slice(), vk::Extent3D {
-			width: 1,
-			height: 1,
-			depth: 1,
-		}, vk::Format::R8G8B8A8_UNORM, vk::ImageUsageFlags::SAMPLED, Some("Black"), false));
+		app.black_image = Some(app.create_image_with_data(
+			black.as_slice(),
+			vk::Extent3D {
+				width: 1,
+				height: 1,
+				depth: 1,
+			},
+			vk::Format::R8G8B8A8_UNORM,
+			vk::ImageUsageFlags::SAMPLED,
+			Some("Black"),
+			false,
+		));
 		let mut pixels = [64u8; 16 * 16 * 4];
 		let magenta = [255u8, 0u8, 255u8, 255u8];
 		for x in 0..16 {
@@ -387,11 +415,18 @@ impl RenderContext {
 				}
 			}
 		}
-		app.error_checkerboard_image = Some(app.create_image_with_data(pixels.as_slice(), vk::Extent3D {
-			width: 16,
-			height: 16,
-			depth: 1,
-		}, vk::Format::R8G8B8A8_UNORM, vk::ImageUsageFlags::SAMPLED, Some("Magenta"), false));
+		app.error_checkerboard_image = Some(app.create_image_with_data(
+			pixels.as_slice(),
+			vk::Extent3D {
+				width: 16,
+				height: 16,
+				depth: 1,
+			},
+			vk::Format::R8G8B8A8_UNORM,
+			vk::ImageUsageFlags::SAMPLED,
+			Some("Magenta"),
+			false,
+		));
 		let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/basicmesh.glb"));
 		app.test_meshes = meshes;
 		app
@@ -478,34 +513,36 @@ impl RenderContext {
 		})
 			.unwrap();
 		//self.wsi_deletion_stack.push_resource(&image);
-		let depth_image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
-			device: self.device.clone(),
-			image_ci: vk::ImageCreateInfo {
-				s_type: vk::StructureType::IMAGE_CREATE_INFO,
-				p_next: ptr::null(),
-				flags: vk::ImageCreateFlags::empty(),
-				image_type: vk::ImageType::TYPE_2D,
-				format: vk::Format::D32_SFLOAT,
-				extent: vk::Extent3D {
-					width: self.swapchain.as_ref().unwrap().extent().width,
-					height: self.swapchain.as_ref().unwrap().extent().height,
-					depth: 1,
+		let depth_image =
+			dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+				device: self.device.clone(),
+				image_ci: vk::ImageCreateInfo {
+					s_type: vk::StructureType::IMAGE_CREATE_INFO,
+					p_next: ptr::null(),
+					flags: vk::ImageCreateFlags::empty(),
+					image_type: vk::ImageType::TYPE_2D,
+					format: vk::Format::D32_SFLOAT,
+					extent: vk::Extent3D {
+						width: self.swapchain.as_ref().unwrap().extent().width,
+						height: self.swapchain.as_ref().unwrap().extent().height,
+						depth: 1,
+					},
+					mip_levels: 1,
+					array_layers: 1,
+					samples: vk::SampleCountFlags::TYPE_1,
+					tiling: vk::ImageTiling::OPTIMAL,
+					usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+					sharing_mode: vk::SharingMode::EXCLUSIVE,
+					queue_family_index_count: 1,
+					p_queue_family_indices: &self.graphics_queue.get_family_index(),
+					initial_layout: vk::ImageLayout::UNDEFINED,
+					_marker: Default::default(),
 				},
-				mip_levels: 1,
-				array_layers: 1,
-				samples: vk::SampleCountFlags::TYPE_1,
-				tiling: vk::ImageTiling::OPTIMAL,
-				usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-				sharing_mode: vk::SharingMode::EXCLUSIVE,
-				queue_family_index_count: 1,
-				p_queue_family_indices: &self.graphics_queue.get_family_index(),
-				initial_layout: vk::ImageLayout::UNDEFINED,
-				_marker: Default::default(),
-			},
-			allocator: &mut self.allocator,
-			location: dagal::allocators::MemoryLocation::GpuOnly,
-			name: Some("GBuffer Depth"),
-		}).unwrap();
+				allocator: &mut self.allocator,
+				location: dagal::allocators::MemoryLocation::GpuOnly,
+				name: Some("GBuffer Depth"),
+			})
+				.unwrap();
 		//self.wsi_deletion_stack.push_resource(&depth_image);
 		let image_view =
 			resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
@@ -517,7 +554,9 @@ impl RenderContext {
 					view_type: vk::ImageViewType::TYPE_2D,
 					format: image.format(),
 					components: Default::default(),
-					subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR),
+					subresource_range: dagal::resource::Image::image_subresource_range(
+						vk::ImageAspectFlags::COLOR,
+					),
 					_marker: Default::default(),
 				},
 				device: self.device.clone(),
@@ -533,7 +572,9 @@ impl RenderContext {
 					view_type: vk::ImageViewType::TYPE_2D,
 					format: depth_image.format(),
 					components: Default::default(),
-					subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::DEPTH),
+					subresource_range: dagal::resource::Image::image_subresource_range(
+						vk::ImageAspectFlags::DEPTH,
+					),
 					_marker: Default::default(),
 				},
 				device: self.device.clone(),
@@ -554,8 +595,9 @@ impl RenderContext {
 					pool: &self.global_descriptor_pool,
 					layout: &self.draw_image_descriptor_set_layout,
 					name: None,
-				}
-			).unwrap()
+				},
+			)
+				.unwrap(),
 		);
 		let img_info = vk::DescriptorImageInfo {
 			sampler: Default::default(),
@@ -567,9 +609,7 @@ impl RenderContext {
 				.slot(0)
 				.binding(0)
 				.ty(dagal::descriptor::DescriptorType::StorageImage)
-				.push_descriptor(
-					dagal::descriptor::DescriptorInfo::Image(img_info)
-				)
+				.push_descriptor(dagal::descriptor::DescriptorInfo::Image(img_info)),
 		]);
 	}
 
@@ -690,7 +730,10 @@ impl RenderContext {
 		let dynamic_rendering_context = cmd.dynamic_rendering();
 		let dynamic_rendering_context = dynamic_rendering_context
 			.push_image_as_color_attachment(vk::ImageLayout::GENERAL, draw_image_view, None)
-			.depth_attachment_info(depth_image_view.handle(), vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
+			.depth_attachment_info(
+				depth_image_view.handle(),
+				vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+			)
 			.begin_rendering(vk::Extent2D {
 				width: draw_image.extent().width,
 				height: draw_image.extent().height,
@@ -731,7 +774,12 @@ impl RenderContext {
 				.get_handle()
 				.cmd_set_scissor(cmd.handle(), 0, &[scissor]);
 			let view = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -2.5));
-			let mut projection = glam::Mat4::perspective_rh(70_f32.to_radians(), draw_image.extent().width as f32 / draw_image.extent().height as f32, 10000.0, 0.1);
+			let mut projection = glam::Mat4::perspective_rh(
+				70_f32.to_radians(),
+				draw_image.extent().width as f32 / draw_image.extent().height as f32,
+				10000.0,
+				0.1,
+			);
 			projection.y_axis.y *= -1.0;
 			let world_matrix = projection * view;
 			let mesh_render = meshes.get(2).unwrap();
@@ -757,9 +805,14 @@ impl RenderContext {
 				0,
 				vk::IndexType::UINT32,
 			);
-			device
-				.get_handle()
-				.cmd_draw_indexed(cmd.handle(), mesh_render.surfaces[0].count, 1, mesh_render.surfaces[0].start_index, 0, 0);
+			device.get_handle().cmd_draw_indexed(
+				cmd.handle(),
+				mesh_render.surfaces[0].count,
+				1,
+				mesh_render.surfaces[0].start_index,
+				0,
+				0,
+			);
 			dynamic_rendering_context.end_rendering();
 		}
 	}
@@ -767,7 +820,8 @@ impl RenderContext {
 	fn load_gltf_meshes(&mut self, path: path::PathBuf) -> Vec<Arc<MeshAsset>> {
 		let (document, buffers, images) = gltf::import(path).unwrap();
 		let mut meshes: Vec<Arc<MeshAsset>> = Vec::new();
-		let mut immediate_submit = ImmediateSubmit::new(self.device.clone(), self.graphics_queue).unwrap();
+		let mut immediate_submit =
+			ImmediateSubmit::new(self.device.clone(), self.graphics_queue).unwrap();
 
 		let mut indices: Vec<u32> = Vec::new();
 		let mut vertices: Vec<Vertex> = Vec::new();
@@ -810,7 +864,10 @@ impl RenderContext {
 				// load normals
 				if let Some(normals) = reader.read_normals() {
 					for (index, normal) in normals.enumerate() {
-						vertices.get_mut(initial_vtx as usize + index).unwrap().normal = glam::Vec3::from(normal);
+						vertices
+							.get_mut(initial_vtx as usize + index)
+							.unwrap()
+							.normal = glam::Vec3::from(normal);
 					}
 				}
 
@@ -825,14 +882,14 @@ impl RenderContext {
 				// load colors
 				if let Some(colors) = reader.read_colors(0) {
 					for (index, color) in colors.into_rgba_f32().enumerate() {
-						vertices.get_mut(initial_vtx as usize + index).unwrap().color = glam::Vec4::from(color);
+						vertices
+							.get_mut(initial_vtx as usize + index)
+							.unwrap()
+							.color = glam::Vec4::from(color);
 					}
 				}
 
-				surfaces.push(GeometrySurface {
-					start_index,
-					count,
-				})
+				surfaces.push(GeometrySurface { start_index, count })
 			}
 
 			// display normals instead
@@ -841,7 +898,14 @@ impl RenderContext {
 					vertex.color = glam::Vec4::from((vertex.normal, 1.0));
 				}
 			}
-			let mesh_buffers = GPUMeshBuffer::new(&mut self.allocator, &mut immediate_submit, &mut self.gpu_resource_table, indices.as_slice(), vertices.as_slice(), Some(mesh.name().unwrap().to_string()));
+			let mesh_buffers = GPUMeshBuffer::new(
+				&mut self.allocator,
+				&mut immediate_submit,
+				&mut self.gpu_resource_table,
+				indices.as_slice(),
+				vertices.as_slice(),
+				Some(mesh.name().unwrap().to_string()),
+			);
 			meshes.push(Arc::new(MeshAsset {
 				name: mesh.name().unwrap().to_string(),
 				surfaces,
@@ -851,38 +915,44 @@ impl RenderContext {
 		meshes
 	}
 
-	fn create_image(&mut self, size: vk::Extent3D, format: vk::Format, usage: vk::ImageUsageFlags, name: Option<&str>, mipmappings: bool) -> AllocatedImage {
+	fn create_image(
+		&mut self,
+		size: vk::Extent3D,
+		format: vk::Format,
+		usage: vk::ImageUsageFlags,
+		name: Option<&str>,
+		mipmappings: bool,
+	) -> AllocatedImage {
 		let mip_levels = if mipmappings {
 			size.width.max(size.height).ilog2() + 1
 		} else {
 			1
 		};
-		let image = resource::Image::new(
-			resource::ImageCreateInfo::NewAllocated {
-				device: self.device.clone(),
-				allocator: &mut self.allocator,
-				location: dagal::allocators::MemoryLocation::GpuOnly,
-				image_ci: vk::ImageCreateInfo {
-					s_type: vk::StructureType::IMAGE_CREATE_INFO,
-					p_next: ptr::null(),
-					flags: vk::ImageCreateFlags::empty(),
-					image_type: vk::ImageType::TYPE_2D,
-					format,
-					extent: size,
-					mip_levels,
-					array_layers: 1,
-					samples: vk::SampleCountFlags::TYPE_1,
-					tiling: vk::ImageTiling::LINEAR,
-					usage,
-					sharing_mode: vk::SharingMode::EXCLUSIVE,
-					queue_family_index_count: 1,
-					p_queue_family_indices: &self.graphics_queue.get_family_index(),
-					initial_layout: vk::ImageLayout::UNDEFINED,
-					_marker: Default::default(),
-				},
-				name,
-			}
-		).unwrap();
+		let image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
+			device: self.device.clone(),
+			allocator: &mut self.allocator,
+			location: dagal::allocators::MemoryLocation::GpuOnly,
+			image_ci: vk::ImageCreateInfo {
+				s_type: vk::StructureType::IMAGE_CREATE_INFO,
+				p_next: ptr::null(),
+				flags: vk::ImageCreateFlags::empty(),
+				image_type: vk::ImageType::TYPE_2D,
+				format,
+				extent: size,
+				mip_levels,
+				array_layers: 1,
+				samples: vk::SampleCountFlags::TYPE_1,
+				tiling: vk::ImageTiling::LINEAR,
+				usage,
+				sharing_mode: vk::SharingMode::EXCLUSIVE,
+				queue_family_index_count: 1,
+				p_queue_family_indices: &self.graphics_queue.get_family_index(),
+				initial_layout: vk::ImageLayout::UNDEFINED,
+				_marker: Default::default(),
+			},
+			name,
+		})
+			.unwrap();
 		let aspect_flag = if format == vk::Format::D32_SFLOAT {
 			vk::ImageAspectFlags::DEPTH
 		} else {
@@ -890,23 +960,29 @@ impl RenderContext {
 		};
 		let mut subresource_range = resource::Image::image_subresource_range(aspect_flag);
 		subresource_range.level_count = mip_levels;
-		let image_view = resource::ImageView::new(
-			resource::ImageViewCreateInfo::FromCreateInfo {
-				device: self.device.clone(),
-				create_info: vk::ImageViewCreateInfo {
-					s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-					p_next: ptr::null(),
-					flags: vk::ImageViewCreateFlags::empty(),
-					image: image.handle(),
-					view_type: vk::ImageViewType::TYPE_2D,
-					format,
-					components: Default::default(),
-					subresource_range,
-					_marker: Default::default(),
-				},
-			}
-		).unwrap();
-		let (image, image_view) = self.gpu_resource_table.new_image(ResourceInput::Resource(image), ResourceInput::Resource(image_view), vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL).unwrap();
+		let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
+			device: self.device.clone(),
+			create_info: vk::ImageViewCreateInfo {
+				s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+				p_next: ptr::null(),
+				flags: vk::ImageViewCreateFlags::empty(),
+				image: image.handle(),
+				view_type: vk::ImageViewType::TYPE_2D,
+				format,
+				components: Default::default(),
+				subresource_range,
+				_marker: Default::default(),
+			},
+		})
+			.unwrap();
+		let (image, image_view) = self
+			.gpu_resource_table
+			.new_image(
+				ResourceInput::Resource(image),
+				ResourceInput::Resource(image_view),
+				vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+			)
+			.unwrap();
 		AllocatedImage {
 			image,
 			image_view,
@@ -914,43 +990,70 @@ impl RenderContext {
 		}
 	}
 
-	fn create_image_with_data<T: Sized>(&mut self, data: &[T], size: vk::Extent3D, format: vk::Format, usage: vk::ImageUsageFlags, name: Option<&str>, mipmappings: bool) -> AllocatedImage {
+	fn create_image_with_data<T: Sized>(
+		&mut self,
+		data: &[T],
+		size: vk::Extent3D,
+		format: vk::Format,
+		usage: vk::ImageUsageFlags,
+		name: Option<&str>,
+		mipmappings: bool,
+	) -> AllocatedImage {
 		let data_size = size.width as u64 * size.height as u64 * size.depth as u64 * 4;
-		let mut staging_buffer = resource::Buffer::new(
-			resource::BufferCreateInfo::NewEmptyBuffer {
+		let mut staging_buffer =
+			resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
 				device: self.device.clone(),
 				allocator: &mut self.allocator,
 				size: data_size,
 				memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
 				usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-			}
-		).unwrap();
+			})
+				.unwrap();
 		staging_buffer.write(0, data).unwrap();
 		// min expected flags
 		let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
 		let allocated_image = self.create_image(size, format, usage, name, mipmappings);
-		self.gpu_resource_table.with_image(&allocated_image.image, |image| {
-			self.immediate_submit.submit(|context: ImmediateSubmitContext| {
-				image.transition(context.cmd, context.queue, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL);
-				let copy_region = vk::BufferImageCopy {
-					buffer_offset: 0,
-					buffer_row_length: 0,
-					buffer_image_height: 0,
-					image_subresource: vk::ImageSubresourceLayers {
-						aspect_mask: vk::ImageAspectFlags::COLOR,
-						mip_level: 0,
-						base_array_layer: 0,
-						layer_count: 1,
-					},
-					image_offset: Default::default(),
-					image_extent: image.extent(),
-				};
-				unsafe {
-					context.device.get_handle().cmd_copy_buffer_to_image(context.cmd.handle(), staging_buffer.handle(), image.handle(), vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[copy_region]);
-				}
-				image.transition(context.cmd, context.queue, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-			})
-		}).unwrap();
+		self.gpu_resource_table
+		    .with_image(&allocated_image.image, |image| {
+			    self.immediate_submit
+			        .submit(|context: ImmediateSubmitContext| {
+				        image.transition(
+					        context.cmd,
+					        context.queue,
+					        vk::ImageLayout::UNDEFINED,
+					        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+				        );
+				        let copy_region = vk::BufferImageCopy {
+					        buffer_offset: 0,
+					        buffer_row_length: 0,
+					        buffer_image_height: 0,
+					        image_subresource: vk::ImageSubresourceLayers {
+						        aspect_mask: vk::ImageAspectFlags::COLOR,
+						        mip_level: 0,
+						        base_array_layer: 0,
+						        layer_count: 1,
+					        },
+					        image_offset: Default::default(),
+					        image_extent: image.extent(),
+				        };
+				        unsafe {
+					        context.device.get_handle().cmd_copy_buffer_to_image(
+						        context.cmd.handle(),
+						        staging_buffer.handle(),
+						        image.handle(),
+						        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+						        &[copy_region],
+					        );
+				        }
+				        image.transition(
+					        context.cmd,
+					        context.queue,
+					        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+					        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+				        )
+			        })
+		    })
+		    .unwrap();
 		drop(staging_buffer);
 		allocated_image
 	}
@@ -971,21 +1074,21 @@ impl RenderContext {
 			swapchain_frame.render_fence.reset().unwrap();
 		}
 		// check if we can even render
-		if self.draw_image.is_none() || self.swapchain.is_none() || self.surface.is_none() || self.depth_image.is_none() {
+		if self.draw_image.is_none()
+			|| self.swapchain.is_none()
+			|| self.surface.is_none()
+			|| self.depth_image.is_none()
+		{
 			return;
 		}
 
 		let swapchain_frame = self.frames.get(self.frame_number % FRAME_OVERLAP).unwrap();
 		// get swapchain image
-		let swapchain_image_index = self
-			.swapchain
-			.as_ref()
-			.unwrap()
-			.next_image_index(
-				1000000000,
-				Some(&swapchain_frame.swapchain_semaphore),
-				None,
-			);
+		let swapchain_image_index = self.swapchain.as_ref().unwrap().next_image_index(
+			1000000000,
+			Some(&swapchain_frame.swapchain_semaphore),
+			None,
+		);
 		if swapchain_image_index.is_err() {
 			return;
 		}
@@ -1188,7 +1291,10 @@ impl winit::application::ApplicationHandler for App {
 			winit::event::WindowEvent::RedrawRequested => {
 				if let Some(render_context) = self.render_context.as_mut() {
 					// do not draw if window size is impossibly small
-					if window.width() != 0 && window.height() != 0 && !render_context.resize_requested {
+					if window.width() != 0
+						&& window.height() != 0
+						&& !render_context.resize_requested
+					{
 						render_context.draw();
 					}
 				}

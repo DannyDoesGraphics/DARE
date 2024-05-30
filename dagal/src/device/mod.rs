@@ -5,7 +5,7 @@ pub mod queue;
 
 pub use debug_utils::DebugMessenger;
 pub use logical_device::LogicalDevice;
-pub use logical_device::WeakLogicalDevice;
 pub use logical_device::LogicalDeviceCreateInfo;
+pub use logical_device::WeakLogicalDevice;
 pub use physical_device::PhysicalDevice;
 pub use queue::Queue;

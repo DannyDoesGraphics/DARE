@@ -22,34 +22,34 @@ pub mod gpu_allocator_impl;
 #[cfg(feature = "vk-mem-rs")]
 pub mod vk_mem_impl;
 
-pub mod memory_type;
 pub mod arc_allocator;
+pub mod memory_type;
 
 /// An interface to universally interact with all allocators with
 pub trait Allocator: Clone + Send + Sync {
-	type Allocation: Allocation;
+    type Allocation: Allocation;
 
-	/// Create a new allocation
-	fn allocate(
-		&mut self,
-		name: &str,
-		requirements: &vk::MemoryRequirements,
-		ty: MemoryLocation,
-	) -> Result<Self::Allocation>;
+    /// Create a new allocation
+    fn allocate(
+        &mut self,
+        name: &str,
+        requirements: &vk::MemoryRequirements,
+        ty: MemoryLocation,
+    ) -> Result<Self::Allocation>;
 
-	/// Free an allocation
-	fn free(&mut self, allocation: Self::Allocation) -> Result<()>;
+    /// Free an allocation
+    fn free(&mut self, allocation: Self::Allocation) -> Result<()>;
 }
 
 pub trait Allocation: Default + Send + Sync + Debug {
-	/// Get the underlying [`vk::DeviceMemory`]
-	fn memory(&self) -> vk::DeviceMemory;
+    /// Get the underlying [`vk::DeviceMemory`]
+    fn memory(&self) -> vk::DeviceMemory;
 
-	/// Get the offset of the memory
-	fn offset(&self) -> vk::DeviceSize;
+    /// Get the offset of the memory
+    fn offset(&self) -> vk::DeviceSize;
 
-	/// Get the raw ptr that underlies the allocation
-	fn mapped_ptr(&self) -> Option<NonNull<c_void>>;
-	/// Get name of the allocation
-	fn name(&self) -> &str;
+    /// Get the raw ptr that underlies the allocation
+    fn mapped_ptr(&self) -> Option<NonNull<c_void>>;
+    /// Get name of the allocation
+    fn name(&self) -> &str;
 }

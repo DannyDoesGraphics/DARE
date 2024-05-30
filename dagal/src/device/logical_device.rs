@@ -1,11 +1,11 @@
-use std::collections::HashSet;
-use std::ffi::c_char;
 use crate::device::physical_device::PhysicalDevice;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
+use std::collections::HashSet;
+use std::ffi::c_char;
 use std::sync::{Arc, Weak};
 
 use tracing::trace;
@@ -21,10 +21,10 @@ struct LogicalDeviceInner {
     /// Enabled extensions
     enabled_extensions: HashSet<String>,
     /// Debug utils
-    #[derivative(PartialEq = "ignore", Debug="ignore")]
+    #[derivative(PartialEq = "ignore", Debug = "ignore")]
     debug_utils: Option<ash::ext::debug_utils::Device>,
     /// Acceleration structure
-    #[derivative(PartialEq = "ignore", Debug="ignore")]
+    #[derivative(PartialEq = "ignore", Debug = "ignore")]
     acceleration_structure: Option<ash::khr::acceleration_structure::Device>,
 }
 
@@ -92,23 +92,36 @@ pub struct LogicalDeviceCreateInfo<'a> {
 }
 
 impl LogicalDevice {
-    pub fn new(
-        device_ci: LogicalDeviceCreateInfo
-    ) -> Result<Self> {
-        let device =
-            unsafe { device_ci.instance.create_device(*device_ci.physical_device.get_handle(), &device_ci.device_ci, None)? };
+    pub fn new(device_ci: LogicalDeviceCreateInfo) -> Result<Self> {
+        let device = unsafe {
+            device_ci.instance.create_device(
+                *device_ci.physical_device.get_handle(),
+                &device_ci.device_ci,
+                None,
+            )?
+        };
 
         #[cfg(feature = "log-lifetimes")]
         trace!("Creating VkDevice {:p}", device.handle());
 
         let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
         if device_ci.debug_utils {
-            debug_utils = Some(ash::ext::debug_utils::Device::new(device_ci.instance, &device));
+            debug_utils = Some(ash::ext::debug_utils::Device::new(
+                device_ci.instance,
+                &device,
+            ));
         }
 
         let mut acceleration_structure: Option<ash::khr::acceleration_structure::Device> = None;
-        if device_ci.enabled_extensions.contains(&crate::util::wrap_c_str(ash::khr::acceleration_structure::NAME.as_ptr()).to_string_lossy().to_string()) {
-            acceleration_structure = Some(ash::khr::acceleration_structure::Device::new(device_ci.instance, &device));
+        if device_ci.enabled_extensions.contains(
+            &crate::util::wrap_c_str(ash::khr::acceleration_structure::NAME.as_ptr())
+                .to_string_lossy()
+                .to_string(),
+        ) {
+            acceleration_structure = Some(ash::khr::acceleration_structure::Device::new(
+                device_ci.instance,
+                &device,
+            ));
         }
 
         Ok(Self {
@@ -123,7 +136,9 @@ impl LogicalDevice {
     }
 
     pub fn has_extension(&self, ext: *const c_char) -> bool {
-        self.inner.enabled_extensions.contains(&crate::util::wrap_c_str(ext).to_string_lossy().to_string())
+        self.inner
+            .enabled_extensions
+            .contains(&crate::util::wrap_c_str(ext).to_string_lossy().to_string())
     }
 
     /// Get reference to the underlying [`ash::Device`]

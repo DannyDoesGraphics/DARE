@@ -18,14 +18,16 @@ pub struct ComputePipeline {
 impl Destructible for ComputePipeline {
 	fn destroy(&mut self) {
 		#[cfg(feature = "log-lifetimes")]
-		trace!("Destroying VkPipelineLayout {:p}", self.layout);
-		#[cfg(feature = "log-lifetimes")]
 		trace!("Destroying VkPipeline {:p}", self.handle);
 
 		unsafe {
-			self.device
-			    .get_handle()
-			    .destroy_pipeline_layout(self.layout, None);
+			if self.layout != vk::PipelineLayout::null() {
+				#[cfg(feature = "log-lifetimes")]
+				trace!("Destroying VkPipelineLayout {:p}", self.layout);
+				self.device
+				    .get_handle()
+				    .destroy_pipeline_layout(self.layout, None);
+			}
 			self.device.get_handle().destroy_pipeline(self.handle, None);
 		}
 	}

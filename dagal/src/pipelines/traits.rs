@@ -51,7 +51,7 @@ pub trait PipelineBuilder: Default + Debug {
 		path: std::path::PathBuf,
 		stage: vk::ShaderStageFlags,
 	) -> Result<Self, (Self, anyhow::Error)> {
-		let content = fs::read_to_string(path);
+		let content = fs::read_to_string(path.clone());
 		if content.is_err() {
 			let err = content.unwrap_err();
 			return Err((self, anyhow::Error::from(err)));
@@ -60,7 +60,7 @@ pub trait PipelineBuilder: Default + Debug {
 		let content = compiler.compile(
 			content.as_str(),
 			crate::shader::ShaderKind::from(stage),
-			"asdasd",
+			path.to_str().unwrap(),
 		);
 		if content.is_err() {
 			let err = content.unwrap_err();

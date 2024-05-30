@@ -99,9 +99,7 @@ impl super::Allocator for VkMemAllocator {
         let allocator = allocator.as_ref().unwrap();
         let memory_property_flags = match ty {
             MemoryLocation::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            MemoryLocation::CpuToGpu => {
-                vk::MemoryPropertyFlags::HOST_VISIBLE
-            }
+            MemoryLocation::CpuToGpu => vk::MemoryPropertyFlags::HOST_VISIBLE,
             MemoryLocation::GpuToCpu => {
                 vk::MemoryPropertyFlags::DEVICE_LOCAL
                     | vk::MemoryPropertyFlags::HOST_COHERENT
@@ -113,25 +111,33 @@ impl super::Allocator for VkMemAllocator {
         let memory_type_bits = self
             .find_memory_type_index(requirements.memory_type_bits, memory_property_flags)
             .unwrap();
-        let allocation = unsafe {
-            allocator.allocate_memory(
-                requirements,
-                &vk_mem::AllocationCreateInfo {
-                    flags: match ty {
-                        MemoryLocation::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
-                        MemoryLocation::CpuToGpu => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE,
-                        MemoryLocation::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_ALLOW_TRANSFER_INSTEAD,
-                        MemoryLocation::CpuOnly => vk_mem::AllocationCreateFlags::MAPPED | vk_mem::AllocationCreateFlags::HOST_ACCESS_RANDOM,
+        let allocation =
+            unsafe {
+                allocator.allocate_memory(
+                    requirements,
+                    &vk_mem::AllocationCreateInfo {
+                        flags: match ty {
+                            MemoryLocation::GpuOnly => vk_mem::AllocationCreateFlags::empty(),
+                            MemoryLocation::CpuToGpu => {
+                                vk_mem::AllocationCreateFlags::MAPPED
+                                    | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
+                            }
+                            MemoryLocation::GpuToCpu => vk_mem::AllocationCreateFlags::MAPPED
+                                | vk_mem::AllocationCreateFlags::HOST_ACCESS_ALLOW_TRANSFER_INSTEAD,
+                            MemoryLocation::CpuOnly => {
+                                vk_mem::AllocationCreateFlags::MAPPED
+                                    | vk_mem::AllocationCreateFlags::HOST_ACCESS_RANDOM
+                            }
+                        },
+                        required_flags: memory_property_flags,
+                        usage: vk_mem::MemoryUsage::from(ty),
+                        preferred_flags: vk::MemoryPropertyFlags::empty(),
+                        memory_type_bits,
+                        user_data: 0,
+                        priority: 1.0,
                     },
-                    required_flags: memory_property_flags,
-                    usage: vk_mem::MemoryUsage::from(ty),
-                    preferred_flags: vk::MemoryPropertyFlags::empty(),
-                    memory_type_bits,
-                    user_data: 0,
-                    priority: 1.0,
-                },
-            )?
-        };
+                )?
+            };
         let ai = allocator.get_allocation_info(&allocation);
         #[cfg(feature = "log-memory-allocations")]
         trace!("Creating memory allocation {:p}", ai.device_memory);

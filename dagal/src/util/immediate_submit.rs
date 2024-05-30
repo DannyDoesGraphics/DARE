@@ -46,10 +46,7 @@ impl ImmediateSubmit {
     }
 
     /// Immediately submit a function which fills out a command buffer
-    pub fn submit<T: FnOnce(ImmediateSubmitContext)>(
-        &self,
-        function: T,
-    ) {
+    pub fn submit<T: FnOnce(ImmediateSubmitContext)>(&self, function: T) {
         unsafe {
             self.device
                 .get_handle()

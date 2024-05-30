@@ -7,9 +7,9 @@ pub use traits::*;
 pub mod shader;
 pub use shader::Shader;
 
+pub(crate) mod glsl_preprocessor;
 #[cfg(feature = "shaderc")]
 pub mod shaderc_impl;
-pub(crate) mod glsl_preprocessor;
 
 #[cfg(feature = "shaderc")]
 pub use shaderc_impl::*;

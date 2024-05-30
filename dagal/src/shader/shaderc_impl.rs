@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -18,8 +18,8 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
 
 	fn compile_file(
 		&self,
-		in_path: std::path::PathBuf,
-		out_path: std::path::PathBuf,
+		in_path: PathBuf,
+		out_path: PathBuf,
 		shader_kind: super::ShaderKind,
 	) -> Result<()> {
 		if !super::is_file_newer(in_path.clone(), out_path.clone())? {
@@ -31,10 +31,7 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
 				shader_kind,
 				in_path.file_name().unwrap().to_str().unwrap(),
 			)?;
-			let output: Vec<u8> = output
-				.iter()
-				.flat_map(|data| data.to_le_bytes())
-				.collect();
+			let output: Vec<u8> = output.iter().flat_map(|data| data.to_le_bytes()).collect();
 			std::fs::write(out_path, output.as_slice())?;
 			Ok(())
 		}
@@ -58,12 +55,19 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
 		options.set_include_callback({
 			let include_context = include_context.clone();
 			move |requested_path, include_type, including_path, _| {
-				let source_path = Path::new(including_path).canonicalize().unwrap_or_else(|_| PathBuf::from(including_path));
+				let source_path = PathBuf::from(including_path)
+					.canonicalize()
+					.unwrap();
 				let include_path = match include_type {
 					IncludeType::Relative => {
-						source_path.parent().unwrap_or_else(|| Path::new("")).join(requested_path)
-						           .canonicalize().unwrap_or_else(|_| PathBuf::from(requested_path))
-					}
+						let path = source_path.parent().unwrap();
+						let requested_path = requested_path.trim_start_matches("./");
+						let path = path
+							.join(requested_path);
+						path
+							.canonicalize()
+							.unwrap()
+					},
 					IncludeType::Standard => {
 						if requested_path.starts_with("dagal/") {
 							let requested_path_str = requested_path.trim_start_matches("dagal/");
@@ -73,12 +77,12 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
 						}
 					}
 				};
-				let include_path = include_path.canonicalize().unwrap();
+				//let include_path = include_path.canonicalize().unwrap();
 
 				let mut guard = include_context.lock().unwrap();
-				let res = guard.resolve_include(source_path, include_path).map_err(|err| {
-					err.to_string()
-				})?;
+				let res = guard
+					.resolve_include(source_path, include_path)
+					.map_err(|err| err.to_string())?;
 				Ok(ResolvedInclude {
 					resolved_name: res.resolved_name,
 					content: res.content,

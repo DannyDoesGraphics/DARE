@@ -1,8 +1,5 @@
-
 pub struct RayTracingBuilder {
-	immediate: dagal::util::ImmediateSubmit,
+    immediate: dagal::util::ImmediateSubmit,
 }
 
-impl RayTracingBuilder {
-
-}
+impl RayTracingBuilder {}

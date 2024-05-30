@@ -6,6 +6,7 @@ use std::ptr;
 use ash::vk;
 use tracing::trace;
 
+use crate::resource::traits::AsRaw;
 use crate::traits::Destructible;
 
 #[derive(Debug)]
@@ -18,14 +19,16 @@ pub struct GraphicsPipeline {
 impl Destructible for GraphicsPipeline {
 	fn destroy(&mut self) {
 		#[cfg(feature = "log-lifetimes")]
-		trace!("Destroying VkPipelineLayout {:p}", self.layout);
-		#[cfg(feature = "log-lifetimes")]
 		trace!("Destroying VkPipeline {:p}", self.handle);
 
 		unsafe {
-			self.device
-			    .get_handle()
-			    .destroy_pipeline_layout(self.layout, None);
+			if self.layout != vk::PipelineLayout::null() {
+				#[cfg(feature = "log-lifetimes")]
+				trace!("Destroying VkPipelineLayout {:p}", self.layout);
+				self.device
+				    .get_handle()
+				    .destroy_pipeline_layout(self.layout, None);
+			}
 			self.device.get_handle().destroy_pipeline(self.handle, None);
 		}
 	}
@@ -48,6 +51,14 @@ impl super::Pipeline for GraphicsPipeline {
 	}
 }
 
+impl AsRaw for GraphicsPipeline {
+	type AsRawType = (vk::Pipeline, vk::PipelineLayout);
+
+	unsafe fn as_raw(self) -> Self::AsRawType {
+		(self.handle, self.layout)
+	}
+}
+
 #[derive(Debug)]
 pub struct GraphicsPipelineBuilder<'a> {
 	shaders: HashMap<vk::ShaderStageFlags, crate::shader::Shader>,
@@ -60,6 +71,28 @@ pub struct GraphicsPipelineBuilder<'a> {
 	depth_stencil: vk::PipelineDepthStencilStateCreateInfo<'a>,
 	render_info: vk::PipelineRenderingCreateInfo<'a>,
 	color_attachment_format: vk::Format,
+}
+
+impl<'a> Clone for GraphicsPipelineBuilder<'a> {
+	/// **Only performs a partial clone of the underlying data.**
+	///
+	/// Only clones input_assembly, rasterizer, color_blend_attachment, multisampling, depth_stencil,
+	/// render_info, and color_attachment_info.
+	///
+	/// In other words, **does not clone layout or shaders**.
+	fn clone(&self) -> Self {
+		Self {
+			shaders: Default::default(),
+			input_assembly: self.input_assembly,
+			rasterizer: self.rasterizer,
+			color_blend_attachment: self.color_blend_attachment,
+			multisampling: self.multisampling,
+			layout: None,
+			depth_stencil: self.depth_stencil,
+			render_info: self.render_info,
+			color_attachment_format: self.color_attachment_format,
+		}
+	}
 }
 
 impl<'a> Default for GraphicsPipelineBuilder<'a> {
@@ -287,7 +320,11 @@ impl<'a> GraphicsPipelineBuilder<'a> {
 		self
 	}
 
-	pub fn enable_depth_test(mut self, depth_write_enable: vk::Bool32, compare_op: vk::CompareOp) -> Self {
+	pub fn enable_depth_test(
+		mut self,
+		depth_write_enable: vk::Bool32,
+		compare_op: vk::CompareOp,
+	) -> Self {
 		self.depth_stencil.depth_test_enable = vk::TRUE;
 		self.depth_stencil.depth_write_enable = depth_write_enable;
 		self.depth_stencil.depth_compare_op = compare_op;

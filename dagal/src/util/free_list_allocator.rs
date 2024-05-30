@@ -16,9 +16,7 @@ pub struct Handle<T> {
 
 impl<T> Debug for Handle<T> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Handle")
-		 .field("id", &self.id)
-		 .finish()
+		f.debug_struct("Handle").field("id", &self.id).finish()
 	}
 }
 
@@ -50,7 +48,6 @@ impl<T> Handle<T> {
 	}
 }
 
-
 /// Free list allocator
 ///
 /// # Differences from [`SlotMap`](crate::util::DenseSlotMap)
@@ -76,11 +73,10 @@ pub struct FreeList<T> {
 impl<T> Clone for FreeList<T> {
 	fn clone(&self) -> Self {
 		Self {
-			inner: self.inner.clone()
+			inner: self.inner.clone(),
 		}
 	}
 }
-
 
 impl<T> Default for FreeList<T> {
 	fn default() -> Self {
@@ -88,16 +84,17 @@ impl<T> Default for FreeList<T> {
 			inner: Arc::new(RwLock::new(FreeListInner {
 				resources: vec![],
 				free_ids: vec![],
-			}))
+			})),
 		}
 	}
 }
 
 impl<T> FreeList<T> {
 	pub fn allocate(&mut self, resource: T) -> Result<Handle<T>> {
-		let mut guard = self.inner.write().map_err(|_| {
-			anyhow::Error::from(crate::DagalError::PoisonError)
-		})?;
+		let mut guard = self
+			.inner
+			.write()
+			.map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
 		let id: u64 = if guard.free_ids.is_empty() {
 			guard.resources.len() as u64
 		} else {
@@ -115,36 +112,42 @@ impl<T> FreeList<T> {
 		if !self.is_valid(&handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		let mut guard = self.inner.write().map_err(|_| {
-			anyhow::Error::from(crate::DagalError::PoisonError)
-		})?;
-		let resource: Option<T> = guard.resources.get_mut(handle.id as usize).and_then(Option::take);
+		let mut guard = self
+			.inner
+			.write()
+			.map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
+		let resource: Option<T> = guard
+			.resources
+			.get_mut(handle.id as usize)
+			.and_then(Option::take);
 		guard.free_ids.push(handle.id);
 		Ok(resource.unwrap())
 	}
 
 	pub fn with_handle<R, F: FnOnce(&T) -> R>(&self, handle: &Handle<T>, f: F) -> Result<R> {
-		unsafe {
-			self.untyped_with_handle(handle, f)
-		}
+		unsafe { self.untyped_with_handle(handle, f) }
 	}
 
-	pub fn with_handle_mut<R, F: FnOnce(&mut T) -> R>(&self, handle: &Handle<T>, f: F) -> Result<R> {
-		unsafe {
-			self.untyped_with_handle_mut(handle, f)
-		}
+	pub fn with_handle_mut<R, F: FnOnce(&mut T) -> R>(
+		&self,
+		handle: &Handle<T>,
+		f: F,
+	) -> Result<R> {
+		unsafe { self.untyped_with_handle_mut(handle, f) }
 	}
 
 	pub fn is_valid(&self, handle: &Handle<T>) -> Result<bool> {
-		unsafe {
-			self.untyped_is_valid(handle)
-		}
+		unsafe { self.untyped_is_valid(handle) }
 	}
 
 	pub(crate) unsafe fn untyped_is_valid<A>(&self, handle: &Handle<A>) -> Result<bool> {
-		if let Some(resource) = self.inner.read().map_err(|_| {
-			anyhow::Error::from(crate::DagalError::PoisonError)
-		})?.resources.get(handle.id as usize) {
+		if let Some(resource) = self
+			.inner
+			.read()
+			.map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+			.resources
+			.get(handle.id as usize)
+		{
 			return Ok(resource.is_some());
 		}
 		Ok(false)
@@ -154,40 +157,50 @@ impl<T> FreeList<T> {
 	///
 	/// Result returned if the lambda's return type. Any error in the Result indicates an error
 	/// found with the handle.
-	pub unsafe fn untyped_with_handle<A, R, F: FnOnce(&T) -> R>(&self, handle: &Handle<A>, f: F) -> Result<R> {
+	pub unsafe fn untyped_with_handle<A, R, F: FnOnce(&T) -> R>(
+		&self,
+		handle: &Handle<A>,
+		f: F,
+	) -> Result<R> {
 		if !self.untyped_is_valid(handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		self
-			.inner
-			.read()
-			.map_err(|_| {
-				anyhow::Error::from(crate::DagalError::PoisonError)
-			})?
-			.resources.get(handle.id as usize)
+		self.inner
+		    .read()
+		    .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+			.resources
+			.get(handle.id as usize)
 			.unwrap()
 			.as_ref()
-			.map_or(Err(anyhow::Error::from(crate::DagalError::PoisonError)), |data| Ok(f(data)))
+			.map_or(
+				Err(anyhow::Error::from(crate::DagalError::PoisonError)),
+				|data| Ok(f(data)),
+			)
 	}
 
 	/// Execute with a handle's underlying resource
 	///
 	/// Result returned if the lambda's return type. Any error in the Result indicates an error
 	/// found with the handle.
-	pub unsafe fn untyped_with_handle_mut<A, R, F: FnOnce(&mut T) -> R>(&self, handle: &Handle<A>, f: F) -> Result<R> {
+	pub unsafe fn untyped_with_handle_mut<A, R, F: FnOnce(&mut T) -> R>(
+		&self,
+		handle: &Handle<A>,
+		f: F,
+	) -> Result<R> {
 		if !self.untyped_is_valid(handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		self
-			.inner
-			.write()
-			.map_err(|_| {
-				anyhow::Error::from(crate::DagalError::PoisonError)
-			})?
-			.resources.get_mut(handle.id as usize)
+		self.inner
+		    .write()
+		    .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+			.resources
+			.get_mut(handle.id as usize)
 			.unwrap()
 			.as_mut()
-			.map_or(Err(anyhow::Error::from(crate::DagalError::PoisonError)), |data| Ok(f(data)))
+			.map_or(
+				Err(anyhow::Error::from(crate::DagalError::PoisonError)),
+				|data| Ok(f(data)),
+			)
 	}
 }
 
@@ -197,9 +210,10 @@ impl<'a, T: Resource<'a>> FreeList<T> {
 		if !self.is_valid(handle)? {
 			return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
 		}
-		Ok(self.inner
-		       .read()
-		       .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+		Ok(self
+			.inner
+			.read()
+			.map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
 			.resources
 			.get(handle.id as usize)
 			.unwrap()
@@ -219,11 +233,11 @@ impl<T: Destructible> FreeList<T> {
 }
 
 pub mod errors {
-	use thiserror::Error;
+    use thiserror::Error;
 
-	#[derive(Debug, Error)]
+    #[derive(Debug, Error)]
 	pub enum Errors {
 		#[error("Handle does not exist in the free list allocator")]
-		InvalidHandle
+		InvalidHandle,
 	}
 }

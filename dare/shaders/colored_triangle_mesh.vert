@@ -25,7 +25,7 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 };
 
 //push constants block
-layout( push_constant ) uniform constants
+layout(push_constant) uniform constants
 {
     mat4 render_matrix;
     u32 vertex_buffer_id;
