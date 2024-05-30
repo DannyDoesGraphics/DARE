@@ -4,6 +4,7 @@ use std::sync::Arc;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::descriptor::GPUResourceTable;
+use dagal::pipelines::Pipeline;
 use dagal::resource;
 use dagal::resource::traits::{Nameable, Resource};
 use dagal::util::free_list_allocator::Handle;
@@ -160,6 +161,20 @@ pub struct Material {
 	pub metal_rough_factors: glam::Vec4,
 
 	inner: Arc<MaterialInner>,
+}
+
+pub struct MaterialPipeline {
+	pub transparent_pipeline: Arc<dagal::pipelines::GraphicsPipeline>,
+	pub opaque_pipeline: Arc<dagal::pipelines::GraphicsPipeline>,
+	pub layout: vk::PipelineLayout,
+}
+
+impl Drop for MaterialPipeline {
+	fn drop(&mut self) {
+		unsafe {
+			self.transparent_pipeline.get_device().get_handle().destroy_pipeline_layout(self.layout, None);
+		}
+	}
 }
 
 impl Material {
