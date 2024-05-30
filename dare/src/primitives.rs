@@ -4,10 +4,13 @@ use std::sync::Arc;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::descriptor::GPUResourceTable;
-use dagal::pipelines::Pipeline;
+use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::resource;
 use dagal::resource::traits::{Nameable, Resource};
+use dagal::shader::ShaderCompiler;
 use dagal::util::free_list_allocator::Handle;
+
+use crate::RenderContext;
 
 #[repr(C)]
 #[derive(Debug, Clone, Default)]
@@ -163,16 +166,101 @@ pub struct Material {
 	inner: Arc<MaterialInner>,
 }
 
-pub struct MaterialPipeline {
-	pub transparent_pipeline: Arc<dagal::pipelines::GraphicsPipeline>,
-	pub opaque_pipeline: Arc<dagal::pipelines::GraphicsPipeline>,
+pub struct MaterialPipelineInner {
+	pub transparent_pipeline: dagal::pipelines::GraphicsPipeline,
+	pub opaque_pipeline: dagal::pipelines::GraphicsPipeline,
 	pub layout: vk::PipelineLayout,
 }
 
-impl Drop for MaterialPipeline {
+impl Drop for MaterialPipelineInner {
 	fn drop(&mut self) {
 		unsafe {
-			self.transparent_pipeline.get_device().get_handle().destroy_pipeline_layout(self.layout, None);
+			self.transparent_pipeline
+			    .get_device()
+			    .get_handle()
+			    .destroy_pipeline_layout(self.layout, None);
+		}
+	}
+}
+
+#[derive(Clone)]
+pub struct MaterialPipeline {
+	pub inner: Arc<MaterialPipelineInner>,
+}
+
+#[repr(C)]
+pub struct GPUMaterialPushConstants {
+	material_index: u32,
+	render_matrix: glam::Mat4,
+}
+
+impl MaterialPipeline {
+	pub fn new(render_context: &mut RenderContext) -> Self {
+		let layout = dagal::pipelines::PipelineLayoutBuilder::default()
+			.push_bindless_gpu_resource_table(&render_context.gpu_resource_table)
+			.push_push_constant_struct::<GPUMaterialPushConstants>(
+				vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+			)
+			.build(
+				render_context.device.clone(),
+				vk::PipelineLayoutCreateFlags::empty(),
+			)
+			.unwrap();
+		let pipeline_builder = dagal::pipelines::GraphicsPipelineBuilder::default()
+			.replace_layout(vk::PipelineLayout::null())
+			.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+			.set_polygon_mode(vk::PolygonMode::FILL)
+			.set_multisampling_none()
+			.disable_blending()
+			.enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
+			.set_depth_format(render_context.depth_image.as_ref().unwrap().format())
+			.set_color_attachment(render_context.draw_image.as_ref().unwrap().format());
+
+		let shaderc_compiler = dagal::shader::ShaderCCompiler::new();
+		let opaque_pipeline = pipeline_builder
+			.clone()
+			.replace_shader_from_source_file(
+				render_context.device.clone(),
+				&shaderc_compiler,
+				std::path::PathBuf::from("./dare/shaders/mesh.vert"),
+				vk::ShaderStageFlags::VERTEX,
+			)
+			.unwrap()
+			.replace_shader_from_source_file(
+				render_context.device.clone(),
+				&shaderc_compiler,
+				std::path::PathBuf::from("./dare/shaders/mesh.frag"),
+				vk::ShaderStageFlags::FRAGMENT,
+			)
+			.unwrap()
+			.build(render_context.device.clone())
+			.unwrap();
+		let transparent_pipeline = pipeline_builder
+			.clone()
+			.replace_shader_from_source_file(
+				render_context.device.clone(),
+				&shaderc_compiler,
+				std::path::PathBuf::from("./dare/shaders/mesh.vert"),
+				vk::ShaderStageFlags::VERTEX,
+			)
+			.unwrap()
+			.replace_shader_from_source_file(
+				render_context.device.clone(),
+				&shaderc_compiler,
+				std::path::PathBuf::from("./dare/shaders/mesh.frag"),
+				vk::ShaderStageFlags::FRAGMENT,
+			)
+			.unwrap()
+			.enable_blending_additive()
+			.enable_depth_test(vk::FALSE, vk::CompareOp::GREATER_OR_EQUAL)
+			.build(render_context.device.clone())
+			.unwrap();
+		Self {
+			inner: Arc::new(MaterialPipelineInner {
+				transparent_pipeline,
+				opaque_pipeline,
+				layout,
+			}),
 		}
 	}
 }
