@@ -7,7 +7,7 @@ layout(buffer_reference, std430) readonly buffer SceneData {
     vec4 sunlight_color;
 };
 
-layout(buffer_reference, std430) readonly buffer struct Material {
+layout(buffer_reference, std430) readonly buffer GLTFMaterialData {
     vec4 color_factors;
     vec4 metal_rough_factors;
 
@@ -20,5 +20,7 @@ layout(buffer_reference, std430) readonly buffer struct Material {
 
 layout(push_constant) uniform PushConstant {
     uint material_buffer_index;
+    uint scene_data_index;
+    uint vertex_buffer_index;
     mat4 render_matrix;
 } pc;

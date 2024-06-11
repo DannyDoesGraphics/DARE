@@ -1,3 +1,4 @@
+#version 450
 #include <dagal/ext.glsl>
 #include <dagal/dagal.glsl>
 #include "constants.glsl"
@@ -17,12 +18,13 @@ layout (location = 0) out vec4 outFragColor;
 
 void main()
 {
-    SceneData scene_data = SceneData(buffer_addresses[constants.scene_data_index]);
+    SceneData scene_data = SceneData(buffer_addresses[pc.scene_data_index]);
+    GLTFMaterialData material_data = GLTFMaterialData(buffer_addresses[pc.material_buffer_index]);
     float lightValue = max(dot(inNormal, scene_data.sunlight_direction.xyz), 0.1f);
 
 
-    vec3 color = inColor * texture(sampler2D(sampled_images[pc.sampled_image_index], samplers[pc.sampler_index]), inUV).xyz;
+    vec3 color = inColor * texture(sampler2D(sampled_images[material_data.color_image], samplers[material_data.color_image_sampler]), inUV).xyz;
     vec3 ambient = color *  scene_data.ambient_color.xyz;
 
-    outFragColor = vec4(color * lightValue *  scene_data.sun_light_color.w + ambient, 1.0f);
+    outFragColor = vec4(color * lightValue *  scene_data.sunlight_color.w + ambient, 1.0f);
 }

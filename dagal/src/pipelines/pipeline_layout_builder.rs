@@ -3,6 +3,8 @@ use std::ptr;
 use anyhow::Result;
 use ash::vk;
 
+use crate::resource::traits::Resource;
+
 #[derive(Default, Debug, Clone)]
 pub struct PipelineLayoutBuilder {
     push_constant_ranges: Vec<vk::PushConstantRange>,
@@ -53,7 +55,7 @@ impl PipelineLayoutBuilder {
         self,
         device: crate::device::LogicalDevice,
         flags: vk::PipelineLayoutCreateFlags,
-    ) -> Result<vk::PipelineLayout> {
+    ) -> Result<crate::pipelines::PipelineLayout> {
         let pipeline_ci = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             p_next: ptr::null(),
@@ -64,10 +66,12 @@ impl PipelineLayoutBuilder {
             p_push_constant_ranges: self.push_constant_ranges.as_ptr(),
             _marker: Default::default(),
         };
-        Ok(unsafe {
-            device
-                .get_handle()
-                .create_pipeline_layout(&pipeline_ci, None)?
-        })
+        crate::pipelines::PipelineLayout::new(
+            crate::pipelines::PipelineLayoutCreateInfo::CreateInfo {
+                create_info: pipeline_ci,
+                name: None,
+                device,
+            }
+        )
     }
 }

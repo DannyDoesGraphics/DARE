@@ -13,7 +13,6 @@ use crate::traits::Destructible;
 pub struct GraphicsPipeline {
     handle: vk::Pipeline,
     device: crate::device::LogicalDevice,
-    layout: vk::PipelineLayout,
 }
 
 impl Destructible for GraphicsPipeline {
@@ -22,13 +21,6 @@ impl Destructible for GraphicsPipeline {
         trace!("Destroying VkPipeline {:p}", self.handle);
 
         unsafe {
-            if self.layout != vk::PipelineLayout::null() {
-                #[cfg(feature = "log-lifetimes")]
-                trace!("Destroying VkPipelineLayout {:p}", self.layout);
-                self.device
-                    .get_handle()
-                    .destroy_pipeline_layout(self.layout, None);
-            }
             self.device.get_handle().destroy_pipeline(self.handle, None);
         }
     }
@@ -49,17 +41,13 @@ impl super::Pipeline for GraphicsPipeline {
     fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
     }
-
-    fn layout(&self) -> vk::PipelineLayout {
-        self.layout
-    }
 }
 
 impl AsRaw for GraphicsPipeline {
-    type AsRawType = (vk::Pipeline, vk::PipelineLayout);
+    type AsRawType = vk::Pipeline;
 
     unsafe fn as_raw(self) -> Self::AsRawType {
-        (self.handle, self.layout)
+        self.handle
     }
 }
 
@@ -91,7 +79,7 @@ impl<'a> Clone for GraphicsPipelineBuilder<'a> {
             rasterizer: self.rasterizer,
             color_blend_attachment: self.color_blend_attachment,
             multisampling: self.multisampling,
-            layout: None,
+            layout: self.layout,
             depth_stencil: self.depth_stencil,
             render_info: self.render_info,
             color_attachment_format: self.color_attachment_format,
@@ -242,8 +230,8 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .unwrap()
         }
-        .pop()
-        .unwrap();
+            .pop()
+            .unwrap();
         // Clean up shaders
         for shader in self.shaders.into_values() {
             drop(shader)
@@ -252,7 +240,6 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
         Ok(Self::BuildTo {
             handle,
             device,
-            layout: self.layout.unwrap(),
         })
     }
 }

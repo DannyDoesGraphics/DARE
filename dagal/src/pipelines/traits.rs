@@ -11,9 +11,6 @@ pub trait Pipeline: Destructible + Debug {
     fn handle(&self) -> vk::Pipeline;
 
     fn get_device(&self) -> &crate::device::LogicalDevice;
-
-    /// Get a copy of the pipeline layout
-    fn layout(&self) -> vk::PipelineLayout;
 }
 
 pub trait PipelineBuilder: Default + Debug {

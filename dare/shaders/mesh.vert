@@ -1,3 +1,4 @@
+#version 450
 #include <dagal/ext.glsl>
 #include <dagal/dagal.glsl>
 #include "constants.glsl"
@@ -27,9 +28,9 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 
 void main()
 {
-    Vertex v = VertexBuffer(buffer_addresses[pc.vertex_buffer_index])[gl_VertexIndex];
+    Vertex v = VertexBuffer(buffer_addresses[pc.vertex_buffer_index]).vertices[gl_VertexIndex];
     SceneData scene_data = SceneData(buffer_addresses[pc.scene_data_index]);
-    GLTFMaterialData material_data = GLTFMaterialData(buffer_addresses[pc.gltf_material_data_index]);
+    GLTFMaterialData material_data = GLTFMaterialData(buffer_addresses[pc.material_buffer_index]);
 
     vec4 position = vec4(v.position, 1.0f);
 

@@ -1,10 +1,11 @@
+use std::{mem, path, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
-use std::{mem, path, ptr, slice};
 
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
+use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -19,9 +20,8 @@ use dagal::util::free_list_allocator::Handle;
 use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::wsi::WindowDimensions;
-use dagal::{resource, winit};
 
-use crate::primitives::{GPUMeshBuffer, GeometrySurface, MeshAsset, Vertex};
+use crate::primitives::{GeometrySurface, GLTF_Metallic_Roughness, GPUMeshBuffer, MaterialInstance, MaterialPass, MaterialResources, MeshAsset, Vertex};
 
 mod assets;
 mod primitives;
@@ -45,6 +45,8 @@ struct RenderContext {
     test_meshes: Vec<Arc<MeshAsset>>,
     mesh_pipeline: dagal::pipelines::GraphicsPipeline,
     gradient_pipeline: dagal::pipelines::ComputePipeline,
+    mesh_pipeline_layout: dagal::pipelines::PipelineLayout,
+    gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
     global_descriptor_pool: dagal::descriptor::DescriptorPool,
@@ -73,6 +75,9 @@ struct RenderContext {
     debug_messenger: Option<dagal::device::DebugMessenger>,
     physical_device: dagal::device::PhysicalDevice,
     instance: dagal::core::Instance,
+
+    default_data: Option<MaterialInstance>,
+    metal_rough_material: Option<GLTF_Metallic_Roughness>,
 }
 
 struct Frame {
@@ -188,7 +193,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-        .unwrap();
+            .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -203,19 +208,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                .unwrap();
+                    .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -244,7 +249,7 @@ impl RenderContext {
                 name: None,
             },
         )
-        .unwrap();
+            .unwrap();
 
         let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -262,7 +267,7 @@ impl RenderContext {
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(gradient_pipeline_layout)
+            .replace_layout(gradient_pipeline_layout.handle())
             .replace_shader_from_source_file(
                 device.clone(),
                 &compiler,
@@ -273,7 +278,7 @@ impl RenderContext {
             .build(device.clone())
             .unwrap();
 
-        let triangle_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+        let mesh_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .push_descriptor_sets(vec![gpu_resource_table.get_descriptor_layout().unwrap()])
             .push_push_constant_struct::<primitives::GPUDrawPushConstants>(
                 vk::ShaderStageFlags::VERTEX,
@@ -281,9 +286,9 @@ impl RenderContext {
             .push_bindless_gpu_resource_table(&gpu_resource_table)
             .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
             .unwrap();
-        let triangle_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
+        let mesh_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
             .clear()
-            .replace_layout(triangle_pipeline_layout)
+            .replace_layout(mesh_pipeline_layout.handle())
             .replace_shader_from_source_file(
                 device.clone(),
                 &compiler,
@@ -338,8 +343,10 @@ impl RenderContext {
             draw_image_descriptor_set_layout: draw_image_set_layout,
 
             gradient_pipeline,
+            mesh_pipeline,
+            gradient_pipeline_layout,
+            mesh_pipeline_layout,
 
-            mesh_pipeline: triangle_pipeline,
             test_meshes: vec![],
 
             sampler: None,
@@ -347,21 +354,24 @@ impl RenderContext {
             black_image: None,
             grey_image: None,
             error_checkerboard_image: None,
+
+            default_data: None,
+            metal_rough_material: None,
         };
         // create default images
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-                .new_sampler(ResourceInput::ResourceCI(
-                    resource::SamplerCreateInfo::FromCreateInfo {
-                        device: app.device.clone(),
-                        create_info: vk::SamplerCreateInfo::default()
-                            .mag_filter(vk::Filter::NEAREST)
-                            .min_filter(vk::Filter::NEAREST),
-                        name: None,
-                    },
-                ))
-                .unwrap(),
+               .new_sampler(ResourceInput::ResourceCI(
+                   resource::SamplerCreateInfo::FromCreateInfo {
+                       device: app.device.clone(),
+                       create_info: vk::SamplerCreateInfo::default()
+                           .mag_filter(vk::Filter::NEAREST)
+                           .min_filter(vk::Filter::NEAREST),
+                       name: None,
+                   },
+               ))
+               .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -439,7 +449,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-        .unwrap();
+            .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -511,7 +521,7 @@ impl RenderContext {
             location: dagal::allocators::MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image =
             dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
@@ -542,7 +552,7 @@ impl RenderContext {
                 location: dagal::allocators::MemoryLocation::GpuOnly,
                 name: Some("GBuffer Depth"),
             })
-            .unwrap();
+                .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view =
             resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
@@ -561,7 +571,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         let depth_image_view =
             resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -579,7 +589,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -597,7 +607,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-            .unwrap(),
+                .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -611,6 +621,17 @@ impl RenderContext {
                 .ty(dagal::descriptor::DescriptorType::StorageImage)
                 .push_descriptor(dagal::descriptor::DescriptorInfo::Image(img_info)),
         ]);
+        if self.metal_rough_material.is_none() {
+            let material_pipeline = GLTF_Metallic_Roughness::new(self);
+            let material_resources = MaterialResources {
+                color_image: self.white_image.take().unwrap(),
+                color_sampler: self.sampler.as_ref().unwrap().clone(),
+                metal_rough_image: self.black_image.take().unwrap(),
+                metal_sampler: self.sampler.as_ref().unwrap().clone(),
+            };
+            let material = material_pipeline.write_material(&mut self.gpu_resource_table, &mut self.immediate_submit, &mut self.allocator, MaterialPass::MainColor, material_resources);
+            self.metal_rough_material = Some(material_pipeline);
+        }
     }
 
     /// Resize swapchain
@@ -649,9 +670,10 @@ impl RenderContext {
     fn draw_background(
         device: &dagal::device::LogicalDevice,
         cmd: &dagal::command::CommandBufferRecording,
-        draw_image: &dagal::resource::Image,
+        draw_image: &resource::Image,
         frame_number: usize,
         gradient_pipeline: &dagal::pipelines::ComputePipeline,
+        gradient_layout: &dagal::pipelines::PipelineLayout,
         gradient_descriptor_set: vk::DescriptorSet,
     ) {
         let flash = (frame_number as f64 / 120.0).sin().abs();
@@ -669,7 +691,7 @@ impl RenderContext {
             device.get_handle().cmd_bind_descriptor_sets(
                 cmd.handle(),
                 vk::PipelineBindPoint::COMPUTE,
-                gradient_pipeline.layout(),
+                gradient_layout.handle(),
                 0,
                 &[gradient_descriptor_set],
                 &[],
@@ -698,7 +720,7 @@ impl RenderContext {
             };
             device.get_handle().cmd_push_constants(
                 cmd.handle(),
-                gradient_pipeline.layout(),
+                gradient_layout.handle(),
                 vk::ShaderStageFlags::COMPUTE,
                 0,
                 unsafe {
@@ -724,6 +746,7 @@ impl RenderContext {
         draw_image_view: &resource::ImageView,
         depth_image_view: &resource::ImageView,
         mesh_pipeline: &dagal::pipelines::GraphicsPipeline,
+        mesh_layout: &dagal::pipelines::PipelineLayout,
         gpu_rt: &GPUResourceTable,
         meshes: Vec<Arc<MeshAsset>>,
     ) {
@@ -747,7 +770,7 @@ impl RenderContext {
             device.get_handle().cmd_bind_descriptor_sets(
                 cmd.handle(),
                 vk::PipelineBindPoint::GRAPHICS,
-                mesh_pipeline.layout(),
+                mesh_layout.handle(),
                 0,
                 &[gpu_rt.get_descriptor_set().unwrap()],
                 &[],
@@ -789,7 +812,7 @@ impl RenderContext {
             };
             device.get_handle().cmd_push_constants(
                 cmd.handle(),
-                mesh_pipeline.layout(),
+                mesh_layout.handle(),
                 vk::ShaderStageFlags::VERTEX,
                 0,
                 unsafe {
@@ -952,7 +975,7 @@ impl RenderContext {
             },
             name,
         })
-        .unwrap();
+            .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -974,7 +997,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-        .unwrap();
+            .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -1008,7 +1031,7 @@ impl RenderContext {
                 memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-            .unwrap();
+                .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -1123,6 +1146,7 @@ impl RenderContext {
             self.draw_image.as_ref().unwrap(),
             self.frame_number,
             &self.gradient_pipeline,
+            &self.gradient_pipeline_layout,
             self.draw_image_descriptors.as_ref().unwrap().handle(),
         );
         // add a sync point
@@ -1145,6 +1169,7 @@ impl RenderContext {
             self.draw_image_view.as_ref().unwrap(),
             self.depth_image_view.as_ref().unwrap(),
             &self.mesh_pipeline,
+            &self.mesh_pipeline_layout,
             &self.gpu_resource_table,
             self.test_meshes.clone(),
         );
@@ -1222,6 +1247,9 @@ impl Drop for RenderContext {
     fn drop(&mut self) {
         unsafe {
             self.device.get_handle().device_wait_idle().unwrap();
+        }
+        if let Some(mat) = self.metal_rough_material.take() {
+            drop(mat);
         }
     }
 }

@@ -1,13 +1,11 @@
-use crate::traits::Destructible;
+use std::ops::Deref;
+
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
-use std::ops::Deref;
 use tracing::trace;
 
-/// Stolen mainly from phobos :)
-///
-/// Represents the Vulkan instance
+use crate::traits::Destructible;
 
 /// Represents a Vulkan Instance
 #[derive(Derivative, Clone)]

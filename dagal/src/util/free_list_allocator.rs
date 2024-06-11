@@ -8,7 +8,7 @@ use derivative::Derivative;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 
-#[derive(Copy, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Copy, PartialOrd, Eq, )]
 pub struct Handle<T> {
     id: u64,
     _marker: PhantomData<T>,
@@ -45,6 +45,12 @@ impl<T> Handle<T> {
             id,
             _marker: Default::default(),
         }
+    }
+}
+
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 

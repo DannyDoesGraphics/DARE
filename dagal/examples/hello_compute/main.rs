@@ -19,6 +19,7 @@ struct App {
 }
 
 struct RenderContext {
+    gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
     gradient_pipeline: dagal::pipelines::ComputePipeline,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
@@ -120,7 +121,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-        .unwrap();
+            .unwrap();
         let allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -134,19 +135,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                .unwrap();
+                    .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -173,7 +174,7 @@ impl RenderContext {
                 name: None,
             },
         )
-        .unwrap();
+            .unwrap();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(
@@ -192,14 +193,15 @@ impl RenderContext {
             device.clone(),
             get_local_path("shaders/compiled/gradient.comp.spv"),
         )
-        .unwrap();
+            .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(gradient_pipeline_layout)
+            .replace_layout(gradient_pipeline_layout.handle())
             .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
             .build(device.clone())
             .unwrap();
 
         Self {
+            gradient_pipeline_layout,
             instance,
             physical_device,
             device,
@@ -234,7 +236,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-        .unwrap();
+            .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -306,7 +308,7 @@ impl RenderContext {
             location: dagal::allocators::MemoryLocation::GpuOnly,
             name: Some("Draw Image"),
         })
-        .unwrap();
+            .unwrap();
         let image_view =
             dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -328,7 +330,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         self.draw_image = Some(image);
         self.draw_image_view = Some(image_view);
         // update descriptors
@@ -343,7 +345,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-            .unwrap(),
+                .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -406,6 +408,7 @@ impl RenderContext {
         cmd: &dagal::command::CommandBufferRecording,
         draw_image: &dagal::resource::Image,
         frame_number: usize,
+        gradient_layout: &dagal::pipelines::PipelineLayout,
         gradient_pipeline: &dagal::pipelines::ComputePipeline,
         gradient_descriptor_set: vk::DescriptorSet,
     ) {
@@ -424,7 +427,7 @@ impl RenderContext {
             device.get_handle().cmd_bind_descriptor_sets(
                 cmd.handle(),
                 vk::PipelineBindPoint::COMPUTE,
-                gradient_pipeline.layout(),
+                gradient_layout.handle(),
                 0,
                 &[gradient_descriptor_set],
                 &[],
@@ -453,7 +456,7 @@ impl RenderContext {
             };
             device.get_handle().cmd_push_constants(
                 cmd.handle(),
-                gradient_pipeline.layout(),
+                gradient_layout.handle(),
                 vk::ShaderStageFlags::COMPUTE,
                 0,
                 unsafe {
@@ -528,6 +531,7 @@ impl RenderContext {
             &cmd,
             self.draw_image.as_ref().unwrap(),
             self.frame_number,
+            &self.gradient_pipeline_layout,
             &self.gradient_pipeline,
             self.draw_image_descriptors.as_ref().unwrap().handle(),
         );

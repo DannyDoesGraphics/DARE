@@ -12,7 +12,6 @@ use crate::traits::Destructible;
 pub struct ComputePipeline {
     device: crate::device::LogicalDevice,
     handle: vk::Pipeline,
-    layout: vk::PipelineLayout,
 }
 
 impl Destructible for ComputePipeline {
@@ -21,13 +20,6 @@ impl Destructible for ComputePipeline {
         trace!("Destroying VkPipeline {:p}", self.handle);
 
         unsafe {
-            if self.layout != vk::PipelineLayout::null() {
-                #[cfg(feature = "log-lifetimes")]
-                trace!("Destroying VkPipelineLayout {:p}", self.layout);
-                self.device
-                    .get_handle()
-                    .destroy_pipeline_layout(self.layout, None);
-            }
             self.device.get_handle().destroy_pipeline(self.handle, None);
         }
     }
@@ -40,10 +32,6 @@ impl super::Pipeline for ComputePipeline {
 
     fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
-    }
-
-    fn layout(&self) -> vk::PipelineLayout {
-        self.layout
     }
 }
 
@@ -113,7 +101,6 @@ impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
         Ok(ComputePipeline {
             device,
             handle: pipeline,
-            layout: self.layout.unwrap(),
         })
     }
 }
