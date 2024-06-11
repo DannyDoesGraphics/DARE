@@ -12,6 +12,5 @@ pub mod compute;
 pub mod traits;
 
 pub mod graphics;
-pub mod pipeline_layout_builder;
 mod pipeline_layout;
-
+pub mod pipeline_layout_builder;

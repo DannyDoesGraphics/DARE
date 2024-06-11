@@ -121,7 +121,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-            .unwrap();
+        .unwrap();
         let allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -135,19 +135,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                    .unwrap();
+                .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -174,7 +174,7 @@ impl RenderContext {
                 name: None,
             },
         )
-            .unwrap();
+        .unwrap();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(
@@ -193,7 +193,7 @@ impl RenderContext {
             device.clone(),
             get_local_path("shaders/compiled/gradient.comp.spv"),
         )
-            .unwrap();
+        .unwrap();
         let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
             .replace_layout(gradient_pipeline_layout.handle())
             .replace_shader(compute_draw_shader, vk::ShaderStageFlags::COMPUTE)
@@ -236,7 +236,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-            .unwrap();
+        .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -308,7 +308,7 @@ impl RenderContext {
             location: dagal::allocators::MemoryLocation::GpuOnly,
             name: Some("Draw Image"),
         })
-            .unwrap();
+        .unwrap();
         let image_view =
             dagal::resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -330,7 +330,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-                .unwrap();
+            .unwrap();
         self.draw_image = Some(image);
         self.draw_image_view = Some(image_view);
         // update descriptors
@@ -345,7 +345,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-                .unwrap(),
+            .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),

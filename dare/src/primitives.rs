@@ -54,7 +54,7 @@ impl GPUMeshBuffer {
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                     | vk::BufferUsageFlags::INDEX_BUFFER,
             })
-                .unwrap();
+            .unwrap();
         let vertex_buffer_handle = gpu_resource_table
             .new_buffer(ResourceInput::ResourceCI(
                 resource::BufferCreateInfo::NewEmptyBuffer {
@@ -65,7 +65,8 @@ impl GPUMeshBuffer {
                     usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                }))
+                },
+            ))
             .unwrap();
         index_buffer.upload(immediate, allocator, indices).unwrap(); // fuck it lol
         gpu_resource_table
@@ -166,8 +167,12 @@ pub struct MaterialInstance {
 impl Drop for MaterialInstance {
     fn drop(&mut self) {
         if self.color_image_sampler != self.metal_rough_image_sampler {
-            self.gpu_rt.free_sampler(self.color_image_sampler.clone()).unwrap();
-            self.gpu_rt.free_sampler(self.color_image_sampler.clone()).unwrap();
+            self.gpu_rt
+                .free_sampler(self.color_image_sampler.clone())
+                .unwrap();
+            self.gpu_rt
+                .free_sampler(self.color_image_sampler.clone())
+                .unwrap();
         }
     }
 }
@@ -266,21 +271,26 @@ impl GLTF_Metallic_Roughness {
         }
     }
 
-    pub fn write_material(&self,
-                          gpu_rt: &mut GPUResourceTable<GPUAllocatorImpl>,
-                          immediate: &mut ImmediateSubmit,
-                          allocator: &mut ArcAllocator<GPUAllocatorImpl>,
-                          pass: MaterialPass,
-                          resources: MaterialResources) -> MaterialInstance {
-        let data_buffer = gpu_rt.new_buffer(
-            ResourceInput::ResourceCI(resource::BufferCreateInfo::NewEmptyBuffer {
-                device: gpu_rt.get_device().clone(),
-                allocator,
-                size: mem::size_of::<CMaterial>() as vk::DeviceSize,
-                memory_type: MemoryLocation::GpuOnly,
-                usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            })
-        ).unwrap();
+    pub fn write_material(
+        &self,
+        gpu_rt: &mut GPUResourceTable<GPUAllocatorImpl>,
+        immediate: &mut ImmediateSubmit,
+        allocator: &mut ArcAllocator<GPUAllocatorImpl>,
+        pass: MaterialPass,
+        resources: MaterialResources,
+    ) -> MaterialInstance {
+        let data_buffer = gpu_rt
+            .new_buffer(ResourceInput::ResourceCI(
+                resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: gpu_rt.get_device().clone(),
+                    allocator,
+                    size: mem::size_of::<CMaterial>() as vk::DeviceSize,
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                },
+            ))
+            .unwrap();
 
         let handle = MaterialInstance {
             color_factors: glam::Vec4::ZERO,
@@ -293,10 +303,12 @@ impl GLTF_Metallic_Roughness {
             gpu_rt: gpu_rt.clone(),
         };
         // upload
-        gpu_rt.with_buffer_mut(&handle.data_buffer, |buffer| {
-            let c_material = handle.to_c_material();
-            buffer.upload(immediate, allocator, &[c_material]).unwrap();
-        }).unwrap();
+        gpu_rt
+            .with_buffer_mut(&handle.data_buffer, |buffer| {
+                let c_material = handle.to_c_material();
+                buffer.upload(immediate, allocator, &[c_material]).unwrap();
+            })
+            .unwrap();
         handle
     }
 }
@@ -334,7 +346,7 @@ pub struct RenderObject {
 
     transform: glam::Mat4,
     vertex_handle: Handle<resource::Buffer<GPUAllocatorImpl>>,
-    gpu_rt: GPUResourceTable<GPUAllocatorImpl>
+    gpu_rt: GPUResourceTable<GPUAllocatorImpl>,
 }
 
 impl Drop for RenderObject {

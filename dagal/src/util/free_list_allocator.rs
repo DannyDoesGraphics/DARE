@@ -8,7 +8,7 @@ use derivative::Derivative;
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 
-#[derive(Copy, PartialOrd, Eq, )]
+#[derive(Copy, PartialOrd, Eq)]
 pub struct Handle<T> {
     id: u64,
     _marker: PhantomData<T>,

@@ -71,7 +71,7 @@ impl PipelineLayoutBuilder {
                 create_info: pipeline_ci,
                 name: None,
                 device,
-            }
+            },
         )
     }
 }
