@@ -1,4 +1,5 @@
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
 use dagal::allocators::{ArcAllocator, GPUAllocatorImpl, MemoryLocation};
@@ -25,50 +26,66 @@ pub struct Vertex {
 }
 
 pub struct GPUMeshBuffer {
-    pub index_buffer: resource::Buffer<GPUAllocatorImpl>,
+    pub index_buffer: Handle<resource::Buffer<GPUAllocatorImpl>>,
     pub vertex_buffer: Handle<resource::Buffer<GPUAllocatorImpl>>,
     gpu_rt: GPUResourceTable<GPUAllocatorImpl>,
 }
 
 impl Drop for GPUMeshBuffer {
     fn drop(&mut self) {
-        self.gpu_rt.free_buffer(self.vertex_buffer.clone()).unwrap()
+        self.gpu_rt.free_buffer(self.vertex_buffer.clone()).unwrap();
+        self.gpu_rt.free_buffer(self.index_buffer.clone()).unwrap();
     }
 }
 
 impl GPUMeshBuffer {
     pub fn new(
-        allocator: &mut dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-        immediate: &mut dagal::util::ImmediateSubmit,
+        allocator: &mut ArcAllocator<GPUAllocatorImpl>,
+        immediate: &mut ImmediateSubmit,
         gpu_resource_table: &mut GPUResourceTable<GPUAllocatorImpl>,
         indices: &[u32],
         vertices: &[Vertex],
         name: Option<String>,
     ) -> Self {
-        let mut index_buffer =
-            resource::Buffer::<GPUAllocatorImpl>::new(resource::BufferCreateInfo::NewEmptyBuffer {
+        let mut index_buffer = gpu_resource_table.new_buffer(ResourceInput::ResourceCI(
+            resource::BufferCreateInfo::NewEmptyBuffer {
                 device: immediate.get_device().clone(),
                 allocator,
                 size: mem::size_of_val(indices) as vk::DeviceSize,
-                memory_type: dagal::allocators::MemoryLocation::GpuOnly,
+                memory_type: MemoryLocation::GpuOnly,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST
-                    | vk::BufferUsageFlags::INDEX_BUFFER,
-            })
-            .unwrap();
+                    | vk::BufferUsageFlags::INDEX_BUFFER
+                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            }))
+                                                 .unwrap();
         let vertex_buffer_handle = gpu_resource_table
             .new_buffer(ResourceInput::ResourceCI(
                 resource::BufferCreateInfo::NewEmptyBuffer {
                     device: immediate.get_device().clone(),
                     allocator,
                     size: mem::size_of_val(vertices) as vk::DeviceSize,
-                    memory_type: dagal::allocators::MemoryLocation::GpuOnly,
+                    memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 },
             ))
             .unwrap();
-        index_buffer.upload(immediate, allocator, indices).unwrap(); // fuck it lol
+        gpu_resource_table.with_buffer_mut(&index_buffer, |buf| {
+            buf.upload(immediate, allocator, indices).unwrap();
+            if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
+                if let Some(name) = name.as_deref() {
+                    let index_name = {
+                        let mut n = name.to_string();
+                        n.push_str(" index");
+                        n
+                    };
+                    buf
+                        .set_name(debug_utils, index_name.as_str())
+                        .unwrap();
+                }
+            }
+        }).unwrap();
         gpu_resource_table
             .with_buffer_mut(&vertex_buffer_handle, |buffer| {
                 buffer
@@ -87,18 +104,6 @@ impl GPUMeshBuffer {
             })
             .unwrap();
 
-        if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
-            if let Some(name) = name {
-                let index_name = {
-                    let mut n = name.clone();
-                    n.push_str(" index");
-                    n
-                };
-                index_buffer
-                    .set_name(debug_utils, index_name.as_str())
-                    .unwrap();
-            }
-        }
         Self {
             index_buffer,
             vertex_buffer: vertex_buffer_handle,
@@ -113,10 +118,10 @@ pub struct GPUDrawPushConstants {
     pub vertex_buffer_id: u32,
 }
 
-#[derive(Debug, Clone, Copy, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct GeometrySurface {
     pub start_index: u32,
     pub count: u32,
+    pub material: Arc<MaterialInstance>,
 }
 
 pub struct MeshAsset {
@@ -154,14 +159,17 @@ pub struct MaterialInstance {
     pub color_factors: glam::Vec4,
     pub metal_rough_factors: glam::Vec4,
 
-    pub color_image: AllocatedImage<GPUAllocatorImpl>,
+    pub color_image: ManuallyDrop<AllocatedImage<GPUAllocatorImpl>>,
     pub color_image_sampler: Handle<resource::Sampler>,
 
-    pub metal_rough_image: AllocatedImage<GPUAllocatorImpl>,
+    pub metal_rough_image: ManuallyDrop<AllocatedImage<GPUAllocatorImpl>>,
     pub metal_rough_image_sampler: Handle<resource::Sampler>,
 
     pub data_buffer: Handle<resource::Buffer<GPUAllocatorImpl>>,
     pub gpu_rt: GPUResourceTable<GPUAllocatorImpl>,
+
+    pub pipeline: GPUMaterialPipeline,
+    pub pass_type: MaterialPass,
 }
 
 impl Drop for MaterialInstance {
@@ -173,7 +181,19 @@ impl Drop for MaterialInstance {
             self.gpu_rt
                 .free_sampler(self.color_image_sampler.clone())
                 .unwrap();
+        } else {
+            self.gpu_rt
+                .free_sampler(self.color_image_sampler.clone())
+                .unwrap();
         }
+        // SAFETY: this is literally the drop function
+        unsafe {
+            if self.color_image != self.metal_rough_image {
+                ManuallyDrop::drop(&mut self.metal_rough_image)
+            }
+            ManuallyDrop::drop(&mut self.color_image);
+        }
+        self.gpu_rt.free_buffer(self.data_buffer.clone()).unwrap();
     }
 }
 
@@ -184,24 +204,27 @@ pub struct MaterialResources {
     pub metal_sampler: Handle<resource::Sampler>,
 }
 
-pub struct GLTF_Metallic_Roughness_inner {
-    pub transparent_pipeline: dagal::pipelines::GraphicsPipeline,
-    pub opaque_pipeline: dagal::pipelines::GraphicsPipeline,
-    pub layout: dagal::pipelines::PipelineLayout,
-}
-
 #[derive(Clone)]
-pub struct GLTF_Metallic_Roughness {
-    pub inner: Arc<GLTF_Metallic_Roughness_inner>,
+pub struct GltfMetallicRoughness {
+    pub transparent_pipeline: GPUMaterialPipeline,
+    pub opaque_pipeline: GPUMaterialPipeline,
 }
 
 #[repr(C)]
 pub struct GPUMaterialPushConstants {
-    material_index: u32,
-    render_matrix: glam::Mat4,
+    pub material_index: u32,
+    pub scene_index: u64,
+    pub vertex_index: u32,
+    pub render_matrix: glam::Mat4,
 }
 
-impl GLTF_Metallic_Roughness {
+#[derive(Clone)]
+pub struct GPUMaterialPipeline {
+    pub pipeline: Arc<dagal::pipelines::GraphicsPipeline>,
+    pub layout: Arc<dagal::pipelines::PipelineLayout>,
+}
+
+impl GltfMetallicRoughness {
     pub fn new(render_context: &mut RenderContext) -> Self {
         let layout = dagal::pipelines::PipelineLayoutBuilder::default()
             .push_bindless_gpu_resource_table(&render_context.gpu_resource_table)
@@ -213,12 +236,14 @@ impl GLTF_Metallic_Roughness {
                 vk::PipelineLayoutCreateFlags::empty(),
             )
             .unwrap();
+        let layout = Arc::new(layout);
         let pipeline_builder = dagal::pipelines::GraphicsPipelineBuilder::default()
             .replace_layout(layout.handle())
             .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
             .set_polygon_mode(vk::PolygonMode::FILL)
+            .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
             .set_multisampling_none()
-            .disable_blending()
+            .enable_blending_alpha_blend()
             .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
             .set_depth_format(render_context.depth_image.as_ref().unwrap().format())
             .set_color_attachment(render_context.draw_image.as_ref().unwrap().format());
@@ -263,11 +288,14 @@ impl GLTF_Metallic_Roughness {
             .build(render_context.device.clone())
             .unwrap();
         Self {
-            inner: Arc::new(GLTF_Metallic_Roughness_inner {
-                transparent_pipeline,
-                opaque_pipeline,
-                layout,
-            }),
+            transparent_pipeline: GPUMaterialPipeline {
+                pipeline: Arc::new(transparent_pipeline),
+                layout: layout.clone(),
+            },
+            opaque_pipeline: GPUMaterialPipeline {
+                pipeline: Arc::new(opaque_pipeline),
+                layout: layout.clone(),
+            },
         }
     }
 
@@ -287,20 +315,26 @@ impl GLTF_Metallic_Roughness {
                     size: mem::size_of::<CMaterial>() as vk::DeviceSize,
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 },
             ))
             .unwrap();
 
         let handle = MaterialInstance {
-            color_factors: glam::Vec4::ZERO,
-            metal_rough_factors: glam::Vec4::ZERO,
-            color_image: resources.color_image,
+            color_factors: glam::Vec4::ONE,
+            metal_rough_factors: glam::Vec4::ONE,
+            color_image: ManuallyDrop::new(resources.color_image),
             color_image_sampler: resources.color_sampler,
-            metal_rough_image: resources.metal_rough_image,
+            metal_rough_image: ManuallyDrop::new(resources.metal_rough_image),
             metal_rough_image_sampler: resources.metal_sampler,
             data_buffer,
             gpu_rt: gpu_rt.clone(),
+            pass_type: pass,
+            pipeline: match pass {
+                MaterialPass::MainColor | MaterialPass::Other => self.opaque_pipeline.clone(),
+                MaterialPass::Transparent => self.transparent_pipeline.clone(),
+            },
         };
         // upload
         gpu_rt
@@ -346,6 +380,7 @@ pub struct RenderObject {
 
     transform: glam::Mat4,
     vertex_handle: Handle<resource::Buffer<GPUAllocatorImpl>>,
+    index_handle: Handle<resource::Buffer<GPUAllocatorImpl>>,
     gpu_rt: GPUResourceTable<GPUAllocatorImpl>,
 }
 

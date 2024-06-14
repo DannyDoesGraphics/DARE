@@ -15,8 +15,7 @@ pub struct Mesh<A: Allocator = GPUAllocatorImpl> {
 #[repr(C)]
 #[derive(Debug)]
 pub struct CMesh {
-    position: glam::Vec3,
-    scale: glam::Vec3,
+    transform: glam::Mat4,
     vertex_buffer: u32,
     normal_buffer: u32,
     tangent_buffer: u32,
@@ -27,8 +26,7 @@ pub struct CMesh {
 impl From<Mesh> for CMesh {
     fn from(value: Mesh) -> Self {
         Self {
-            position: value.position,
-            scale: value.scale,
+            transform: glam::Mat4::from_translation(value.position) * glam::Mat4::from_scale(value.scale),
             vertex_buffer: 0,
             normal_buffer: 0,
             tangent_buffer: 0,

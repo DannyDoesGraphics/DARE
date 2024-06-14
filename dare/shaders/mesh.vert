@@ -29,12 +29,11 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 void main()
 {
     Vertex v = VertexBuffer(buffer_addresses[pc.vertex_buffer_index]).vertices[gl_VertexIndex];
-    SceneData scene_data = SceneData(buffer_addresses[pc.scene_data_index]);
     GLTFMaterialData material_data = GLTFMaterialData(buffer_addresses[pc.material_buffer_index]);
 
     vec4 position = vec4(v.position, 1.0f);
 
-    gl_Position =  scene_data.view_proj * pc.render_matrix * position;
+    gl_Position =  pc.scene_data.view_proj * pc.render_matrix * position;
 
     outNormal = (pc.render_matrix * vec4(v.normal, 0.f)).xyz;
     outColor = v.color.xyz * material_data.color_factors.xyz;

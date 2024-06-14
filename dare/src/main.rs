@@ -1,29 +1,31 @@
+use std::{mem, path, ptr, slice};
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
-use std::{mem, path, ptr, slice};
 
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::{resource, winit};
+use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::descriptor::bindless::bindless::ResourceInput;
 use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
-use dagal::resource::traits::Resource;
+use dagal::resource::traits::{Nameable, Resource};
 use dagal::shader::ShaderCompiler;
 use dagal::traits::Destructible;
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::wsi::WindowDimensions;
-use dagal::{resource, winit};
 
+use crate::assets::node::{Mesh, Renderable};
 use crate::primitives::{
-    GLTF_Metallic_Roughness, GPUMeshBuffer, GeometrySurface, MaterialInstance, MaterialPass,
-    MaterialResources, MeshAsset, Vertex,
+    GeometrySurface, GltfMetallicRoughness, GPUMaterialPushConstants, GPUMeshBuffer,
+    MaterialInstance, MaterialPass, MaterialResources, MeshAsset, Vertex,
 };
 
 mod assets;
@@ -46,9 +48,7 @@ struct RenderContext {
     sampler: Option<Handle<resource::Sampler>>,
 
     test_meshes: Vec<Arc<MeshAsset>>,
-    mesh_pipeline: dagal::pipelines::GraphicsPipeline,
     gradient_pipeline: dagal::pipelines::ComputePipeline,
-    mesh_pipeline_layout: dagal::pipelines::PipelineLayout,
     gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
@@ -59,6 +59,12 @@ struct RenderContext {
     draw_image: Option<resource::Image<GPUAllocatorImpl>>,
     depth_image_view: Option<resource::ImageView>,
     depth_image: Option<resource::Image<GPUAllocatorImpl>>,
+
+    loaded_meshes: HashMap<String, Arc<Mesh>>,
+    draw_context: assets::draw_context::DrawContext,
+    default_data: Option<Arc<MaterialInstance>>,
+    metal_rough_material: Option<GltfMetallicRoughness>,
+    scene_data: resource::Buffer<GPUAllocatorImpl>,
 
     gpu_resource_table: GPUResourceTable,
 
@@ -78,9 +84,6 @@ struct RenderContext {
     debug_messenger: Option<dagal::device::DebugMessenger>,
     physical_device: dagal::device::PhysicalDevice,
     instance: dagal::core::Instance,
-
-    default_data: Option<MaterialInstance>,
-    metal_rough_material: Option<GLTF_Metallic_Roughness>,
 }
 
 struct Frame {
@@ -101,11 +104,17 @@ struct PushConstants {
     data4: glam::Vec4,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct AllocatedImage<A: Allocator = GPUAllocatorImpl> {
     pub image: Handle<resource::Image<A>>,
     pub image_view: Handle<resource::ImageView>,
     pub gpu_rt: GPUResourceTable<A>,
+}
+
+impl<A: Allocator> PartialEq for AllocatedImage<A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.image == other.image && self.image_view == other.image_view
+    }
 }
 
 impl<A: Allocator> Destructible for AllocatedImage<A> {
@@ -171,6 +180,7 @@ impl RenderContext {
                 shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
                 shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
                 shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                runtime_descriptor_array: vk::TRUE,
                 ..Default::default()
             })
             .attach_feature_1_0(vk::PhysicalDeviceFeatures {
@@ -196,7 +206,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-        .unwrap();
+            .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -211,19 +221,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                .unwrap();
+                    .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -252,7 +262,7 @@ impl RenderContext {
                 name: None,
             },
         )
-        .unwrap();
+            .unwrap();
 
         let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -280,42 +290,14 @@ impl RenderContext {
             .unwrap()
             .build(device.clone())
             .unwrap();
-
-        let mesh_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
-            .push_descriptor_sets(vec![gpu_resource_table.get_descriptor_layout().unwrap()])
-            .push_push_constant_struct::<primitives::GPUDrawPushConstants>(
-                vk::ShaderStageFlags::VERTEX,
-            )
-            .push_bindless_gpu_resource_table(&gpu_resource_table)
-            .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
-            .unwrap();
-        let mesh_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
-            .clear()
-            .replace_layout(mesh_pipeline_layout.handle())
-            .replace_shader_from_source_file(
-                device.clone(),
-                &compiler,
-                std::path::PathBuf::from("./dare/shaders/colored_triangle_mesh.vert"),
-                vk::ShaderStageFlags::VERTEX,
-            )
-            .unwrap()
-            .replace_shader_from_source_file(
-                device.clone(),
-                &compiler,
-                std::path::PathBuf::from("./dare/shaders/tex_image.frag"),
-                vk::ShaderStageFlags::FRAGMENT,
-            )
-            .unwrap()
-            .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-            .set_polygon_mode(vk::PolygonMode::FILL)
-            .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
-            .set_multisampling_none()
-            .enable_blending_alpha_blend()
-            .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
-            .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
-            .set_depth_format(vk::Format::D32_SFLOAT)
-            .build(device.clone())
-            .unwrap();
+        let mut scene_data = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+            device: device.clone(),
+            allocator: &mut allocator,
+            size: mem::size_of::<assets::scene_data::SceneData>() as vk::DeviceSize,
+            memory_type: MemoryLocation::CpuToGpu,
+            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
+        }).unwrap();
+        scene_data.set_name(device.get_debug_utils().unwrap(), "scene_data").unwrap();
 
         let mut app = Self {
             instance,
@@ -346,9 +328,7 @@ impl RenderContext {
             draw_image_descriptor_set_layout: draw_image_set_layout,
 
             gradient_pipeline,
-            mesh_pipeline,
             gradient_pipeline_layout,
-            mesh_pipeline_layout,
 
             test_meshes: vec![],
 
@@ -360,21 +340,24 @@ impl RenderContext {
 
             default_data: None,
             metal_rough_material: None,
+            loaded_meshes: Default::default(),
+            draw_context: Default::default(),
+            scene_data,
         };
         // create default images
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-                .new_sampler(ResourceInput::ResourceCI(
-                    resource::SamplerCreateInfo::FromCreateInfo {
-                        device: app.device.clone(),
-                        create_info: vk::SamplerCreateInfo::default()
-                            .mag_filter(vk::Filter::NEAREST)
-                            .min_filter(vk::Filter::NEAREST),
-                        name: None,
-                    },
-                ))
-                .unwrap(),
+               .new_sampler(ResourceInput::ResourceCI(
+                   resource::SamplerCreateInfo::FromCreateInfo {
+                       device: app.device.clone(),
+                       create_info: vk::SamplerCreateInfo::default()
+                           .mag_filter(vk::Filter::NEAREST)
+                           .min_filter(vk::Filter::NEAREST),
+                       name: None,
+                   },
+               ))
+               .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -440,8 +423,6 @@ impl RenderContext {
             Some("Magenta"),
             false,
         ));
-        let meshes = app.load_gltf_meshes(std::path::PathBuf::from("./dare/assets/basicmesh.glb"));
-        app.test_meshes = meshes;
         app
     }
 
@@ -452,7 +433,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-        .unwrap();
+            .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -493,7 +474,7 @@ impl RenderContext {
     }
 
     fn create_draw_image(&mut self) {
-        let image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+        let image = dagal::resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
             image_ci: vk::ImageCreateInfo {
                 s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -521,13 +502,13 @@ impl RenderContext {
                 _marker: Default::default(),
             },
             allocator: &mut self.allocator,
-            location: dagal::allocators::MemoryLocation::GpuOnly,
+            location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image =
-            dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+            resource::Image::new(resource::ImageCreateInfo::NewAllocated {
                 device: self.device.clone(),
                 image_ci: vk::ImageCreateInfo {
                     s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -552,13 +533,13 @@ impl RenderContext {
                     _marker: Default::default(),
                 },
                 allocator: &mut self.allocator,
-                location: dagal::allocators::MemoryLocation::GpuOnly,
+                location: MemoryLocation::GpuOnly,
                 name: Some("GBuffer Depth"),
             })
-            .unwrap();
+                .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view =
-            resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+            resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
                     s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                     p_next: ptr::null(),
@@ -567,16 +548,16 @@ impl RenderContext {
                     view_type: vk::ImageViewType::TYPE_2D,
                     format: image.format(),
                     components: Default::default(),
-                    subresource_range: dagal::resource::Image::image_subresource_range(
+                    subresource_range: resource::Image::image_subresource_range(
                         vk::ImageAspectFlags::COLOR,
                     ),
                     _marker: Default::default(),
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         let depth_image_view =
-            resource::ImageView::new(dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+            resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
                     s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                     p_next: ptr::null(),
@@ -585,14 +566,14 @@ impl RenderContext {
                     view_type: vk::ImageViewType::TYPE_2D,
                     format: depth_image.format(),
                     components: Default::default(),
-                    subresource_range: dagal::resource::Image::image_subresource_range(
+                    subresource_range: resource::Image::image_subresource_range(
                         vk::ImageAspectFlags::DEPTH,
                     ),
                     _marker: Default::default(),
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -610,7 +591,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-            .unwrap(),
+                .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -625,7 +606,7 @@ impl RenderContext {
                 .push_descriptor(dagal::descriptor::DescriptorInfo::Image(img_info)),
         ]);
         if self.metal_rough_material.is_none() {
-            let material_pipeline = GLTF_Metallic_Roughness::new(self);
+            let material_pipeline = GltfMetallicRoughness::new(self);
             let material_resources = MaterialResources {
                 color_image: self.white_image.take().unwrap(),
                 color_sampler: self.sampler.as_ref().unwrap().clone(),
@@ -640,6 +621,22 @@ impl RenderContext {
                 material_resources,
             );
             self.metal_rough_material = Some(material_pipeline);
+            let meshes = self.load_gltf_meshes(
+                std::path::PathBuf::from("./dare/assets/basicmesh.glb"),
+                Arc::new(material),
+            );
+            self.test_meshes = meshes;
+            for mesh in self.test_meshes.iter() {
+                self.loaded_meshes.insert(mesh.name.clone(), Arc::new(
+                    Mesh {
+                        parent: Default::default(),
+                        children: vec![],
+                        mesh: mesh.clone(),
+                        local_transform: glam::Mat4::IDENTITY,
+                        world_transform: glam::Mat4::IDENTITY,
+                    }
+                ));
+            }
         }
     }
 
@@ -675,6 +672,22 @@ impl RenderContext {
         self.resize_requested = false;
     }
 
+    fn update_scene(&mut self) {
+        self.draw_context.opaque_surfaces.clear();
+        self.loaded_meshes.get("Suzanne").unwrap().draw(glam::Mat4::IDENTITY, &mut self.draw_context);
+
+        let mut scene_data = self.scene_data.mapped_ptr().unwrap().cast::<assets::scene_data::SceneData>();
+        let extent = self.draw_image.as_ref().unwrap().extent();
+        unsafe {
+            let mut proj = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
+            let view = glam::Mat4::perspective_rh(70.0_f32.to_radians(), extent.width as f32 / extent.height as f32, 10000.0, 0.1);
+            proj.y_axis.y *= -1.0;
+            scene_data.as_mut().proj = proj;
+            scene_data.as_mut().view = view;
+            scene_data.as_mut().view_proj = view * proj;
+        }
+    }
+
     // Draw into the background
     fn draw_background(
         device: &dagal::device::LogicalDevice,
@@ -690,7 +703,7 @@ impl RenderContext {
             float32: [0.0, 0.0, flash as f32, 0.0],
         };
         let clear_range =
-            dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
+            resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
         unsafe {
             device.get_handle().cmd_bind_pipeline(
                 cmd.handle(),
@@ -754,10 +767,9 @@ impl RenderContext {
         draw_image: &resource::Image,
         draw_image_view: &resource::ImageView,
         depth_image_view: &resource::ImageView,
-        mesh_pipeline: &dagal::pipelines::GraphicsPipeline,
-        mesh_layout: &dagal::pipelines::PipelineLayout,
+        draw_context: &assets::draw_context::DrawContext,
+        scene_data: &resource::Buffer<GPUAllocatorImpl>,
         gpu_rt: &GPUResourceTable,
-        meshes: Vec<Arc<MeshAsset>>,
     ) {
         let dynamic_rendering_context = cmd.dynamic_rendering();
         let dynamic_rendering_context = dynamic_rendering_context
@@ -771,19 +783,6 @@ impl RenderContext {
                 height: draw_image.extent().height,
             });
         unsafe {
-            device.get_handle().cmd_bind_pipeline(
-                cmd.handle(),
-                vk::PipelineBindPoint::GRAPHICS,
-                mesh_pipeline.handle(),
-            );
-            device.get_handle().cmd_bind_descriptor_sets(
-                cmd.handle(),
-                vk::PipelineBindPoint::GRAPHICS,
-                mesh_layout.handle(),
-                0,
-                &[gpu_rt.get_descriptor_set().unwrap()],
-                &[],
-            );
             let viewport = vk::Viewport {
                 x: 0.0,
                 y: 0.0,
@@ -805,51 +804,65 @@ impl RenderContext {
             device
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
-            let view = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -2.5));
-            let mut projection = glam::Mat4::perspective_rh(
-                70_f32.to_radians(),
-                draw_image.extent().width as f32 / draw_image.extent().height as f32,
-                10000.0,
-                0.1,
-            );
-            projection.y_axis.y *= -1.0;
-            let world_matrix = projection * view;
-            let mesh_render = meshes.get(2).unwrap();
-            let push_constants = primitives::GPUDrawPushConstants {
-                world_matrix,
-                vertex_buffer_id: mesh_render.mesh_buffers.vertex_buffer.id() as u32,
-            };
-            device.get_handle().cmd_push_constants(
-                cmd.handle(),
-                mesh_layout.handle(),
-                vk::ShaderStageFlags::VERTEX,
-                0,
-                unsafe {
-                    slice::from_raw_parts(
-                        &push_constants as *const primitives::GPUDrawPushConstants as *const u8,
-                        mem::size_of::<primitives::GPUDrawPushConstants>(),
-                    )
-                },
-            );
-            device.get_handle().cmd_bind_index_buffer(
-                cmd.handle(),
-                mesh_render.mesh_buffers.index_buffer.handle(),
-                0,
-                vk::IndexType::UINT32,
-            );
-            device.get_handle().cmd_draw_indexed(
-                cmd.handle(),
-                mesh_render.surfaces[0].count,
-                1,
-                mesh_render.surfaces[0].start_index,
-                0,
-                0,
-            );
+            for draw in draw_context.opaque_surfaces.iter() {
+                device.get_handle().cmd_bind_pipeline(
+                    cmd.handle(),
+                    vk::PipelineBindPoint::GRAPHICS,
+                    draw.material.pipeline.pipeline.handle(),
+                );
+                device.get_handle().cmd_bind_descriptor_sets(
+                    cmd.handle(),
+                    vk::PipelineBindPoint::GRAPHICS,
+                    draw.material.pipeline.layout.handle(),
+                    0,
+                    &[gpu_rt.get_descriptor_set().unwrap()],
+                    &[],
+                );
+                device.get_handle().cmd_bind_index_buffer(
+                    cmd.handle(),
+                    gpu_rt
+                        .with_buffer(&draw.index_buffer, |buf| buf.handle())
+                        .unwrap(),
+                    0,
+                    vk::IndexType::UINT32,
+                );
+                let push_constants = GPUMaterialPushConstants {
+                    material_index: draw.material.data_buffer.id() as u32,
+                    scene_index: scene_data.address(),
+                    vertex_index: draw.vertex_buffer.id() as u32,
+                    render_matrix: draw.transform,
+                };
+                device.get_handle().cmd_push_constants(
+                    cmd.handle(),
+                    draw.material.pipeline.layout.handle(),
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                    0,
+                    unsafe {
+                        slice::from_raw_parts(
+                            &push_constants as *const GPUMaterialPushConstants as *const u8,
+                            mem::size_of::<GPUMaterialPushConstants>(),
+                        )
+                    },
+                );
+                device.get_handle().cmd_draw_indexed(
+                    cmd.handle(),
+                    draw.index_count,
+                    1,
+                    draw.first_index,
+                    0,
+                    0,
+                );
+            }
+
             dynamic_rendering_context.end_rendering();
         }
     }
 
-    fn load_gltf_meshes(&mut self, path: path::PathBuf) -> Vec<Arc<MeshAsset>> {
+    fn load_gltf_meshes(
+        &mut self,
+        path: path::PathBuf,
+        default_material: Arc<MaterialInstance>,
+    ) -> Vec<Arc<MeshAsset>> {
         let (document, buffers, images) = gltf::import(path).unwrap();
         let mut meshes: Vec<Arc<MeshAsset>> = Vec::new();
         let mut immediate_submit =
@@ -921,7 +934,11 @@ impl RenderContext {
                     }
                 }
 
-                surfaces.push(GeometrySurface { start_index, count })
+                surfaces.push(GeometrySurface {
+                    start_index,
+                    count,
+                    material: default_material.clone(),
+                })
             }
 
             // display normals instead
@@ -984,7 +1001,7 @@ impl RenderContext {
             },
             name,
         })
-        .unwrap();
+            .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -1006,7 +1023,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-        .unwrap();
+            .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -1040,7 +1057,7 @@ impl RenderContext {
                 memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-            .unwrap();
+                .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -1092,6 +1109,7 @@ impl RenderContext {
 
     // Deals with drawing
     fn draw(&mut self) {
+        self.update_scene();
         // clear out last frame
         let swapchain_frame = self
             .frames
@@ -1177,10 +1195,9 @@ impl RenderContext {
             self.draw_image.as_ref().unwrap(),
             self.draw_image_view.as_ref().unwrap(),
             self.depth_image_view.as_ref().unwrap(),
-            &self.mesh_pipeline,
-            &self.mesh_pipeline_layout,
+            &self.draw_context,
+            &self.scene_data,
             &self.gpu_resource_table,
-            self.test_meshes.clone(),
         );
         self.draw_image.as_ref().unwrap().transition(
             &cmd,

@@ -1,7 +1,7 @@
+use std::{mem, ptr};
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::NonNull;
-use std::{mem, ptr};
 
 use anyhow::Result;
 use ash::vk;
@@ -81,7 +81,7 @@ impl<A: Allocator> Buffer<A> {
         allocator: &mut ArcAllocator<A>,
         content: &[T],
     ) -> Result<()> {
-        if (mem::size_of_val(content) as vk::DeviceSize) < self.size {
+        if (mem::size_of_val(content) as vk::DeviceSize) > self.size {
             return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
         }
         unsafe { self.upload_arbitrary::<T>(immediate, allocator, content) }
@@ -257,7 +257,7 @@ impl<A: Allocator> Nameable for Buffer<A> {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         self.name = Some(name.to_string());
         Ok(())
