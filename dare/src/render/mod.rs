@@ -1,4 +1,5 @@
 pub use texture::*;
+pub use texture::*;
 
 /// Deals with primitives relating to rendering
 
