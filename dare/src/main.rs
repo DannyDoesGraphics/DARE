@@ -29,6 +29,8 @@ use crate::primitives::{
 };
 
 mod assets;
+mod render;
+mod util;
 mod primitives;
 mod ray_tracing;
 
