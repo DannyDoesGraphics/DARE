@@ -87,47 +87,71 @@ mod tests {
 
     use super::*;
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestData {
+        value: i32,
+    }
+
     #[test]
     fn test_insert() {
         let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
-        assert_eq!(slot.id, 0);
-        assert_eq!(slot.generation, 0);
+        let data = TestData { value: 42 };
+
+        let slot = map.insert(data.clone());
+
+        assert!(map.is_valid_slot(&slot));
+        assert_eq!(map.data[slot.id as usize].data, Some(data));
     }
 
     #[test]
     fn test_remove() {
         let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
-        assert_eq!(map.remove(slot).unwrap(), 1);
-    }
+        let data = TestData { value: 42 };
 
-    #[test]
-    fn test_remove_invalid_slot() {
-        let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
-        assert!(map.remove(Slot::new(slot.id + 1, None)).is_err());
+        let slot = map.insert(data.clone());
+        let removed_data = map.remove(slot.clone()).expect("Failed to remove data");
+
+        assert_eq!(removed_data, data);
+        assert!(!map.is_valid_slot(&slot));
+        assert!(map.data[slot.id as usize].data.is_none());
     }
 
     #[test]
     fn test_is_valid_slot() {
         let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
+        let data = TestData { value: 42 };
+
+        let slot = map.insert(data);
         assert!(map.is_valid_slot(&slot));
-    }
 
-    #[test]
-    fn test_is_valid_slot_invalid_slot() {
-        let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
-        assert!(!map.is_valid_slot(&Slot::new(slot.id + 1, None)));
-    }
+        let invalid_slot = Slot::new(999, None); // An invalid slot
+        assert!(!map.is_valid_slot(&invalid_slot));
 
-    #[test]
-    fn test_is_valid_slot_invalid_slot_generation() {
-        let mut map = SparseSlotMap::new(10);
-        let slot = map.insert(1);
-        map.remove(slot).unwrap();
+        let removed_slot = map.remove(slot.clone()).expect("Failed to remove data");
         assert!(!map.is_valid_slot(&slot));
+    }
+
+    #[test]
+    fn test_reuse_slots() {
+        let mut map = SparseSlotMap::new(10);
+        let data1 = TestData { value: 42 };
+        let data2 = TestData { value: 43 };
+
+        let slot1 = map.insert(data1);
+        map.remove(slot1.clone()).expect("Failed to remove data");
+
+        let slot2 = map.insert(data2.clone());
+        assert_eq!(slot1.id, slot2.id); // Slot should be reused
+        assert!(map.is_valid_slot(&slot2));
+        assert_eq!(map.data[slot2.id as usize].data, Some(data2));
+    }
+
+    #[test]
+    fn test_remove_invalid_slot() {
+        let mut map: SparseSlotMap<TestData> = SparseSlotMap::new(10);
+        let invalid_slot = Slot::new(999, None); // An invalid slot
+
+        let result = map.remove(invalid_slot);
+        assert!(result.is_err());
     }
 }
