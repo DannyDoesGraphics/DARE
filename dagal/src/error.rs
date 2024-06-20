@@ -40,6 +40,9 @@ pub enum DagalError {
 
     #[error("Current memory allocation is empty/freed")]
     EmptyMemoryAllocation,
+
+    #[error("No backing buffer found")]
+    NoSuperBuffer,
 }
 
 impl<T> From<PoisonError<T>> for DagalError {
