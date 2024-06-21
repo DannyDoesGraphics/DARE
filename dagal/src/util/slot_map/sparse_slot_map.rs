@@ -81,7 +81,7 @@ impl<T> SparseSlotMap<T> {
     }
 
     /// Count # of used slots
-    pub fn count_used(&mut self) -> usize {
+    pub fn count_used(&self) -> usize {
         self.data.len()
     }
 }
