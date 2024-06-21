@@ -23,9 +23,10 @@ impl<A: Allocator> Suballocation<A> {
     /// Acquire a mapped pointer, if one exists with the proper offsets
     pub fn mapped_ptr(&self) -> Option<NonNull<c_void>> {
         // SAFETY: it is already checked prior this suballocation can even fit inside the buffer
-        self.buffer.upgrade()?.mapped_ptr().and_then(|ptr| unsafe {
-            NonNull::new(ptr.as_ptr().add(self.offset as usize))
-        })
+        self.buffer
+            .upgrade()?
+            .mapped_ptr()
+            .and_then(|ptr| unsafe { NonNull::new(ptr.as_ptr().add(self.offset as usize)) })
     }
 
     /// Copy data to a mapped pointer on the buffer, if one exists
@@ -33,16 +34,19 @@ impl<A: Allocator> Suballocation<A> {
         if std::mem::size_of_val(data) > self.length as usize {
             return Err(anyhow::Error::from(DagalError::InsufficientSpace));
         }
-        self.mapped_ptr.map_or(Err(anyhow::Error::from(DagalError::NoMappedPointer)), |mut mapped_ptr| {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    data.as_ptr() as *const _ as *const c_void,
-                    mapped_ptr.as_mut() as *mut _ as *mut c_void,
-                    std::mem::size_of_val(data)
-                );
-            }
-            Ok(())
-        })
+        self.mapped_ptr.map_or(
+            Err(anyhow::Error::from(DagalError::NoMappedPointer)),
+            |mut mapped_ptr| {
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        data.as_ptr() as *const _ as *const c_void,
+                        mapped_ptr.as_mut() as *mut _ as *mut c_void,
+                        std::mem::size_of_val(data),
+                    );
+                }
+                Ok(())
+            },
+        )
     }
 
     /// Get the offset
@@ -70,11 +74,9 @@ impl<'a, A: Allocator + 'a> Resource<'a> for SuballocatedBuffer<A> {
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
            where
-               Self: Sized
+               Self: Sized,
     {
-        let buffer: Arc<super::Buffer<A>> = Arc::new(
-            super::Buffer::new(create_info)?
-        );
+        let buffer: Arc<super::Buffer<A>> = Arc::new(super::Buffer::new(create_info)?);
         Ok(Self {
             buffer,
             suballocations: crate::util::SparseSlotMap::new(0),
@@ -95,9 +97,13 @@ impl<'a, A: Allocator + 'a> Resource<'a> for SuballocatedBuffer<A> {
 }
 
 impl<A: Allocator> SuballocatedBuffer<A> {
-    pub fn create_suballocation(&mut self, offset: vk::DeviceSize, length: vk::DeviceSize) -> Result<Slot<Suballocation<A>>> {
+    pub fn create_suballocation(
+        &mut self,
+        offset: vk::DeviceSize,
+        length: vk::DeviceSize,
+    ) -> Result<Slot<Suballocation<A>>> {
         if self.buffer.get_size() < offset + length {
-            return Err(anyhow::Error::from(DagalError::InsufficientSpace))
+            return Err(anyhow::Error::from(DagalError::InsufficientSpace));
         }
         Ok(self.suballocations.insert(Suballocation {
             buffer: Arc::downgrade(&self.buffer),
