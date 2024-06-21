@@ -79,6 +79,11 @@ impl<T> SparseSlotMap<T> {
             .map(|slot_union| *slot == slot_union.slot && slot_union.data.is_some())
             .unwrap_or(false);
     }
+
+    /// Count # of used slots
+    pub fn count_used(&mut self) -> usize {
+        self.data.len()
+    }
 }
 
 #[cfg(test)]
