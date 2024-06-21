@@ -139,10 +139,12 @@ impl<T> FreeList<T> {
         handle: &Handle<T>,
         f: F,
     ) -> Result<R> {
+        // SAFETY: Generic foes type to be that of free list
         unsafe { self.untyped_with_handle_mut(handle, f) }
     }
 
     pub fn is_valid(&self, handle: &Handle<T>) -> Result<bool> {
+        // SAFETY: Generic forces type to be that of free list
         unsafe { self.untyped_is_valid(handle) }
     }
 
@@ -207,6 +209,16 @@ impl<T> FreeList<T> {
                 Err(anyhow::Error::from(crate::DagalError::PoisonError)),
                 |data| Ok(f(data)),
             )
+    }
+
+    /// Count number of used slots in the free list
+    pub fn count_used(&self) -> Result<usize> {
+        Ok(self.inner
+               .write()
+               .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+            .resources
+            .iter()
+            .filter(|res| res.is_some()).count())
     }
 }
 
