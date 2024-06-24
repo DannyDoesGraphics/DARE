@@ -8,8 +8,7 @@ use std::ptr::NonNull;
 use anyhow::Result;
 use ash::vk;
 
-pub use arc_allocator::ArcAllocation;
-pub use arc_allocator::ArcAllocator;
+pub use arc_allocator::{ArcAllocation, ArcAllocator};
 #[cfg(feature = "gpu-allocator")]
 pub use gpu_allocator_impl::*;
 pub use memory_type::*;

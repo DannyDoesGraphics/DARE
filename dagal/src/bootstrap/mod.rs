@@ -8,8 +8,6 @@ pub mod swapchain;
 
 pub use instance::InstanceBuilder;
 pub use logical_device::LogicalDeviceBuilder;
-pub use physical_device::PhysicalDevice;
-pub use physical_device::PhysicalDeviceSelector;
-pub use physical_device::QueueAllocation;
+pub use physical_device::{PhysicalDevice, PhysicalDeviceSelector, QueueAllocation};
 pub use queue::QueueRequest;
 pub use swapchain::SwapchainBuilder;

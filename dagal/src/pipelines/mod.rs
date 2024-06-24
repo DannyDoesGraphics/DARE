@@ -1,9 +1,6 @@
-pub use compute::ComputePipeline;
-pub use compute::ComputePipelineBuilder;
-pub use graphics::GraphicsPipeline;
-pub use graphics::GraphicsPipelineBuilder;
-pub use pipeline_layout::PipelineLayout;
-pub use pipeline_layout::PipelineLayoutCreateInfo;
+pub use compute::{ComputePipeline, ComputePipelineBuilder};
+pub use graphics::{GraphicsPipeline, GraphicsPipelineBuilder};
+pub use pipeline_layout::{PipelineLayout, PipelineLayoutCreateInfo};
 pub use pipeline_layout_builder::PipelineLayoutBuilder;
 pub use traits::*;
 

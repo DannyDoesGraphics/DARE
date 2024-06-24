@@ -213,12 +213,14 @@ impl<T> FreeList<T> {
 
     /// Count number of used slots in the free list
     pub fn count_used(&self) -> Result<usize> {
-        Ok(self.inner
-               .write()
-               .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+        Ok(self
+            .inner
+            .write()
+            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
             .resources
             .iter()
-            .filter(|res| res.is_some()).count())
+            .filter(|res| res.is_some())
+            .count())
     }
 }
 
