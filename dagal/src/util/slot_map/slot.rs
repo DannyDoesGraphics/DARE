@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use derivative::Derivative;
 
-#[derive(Copy, Ord, PartialOrd, Eq, Derivative, Default)]
+#[derive(Copy, Ord, PartialOrd, Derivative, Default)]
 #[derivative(Debug)]
 pub struct Slot<T> {
     pub(super) id: u64,
@@ -27,6 +27,8 @@ impl<T> PartialEq for Slot<T> {
         self.id == other.id && self.generation == other.generation
     }
 }
+
+impl<T> Eq for Slot<T> {}
 
 impl<T> Hash for Slot<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
