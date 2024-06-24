@@ -13,6 +13,12 @@ use crate::util::FreeList;
 use crate::DagalError::PoisonError;
 
 #[derive(Debug)]
+pub enum GPUResource<'a, T: Resource<'a>> {
+    Resource(T),
+    Raw(T::HandleType),
+}
+
+#[derive(Debug)]
 struct GPUResourceTableInner<A: Allocator = GPUAllocatorImpl> {
     pool: crate::descriptor::DescriptorPool,
     set_layout: crate::descriptor::DescriptorSetLayout,
@@ -451,6 +457,11 @@ impl<A: Allocator> GPUResourceTable<A> {
                 f(typed_buffer)
             })
         }
+    }
+
+    /// Utility function to acquire device address
+    pub fn get_bda(&self, handle: &Handle<resource::Buffer<A>>) -> Result<vk::DeviceAddress> {
+        self.with_buffer(handle, |buf| buf.address())
     }
 
     /// Get even more images
