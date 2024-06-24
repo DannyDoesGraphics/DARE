@@ -1,7 +1,7 @@
-use std::{mem, ptr};
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::NonNull;
+use std::{mem, ptr};
 
 use anyhow::Result;
 use ash::vk;
@@ -88,6 +88,9 @@ impl<A: Allocator> Buffer<A> {
     }
 
     /// Upload arbitrary data to a buffer without any form of safety checking
+    ///
+    /// # Safety
+    /// We do not make guarantees the type you're uploading fits inside the buffer
     pub unsafe fn upload_arbitrary<T: Sized>(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
@@ -253,11 +256,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
 
 impl<A: Allocator> Nameable for Buffer<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::BUFFER;
-    fn set_name(
-        &mut self,
-        debug_utils: &ash::ext::debug_utils::Device,
-        name: &str,
-    ) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         self.name = Some(name.to_string());
         Ok(())
