@@ -1,7 +1,8 @@
-use anyhow::Result;
 use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::PathBuf;
+
+use anyhow::Result;
 
 /// Handles pre-processing GLSL shaders
 

@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::util::slot_map::Slot;
+use crate::DagalError;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SlotEntry<T> {
@@ -27,12 +28,21 @@ impl<T> PartialEq for SlotEntry<T> {
 /// 1 level of indirection due to direct handle mappings to the underlying data's location
 ///
 /// Faster deletion time as no data swaps must occur
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SparseSlotMap<T> {
     /// Store the data right next to it's handle
     data: Vec<SlotEntry<T>>,
     /// List of freed slots
     free_list: Vec<usize>,
+}
+
+impl<T> Default for SparseSlotMap<T> {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+            free_list: Vec::new(),
+        }
+    }
 }
 
 impl<T> SparseSlotMap<T> {
@@ -64,7 +74,7 @@ impl<T> SparseSlotMap<T> {
     /// Remove an element from a SparseSlotMap by slot
     pub fn remove(&mut self, slot: Slot<T>) -> Result<T> {
         if !self.is_valid_slot(&slot) {
-            return Err(anyhow::Error::from(crate::DagalError::InvalidSlotMapSlot));
+            return Err(anyhow::Error::from(DagalError::InvalidSlotMapSlot));
         }
         let slot_union = self.data.get_mut(slot.id as usize).unwrap();
         slot_union.slot.generation += 1; // invalidate
@@ -82,7 +92,38 @@ impl<T> SparseSlotMap<T> {
 
     /// Count # of used slots
     pub fn count_used(&self) -> usize {
-        self.data.len()
+        self.data.iter().filter(|data| data.data.is_some()).count()
+    }
+
+    pub fn with_sampler<R, F: FnOnce(&T) -> R>(&self, slot: &Slot<T>, f: F) -> Result<R> {
+        if !self.is_valid_slot(slot) {
+            return Err(anyhow::Error::from(DagalError::InvalidSlotMapSlot));
+        }
+        Ok(f(self
+            .data
+            .get(slot.id() as usize)
+            .as_ref()
+            .unwrap()
+            .data
+            .as_ref()
+            .unwrap()))
+    }
+
+    pub fn with_sampler_mut<R, F: FnOnce(&mut T) -> R>(
+        &mut self,
+        slot: &mut Slot<T>,
+        f: F,
+    ) -> Result<R> {
+        if !self.is_valid_slot(slot) {
+            return Err(anyhow::Error::from(DagalError::InvalidSlotMapSlot));
+        }
+        Ok(f(self
+            .data
+            .get_mut(slot.id() as usize)
+            .unwrap()
+            .data
+            .as_mut()
+            .unwrap()))
     }
 }
 

@@ -26,21 +26,18 @@ impl<A: Allocator> Drop for ImageHandleInner<A> {
 /// An arc reference to a handle which is dropped at lifetime end
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageHandle<A: Allocator = GPUAllocatorImpl> {
-    inner: Arc<ImageHandleInner<A>>
+    inner: Arc<ImageHandleInner<A>>,
 }
 
 impl<A: Allocator> ImageHandle<A> {
     pub fn new(handle: Handle<resource::Image<A>>, gpu_rt: GPUResourceTable<A>) -> Self {
         Self {
-            inner: Arc::new(ImageHandleInner {
-                handle,
-                gpu_rt,
-            })
+            inner: Arc::new(ImageHandleInner { handle, gpu_rt }),
         }
     }
 
     /// Get the underlying handle
-    pub fn get_handle(&self) -> Handle<resource::Image<A>> {
-        self.inner.handle.clone()
+    pub fn get_handle(&self) -> &Handle<resource::Image<A>> {
+        &self.inner.handle
     }
 }

@@ -11,3 +11,7 @@ This project is divided into **DAGAL** (Danny's Awesome Graphics Abstraction Lay
 
 ## Special thanks
 a special thanks to [NotAPenguin](https://github.com/NotAPenguin0) and his project, [phobos-rs](https://github.com/NotAPenguin0/phobos-rs) for providing guidance throughout this project.
+
+
+
+Logo courtesy of "Monkey Face" by MarkGrundland is licensed under CC BY 2.0.

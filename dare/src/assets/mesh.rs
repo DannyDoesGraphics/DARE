@@ -1,37 +1,37 @@
+use std::sync::Arc;
+
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
+
+use crate::render;
 
 #[derive(Debug)]
 pub struct Mesh<A: Allocator = GPUAllocatorImpl> {
     name: Option<String>,
-    position: glam::Vec3,
-    scale: glam::Vec3,
-    vertex_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
-    normal_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
-    tangent_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
-    index_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
-    uv_buffer: dagal::util::slot_map::Slot<dagal::resource::Buffer<A>>,
+    pub position: glam::Vec3,
+    pub scale: glam::Vec3,
+    pub rotation: glam::Quat,
+    surfaces: Vec<Arc<render::Surface<A>>>,
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct CMesh {
-    transform: glam::Mat4,
-    vertex_buffer: u32,
-    normal_buffer: u32,
-    tangent_buffer: u32,
-    index_buffer: u32,
-    uv_buffer: u32,
-}
+impl<A: Allocator> Mesh<A> {
+    /// Get the underlying surfaces of a mesh
+    pub fn get_surfaces(&self) -> &[Arc<render::Surface<A>>] {
+        &self.surfaces
+    }
 
-impl From<Mesh> for CMesh {
-    fn from(value: Mesh) -> Self {
+    pub fn new(
+        name: Option<String>,
+        position: glam::Vec3,
+        scale: glam::Vec3,
+        rotation: glam::Quat,
+        surfaces: Vec<Arc<render::Surface<A>>>,
+    ) -> Self {
         Self {
-            transform: glam::Mat4::from_translation(value.position) * glam::Mat4::from_scale(value.scale),
-            vertex_buffer: 0,
-            normal_buffer: 0,
-            tangent_buffer: 0,
-            index_buffer: 0,
-            uv_buffer: 0,
+            name,
+            position,
+            scale,
+            rotation,
+            surfaces,
         }
     }
 }

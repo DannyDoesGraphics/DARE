@@ -17,3 +17,5 @@ bytemuck = "1.16.0"
 gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", branch = "ash-0.38", features = ["default", "vulkan"] }
 clap = { version = "4.5.7", features = ["derive"] }
 bitflags = "2.5.0"
+image = "0.25.1"
+rayon = "1.10.0"

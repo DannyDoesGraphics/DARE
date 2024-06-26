@@ -26,21 +26,18 @@ impl<A: Allocator> Drop for SamplerHandleInner<A> {
 /// An arc reference to a handle which is dropped at lifetime end
 #[derive(Debug, Clone, PartialEq)]
 pub struct SamplerHandle<A: Allocator = GPUAllocatorImpl> {
-    inner: Arc<SamplerHandleInner<A>>
+    inner: Arc<SamplerHandleInner<A>>,
 }
 
 impl<A: Allocator> SamplerHandle<A> {
     pub fn new(handle: Handle<resource::Sampler>, gpu_rt: GPUResourceTable<A>) -> Self {
         Self {
-            inner: Arc::new(SamplerHandleInner {
-                handle,
-                gpu_rt,
-            })
+            inner: Arc::new(SamplerHandleInner { handle, gpu_rt }),
         }
     }
 
     /// Get the underlying handle
-    pub fn get_handle(&self) -> Handle<resource::Sampler> {
-        self.inner.handle.clone()
+    pub fn get_handle(&self) -> &Handle<resource::Sampler> {
+        &self.inner.handle
     }
 }
