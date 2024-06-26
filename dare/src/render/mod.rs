@@ -14,3 +14,4 @@ pub mod surface;
 pub mod texture;
 pub mod pipeline;
 pub mod scene_data;
+pub mod camera;

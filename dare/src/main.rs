@@ -20,6 +20,7 @@ use dagal::traits::Destructible;
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
+use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
 
 mod assets;
@@ -33,6 +34,7 @@ const FRAME_OVERLAP: usize = 2;
 struct App {
     pub window: Option<winit::window::Window>,
     pub render_context: Option<RenderContext>,
+    previous: Option<std::time::Instant>,
 }
 
 struct RenderContext {
@@ -42,6 +44,7 @@ struct RenderContext {
     white_image: Option<AllocatedImage>,
     sampler: Option<Handle<resource::Sampler>>,
 
+    camera: render::camera::Camera,
     meshes: Vec<assets::mesh::Mesh<GPUAllocatorImpl>>,
     materials: Vec<Arc<render::Material<GPUAllocatorImpl>>>,
     draw_context: render::draw_context::DrawContext<GPUAllocatorImpl>,
@@ -304,6 +307,7 @@ impl RenderContext {
             allocator,
             immediate_submit,
 
+            camera: Default::default(),
             meshes: Vec::new(),
             materials: Vec::new(),
 
@@ -695,17 +699,17 @@ impl RenderContext {
             .cast::<assets::scene_data::SceneData>();
         let extent = self.draw_image.as_ref().unwrap().extent();
         unsafe {
-            let mut proj = glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
-            let view = glam::Mat4::perspective_rh(
+            let mut proj = glam::Mat4::perspective_rh(
                 70.0_f32.to_radians(),
                 extent.width as f32 / extent.height as f32,
                 10000.0,
                 0.1,
             );
+            let view = self.camera.get_view_matrix();
             proj.y_axis.y *= -1.0;
-            scene_data.as_mut().proj = proj.transpose().to_cols_array();
-            scene_data.as_mut().view = view.transpose().to_cols_array();
-            scene_data.as_mut().view_proj = (view * proj).to_cols_array();
+            scene_data.as_mut().proj = proj.to_cols_array();
+            scene_data.as_mut().view = view.to_cols_array();
+            scene_data.as_mut().view_proj = (proj * view).to_cols_array();
         }
     }
 
@@ -1098,18 +1102,6 @@ impl RenderContext {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
-        /*
-        Self::draw_geometry(
-            &self.device,
-            &cmd,
-            self.draw_image.as_ref().unwrap(),
-            self.draw_image_view.as_ref().unwrap(),
-            self.depth_image_view.as_ref().unwrap(),
-            &self.draw_context,
-            &self.scene_data,
-            &self.gpu_resource_table,
-        );
-        */
         self.draw_mesh(&cmd).unwrap();
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -1233,6 +1225,10 @@ impl winit::application::ApplicationHandler for App {
             None => return,
             Some(window) => window,
         };
+        let mut now = Some(std::time::Instant::now());
+        let dt = self.previous.map(|last| now.unwrap().duration_since(last)).unwrap_or(std::time::Duration::new(0, 0));
+        mem::swap(&mut self.previous, &mut now);
+        let dt: f64 = dt.as_secs_f64();
 
         match event {
             winit::event::WindowEvent::CloseRequested => {
@@ -1254,6 +1250,7 @@ impl winit::application::ApplicationHandler for App {
             winit::event::WindowEvent::RedrawRequested => {
                 if let Some(render_context) = self.render_context.as_mut() {
                     // do not draw if window size is impossibly small
+                    render_context.camera.update(dt as f32);
                     if window.width() != 0
                         && window.height() != 0
                         && !render_context.resize_requested
@@ -1261,8 +1258,37 @@ impl winit::application::ApplicationHandler for App {
                         render_context.draw();
                     }
                 }
+            },
+            winit::event::WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
+                if !event.repeat {
+                    if let Some(render_context) = self.render_context.as_mut() {
+                        render_context.camera.process_input(event.physical_key, event.state == ElementState::Pressed);
+                    }
+                }
+            },
+            winit::event::WindowEvent::MouseInput { device_id, state, button } => {
+                if let Some(render_context) = self.render_context.as_mut() {
+                    if button == MouseButton::Left {
+                        render_context.camera.button_down(state == ElementState::Pressed);
+                    }
+                }
+            },
+            winit::event::WindowEvent::MouseWheel { device_id, delta, phase } => {
+                if let Some(render_context) = self.render_context.as_mut() {
+                    if let MouseScrollDelta::LineDelta(x, y) = delta {
+                        render_context.camera.mouse_scrolled(y, dt as f32);
+                    }
+                }
+            }
+            winit::event::WindowEvent::CursorMoved { device_id, position } => {
+                if let Some(render_context) = self.render_context.as_mut() {
+                    render_context.camera.process_mouse_input(glam::Vec2::new(position.x as f32, position.y as f32), dt as f32);
+                }
             }
             _ => {}
+        }
+        if let Some(render_context) = self.render_context.as_mut() {
+            render_context.camera.update(dt as f32);
         }
     }
 
