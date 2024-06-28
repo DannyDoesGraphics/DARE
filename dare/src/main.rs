@@ -1,11 +1,12 @@
+use std::{mem, path, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
-use std::{mem, path, ptr, slice};
 
 use anyhow::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
+use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -21,7 +22,6 @@ use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
-use dagal::{resource, winit};
 
 mod assets;
 mod ray_tracing;
@@ -202,7 +202,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-        .unwrap();
+            .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -217,19 +217,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                .unwrap();
+                    .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -258,7 +258,7 @@ impl RenderContext {
                 name: None,
             },
         )
-        .unwrap();
+            .unwrap();
 
         let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -294,7 +294,7 @@ impl RenderContext {
             usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
         })
-        .unwrap();
+            .unwrap();
         scene_data
             .set_name(device.get_debug_utils().unwrap(), "scene_data")
             .unwrap();
@@ -347,16 +347,16 @@ impl RenderContext {
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-                .new_sampler(ResourceInput::ResourceCI(
-                    resource::SamplerCreateInfo::FromCreateInfo {
-                        device: app.device.clone(),
-                        create_info: vk::SamplerCreateInfo::default()
-                            .mag_filter(vk::Filter::NEAREST)
-                            .min_filter(vk::Filter::NEAREST),
-                        name: None,
-                    },
-                ))
-                .unwrap(),
+               .new_sampler(ResourceInput::ResourceCI(
+                   resource::SamplerCreateInfo::FromCreateInfo {
+                       device: app.device.clone(),
+                       create_info: vk::SamplerCreateInfo::default()
+                           .mag_filter(vk::Filter::NEAREST)
+                           .min_filter(vk::Filter::NEAREST),
+                       name: None,
+                   },
+               ))
+               .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -432,7 +432,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-        .unwrap();
+            .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -504,7 +504,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
@@ -534,7 +534,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("GBuffer Depth"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             create_info: vk::ImageViewCreateInfo {
@@ -552,7 +552,7 @@ impl RenderContext {
             },
             device: self.device.clone(),
         })
-        .unwrap();
+            .unwrap();
         let depth_image_view =
             resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -570,7 +570,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -588,7 +588,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-            .unwrap(),
+                .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -643,7 +643,7 @@ impl RenderContext {
                     .load_assets(
                         &mut self.allocator,
                         self.gpu_resource_table.clone(),
-                        std::path::PathBuf::from("./dare/assets/Sponza/glTF/Sponza.gltf"),
+                        std::path::PathBuf::from("C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf"),
                         pipeline,
                     )
                     .unwrap();
@@ -939,7 +939,7 @@ impl RenderContext {
             },
             name,
         })
-        .unwrap();
+            .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -961,7 +961,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-        .unwrap();
+            .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -995,7 +995,7 @@ impl RenderContext {
                 memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-            .unwrap();
+                .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
