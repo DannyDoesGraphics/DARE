@@ -1,12 +1,11 @@
-use std::{mem, path, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
+use std::{mem, path, ptr, slice};
 
 use anyhow::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -22,6 +21,7 @@ use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
+use dagal::{resource, winit};
 
 mod assets;
 mod ray_tracing;
@@ -176,6 +176,7 @@ impl RenderContext {
                 shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
                 shader_storage_image_array_non_uniform_indexing: vk::TRUE,
                 runtime_descriptor_array: vk::TRUE,
+                scalar_block_layout: vk::TRUE,
                 ..Default::default()
             })
             .attach_feature_1_0(vk::PhysicalDeviceFeatures {
@@ -201,7 +202,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-            .unwrap();
+        .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -216,19 +217,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                    .unwrap();
+                .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -257,7 +258,7 @@ impl RenderContext {
                 name: None,
             },
         )
-            .unwrap();
+        .unwrap();
 
         let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -293,7 +294,7 @@ impl RenderContext {
             usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                 | vk::BufferUsageFlags::STORAGE_BUFFER,
         })
-            .unwrap();
+        .unwrap();
         scene_data
             .set_name(device.get_debug_utils().unwrap(), "scene_data")
             .unwrap();
@@ -346,16 +347,16 @@ impl RenderContext {
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-               .new_sampler(ResourceInput::ResourceCI(
-                   resource::SamplerCreateInfo::FromCreateInfo {
-                       device: app.device.clone(),
-                       create_info: vk::SamplerCreateInfo::default()
-                           .mag_filter(vk::Filter::NEAREST)
-                           .min_filter(vk::Filter::NEAREST),
-                       name: None,
-                   },
-               ))
-               .unwrap(),
+                .new_sampler(ResourceInput::ResourceCI(
+                    resource::SamplerCreateInfo::FromCreateInfo {
+                        device: app.device.clone(),
+                        create_info: vk::SamplerCreateInfo::default()
+                            .mag_filter(vk::Filter::NEAREST)
+                            .min_filter(vk::Filter::NEAREST),
+                        name: None,
+                    },
+                ))
+                .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -431,7 +432,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-            .unwrap();
+        .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -503,7 +504,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
@@ -533,7 +534,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("GBuffer Depth"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             create_info: vk::ImageViewCreateInfo {
@@ -551,7 +552,7 @@ impl RenderContext {
             },
             device: self.device.clone(),
         })
-            .unwrap();
+        .unwrap();
         let depth_image_view =
             resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -569,7 +570,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-                .unwrap();
+            .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -587,7 +588,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-                .unwrap(),
+            .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -605,7 +606,9 @@ impl RenderContext {
             // create pipelines
             let layout = dagal::pipelines::PipelineLayoutBuilder::default()
                 .push_descriptor_sets(vec![self.gpu_resource_table.get_descriptor_layout()?])
-                .push_push_constant_struct::<render::push_constants::RasterizationPushConstant>(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                .push_push_constant_struct::<render::push_constants::RasterizationPushConstant>(
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                )
                 .build(self.device.clone(), vk::PipelineLayoutCreateFlags::empty())?;
             let compiler = ShaderCCompiler::new();
             let pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
@@ -614,24 +617,33 @@ impl RenderContext {
                 .set_polygon_mode(vk::PolygonMode::FILL)
                 .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
                 .set_multisampling_none()
-                .enable_blending_alpha_blend()
+                .disable_blending()
                 .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
                 .set_depth_format(self.depth_image.as_ref().unwrap().format())
                 .set_color_attachment(self.draw_image.as_ref().unwrap().format())
-                .replace_shader_from_source_file(self.device.clone(), &compiler, std::path::PathBuf::from("./dare/shaders/material_mesh.vert"), vk::ShaderStageFlags::VERTEX).unwrap()
-                .replace_shader_from_source_file(self.device.clone(), &compiler, std::path::PathBuf::from("./dare/shaders/material_mesh.frag"), vk::ShaderStageFlags::FRAGMENT).unwrap()
+                .replace_shader_from_source_file(
+                    self.device.clone(),
+                    &compiler,
+                    std::path::PathBuf::from("./dare/shaders/material_mesh.vert"),
+                    vk::ShaderStageFlags::VERTEX,
+                )
+                .unwrap()
+                .replace_shader_from_source_file(
+                    self.device.clone(),
+                    &compiler,
+                    std::path::PathBuf::from("./dare/shaders/material_mesh.frag"),
+                    vk::ShaderStageFlags::FRAGMENT,
+                )
+                .unwrap()
                 .build(self.device.clone())?;
-            let pipeline = Arc::new(render::pipeline::Pipeline::new(
-                pipeline,
-                Arc::new(layout)
-            ));
+            let pipeline = Arc::new(render::pipeline::Pipeline::new(pipeline, Arc::new(layout)));
 
             let (materials, meshes): (Vec<Arc<render::Material>>, Vec<assets::mesh::Mesh>) =
                 assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
                     .load_assets(
                         &mut self.allocator,
                         self.gpu_resource_table.clone(),
-                        std::path::PathBuf::from("./dare/assets/basicmesh.glb"),
+                        std::path::PathBuf::from("./dare/assets/Sponza/glTF/Sponza.gltf"),
                         pipeline,
                     )
                     .unwrap();
@@ -685,7 +697,11 @@ impl RenderContext {
                         .iter()
                         .map(|surface| render::draw_context::DrawSurface {
                             surface: surface.clone(),
-                            local_transform: glam::Mat4::IDENTITY.transpose(),
+                            local_transform: glam::Mat4::from_scale_rotation_translation(
+                                mesh.scale,
+                                mesh.rotation,
+                                mesh.position,
+                            ),
                         })
                         .collect::<Vec<render::draw_context::DrawSurface>>()
                 })
@@ -790,7 +806,11 @@ impl RenderContext {
     fn draw_mesh(&self, cmd: &dagal::command::CommandBufferRecording) -> Result<()> {
         let dynamic_rendering_context = cmd.dynamic_rendering();
         let dynamic_rendering_context = dynamic_rendering_context
-            .push_image_as_color_attachment(vk::ImageLayout::GENERAL, self.draw_image_view.as_ref().unwrap(), None)
+            .push_image_as_color_attachment(
+                vk::ImageLayout::GENERAL,
+                self.draw_image_view.as_ref().unwrap(),
+                None,
+            )
             .depth_attachment_info(
                 self.depth_image_view.as_ref().unwrap().handle(),
                 vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
@@ -829,7 +849,11 @@ impl RenderContext {
                 self.device.get_handle().cmd_bind_pipeline(
                     cmd.handle(),
                     vk::PipelineBindPoint::GRAPHICS,
-                    draw.surface.material().get_pipeline().get_pipeline().handle(),
+                    draw.surface
+                        .material()
+                        .get_pipeline()
+                        .get_pipeline()
+                        .handle(),
                 );
                 self.device.get_handle().cmd_bind_descriptor_sets(
                     cmd.handle(),
@@ -860,7 +884,8 @@ impl RenderContext {
                     vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     0,
                     slice::from_raw_parts(
-                        &push_constants as *const render::push_constants::RasterizationPushConstant as *const u8,
+                        &push_constants as *const render::push_constants::RasterizationPushConstant
+                            as *const u8,
                         mem::size_of::<render::push_constants::RasterizationPushConstant>(),
                     ),
                 );
@@ -914,7 +939,7 @@ impl RenderContext {
             },
             name,
         })
-            .unwrap();
+        .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -936,7 +961,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-            .unwrap();
+        .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -967,10 +992,10 @@ impl RenderContext {
                 device: self.device.clone(),
                 allocator: &mut self.allocator,
                 size: data_size,
-                memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
+                memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-                .unwrap();
+            .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -1212,7 +1237,11 @@ impl winit::application::ApplicationHandler for App {
             .as_mut()
             .unwrap()
             .build_swapchain(self.window.as_ref().unwrap());
-        self.render_context.as_mut().unwrap().create_draw_image();
+        self.render_context
+            .as_mut()
+            .unwrap()
+            .create_draw_image()
+            .unwrap();
     }
 
     fn window_event(
@@ -1226,7 +1255,10 @@ impl winit::application::ApplicationHandler for App {
             Some(window) => window,
         };
         let mut now = Some(std::time::Instant::now());
-        let dt = self.previous.map(|last| now.unwrap().duration_since(last)).unwrap_or(std::time::Duration::new(0, 0));
+        let dt = self
+            .previous
+            .map(|last| now.unwrap().duration_since(last))
+            .unwrap_or(std::time::Duration::new(0, 0));
         mem::swap(&mut self.previous, &mut now);
         let dt: f64 = dt.as_secs_f64();
 
@@ -1258,31 +1290,54 @@ impl winit::application::ApplicationHandler for App {
                         render_context.draw();
                     }
                 }
-            },
-            winit::event::WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
+            }
+            winit::event::WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
                 if !event.repeat {
                     if let Some(render_context) = self.render_context.as_mut() {
-                        render_context.camera.process_input(event.physical_key, event.state == ElementState::Pressed);
+                        render_context.camera.process_input(
+                            event.physical_key,
+                            event.state == ElementState::Pressed,
+                        );
                     }
                 }
-            },
-            winit::event::WindowEvent::MouseInput { device_id, state, button } => {
+            }
+            winit::event::WindowEvent::MouseInput {
+                device_id,
+                state,
+                button,
+            } => {
                 if let Some(render_context) = self.render_context.as_mut() {
                     if button == MouseButton::Left {
-                        render_context.camera.button_down(state == ElementState::Pressed);
+                        render_context
+                            .camera
+                            .button_down(state == ElementState::Pressed);
                     }
                 }
-            },
-            winit::event::WindowEvent::MouseWheel { device_id, delta, phase } => {
+            }
+            winit::event::WindowEvent::MouseWheel {
+                device_id,
+                delta,
+                phase,
+            } => {
                 if let Some(render_context) = self.render_context.as_mut() {
                     if let MouseScrollDelta::LineDelta(x, y) = delta {
                         render_context.camera.mouse_scrolled(y, dt as f32);
                     }
                 }
             }
-            winit::event::WindowEvent::CursorMoved { device_id, position } => {
+            winit::event::WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => {
                 if let Some(render_context) = self.render_context.as_mut() {
-                    render_context.camera.process_mouse_input(glam::Vec2::new(position.x as f32, position.y as f32), dt as f32);
+                    render_context.camera.process_mouse_input(
+                        glam::Vec2::new(position.x as f32, position.y as f32),
+                        dt as f32,
+                    );
                 }
             }
             _ => {}

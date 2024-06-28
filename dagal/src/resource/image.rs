@@ -16,6 +16,7 @@ pub struct Image<A: Allocator = GPUAllocatorImpl> {
     handle: vk::Image,
     format: vk::Format,
     extent: vk::Extent3D,
+    mip_levels: u32,
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
@@ -31,6 +32,7 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         image: vk::Image,
         format: vk::Format,
         extent: vk::Extent3D,
+        mip_levels: u32,
         usage_flags: vk::ImageUsageFlags,
         image_type: vk::ImageType,
         name: Option<&'a str>,
@@ -65,6 +67,11 @@ impl<A: Allocator> Image<A> {
     /// Acquire image extent
     pub fn extent(&self) -> vk::Extent3D {
         self.extent
+    }
+
+    /// Acquire image mip levels
+    pub fn mip_levels(&self) -> u32 {
+        self.mip_levels
     }
 
     /// Transitions an image from one layout to another layout
@@ -333,6 +340,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                 image,
                 usage_flags,
                 image_type,
+                mip_levels,
                 format,
                 extent,
                 name,
@@ -342,6 +350,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                     handle: image,
                     format,
                     extent,
+                    mip_levels,
                     usage_flags,
                     image_type,
                     allocation: None,
@@ -363,6 +372,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                     handle,
                     format: image_ci.format,
                     extent: image_ci.extent,
+                    mip_levels: image_ci.mip_levels,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
                     device,

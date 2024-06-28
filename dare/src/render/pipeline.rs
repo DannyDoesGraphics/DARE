@@ -8,10 +8,7 @@ pub struct Pipeline<P: dagal::pipelines::traits::Pipeline> {
 
 impl<P: dagal::pipelines::traits::Pipeline> Pipeline<P> {
     pub fn new(handle: P, layout: Arc<dagal::pipelines::PipelineLayout>) -> Self {
-        Self {
-            handle,
-            layout
-        }
+        Self { handle, layout }
     }
 
     pub fn get_pipeline(&self) -> &P {

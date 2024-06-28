@@ -76,6 +76,7 @@ impl Swapchain {
                         height: self.extent.height,
                         depth: 1,
                     },
+                    mip_levels: 1,
                     usage_flags: vk::ImageUsageFlags::TRANSFER_DST,
                     image_type: vk::ImageType::TYPE_3D,
                     name: Some(format!("Swapchain image {index}").as_str()),

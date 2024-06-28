@@ -1,16 +1,17 @@
-use std::sync::{Arc, RwLock};
 use std::{mem, ptr};
+use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use ash::vk;
 
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use crate::DagalError::PoisonError;
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource;
+use crate::resource::ImageViewCreateInfo;
 use crate::resource::traits::Resource;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
-use crate::DagalError::PoisonError;
 
 #[derive(Debug)]
 pub enum GPUResource<'a, T: Resource<'a>> {
@@ -240,11 +241,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         &mut self,
         sampler: ResourceInput<resource::Sampler>,
     ) -> Result<Handle<resource::Sampler>> {
-        match sampler {
-            ResourceInput::ResourceHandle(handle) => {
-                return Ok(handle);
-            }
-            _ => {}
+        if let ResourceInput::ResourceHandle(handle) = sampler {
+            return Ok(handle);
         };
 
         let sampler_handle = match sampler {
@@ -302,11 +300,11 @@ impl<A: Allocator> GPUResourceTable<A> {
     pub fn new_image<'a>(
         &mut self,
         image_ci: ResourceInput<'a, resource::Image<A>>,
-        image_view_ci: ResourceInput<'a, resource::ImageView>,
+        mut image_view_ci: ResourceInput<'a, resource::ImageView>,
         image_layout: vk::ImageLayout,
     ) -> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)>
-    where
-        A: 'a,
+        where
+            A: 'a,
     {
         let image_handle = match image_ci {
             ResourceInput::Resource(image) => self.images.allocate(image)?,
@@ -316,6 +314,14 @@ impl<A: Allocator> GPUResourceTable<A> {
             }
             ResourceInput::ResourceHandle(handle) => handle,
         };
+        if let ResourceInput::ResourceCI(ImageViewCreateInfo::FromCreateInfo {
+                                             create_info, ..
+                                         }) = &mut image_view_ci
+        {
+            create_info.image = self
+                .images
+                .with_handle(&image_handle, |image| image.handle())?;
+        }
         let image_view_handle = self.new_image_view(image_view_ci)?;
         let image_view = self.image_views.get_resource_handle(&image_view_handle)?;
 
@@ -381,8 +387,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         &mut self,
         buffer_input: ResourceInput<'a, resource::Buffer<A>>,
     ) -> Result<Handle<resource::Buffer<A>>>
-    where
-        A: 'a,
+        where
+            A: 'a,
     {
         let handle = match buffer_input {
             ResourceInput::Resource(buffer) => {
@@ -453,7 +459,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let typed_buffer = resource::TypedBufferView::new(
                     resource::TypedBufferCreateInfo::FromDagalBuffer { buffer },
                 )
-                .unwrap();
+                    .unwrap();
                 f(typed_buffer)
             })
         }

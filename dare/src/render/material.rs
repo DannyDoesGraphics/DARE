@@ -18,7 +18,7 @@ pub struct Material<A: Allocator = GPUAllocatorImpl> {
     albedo: Option<render::Texture<A>>,
     normal: Option<render::Texture<A>>,
     buffer: resource::Buffer<A>,
-
+    name: String,
     pipeline: Arc<render::pipeline::Pipeline<GraphicsPipeline>>,
 }
 
@@ -29,27 +29,25 @@ impl<A: Allocator> Material<A> {
         color_factor: glam::Vec4,
         albedo: Option<render::Texture<A>>,
         normal: Option<render::Texture<A>>,
+        name: String,
         device: dagal::device::LogicalDevice,
     ) -> Result<Self> {
-        let mut buffer =
-            resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                device: device.clone(),
-                allocator,
-                size: std::mem::size_of::<CMaterial>() as vk::DeviceSize,
-                memory_type: MemoryLocation::GpuOnly,
-                usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                    | vk::BufferUsageFlags::STORAGE_BUFFER
-                    | vk::BufferUsageFlags::TRANSFER_DST,
-            })?;
-        if let Some(debug_utils) = device.get_debug_utils() {
-            buffer.set_name(debug_utils, "Material buffer")?;
-        }
+        let mut buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+            device: device.clone(),
+            allocator,
+            size: std::mem::size_of::<CMaterial>() as vk::DeviceSize,
+            memory_type: MemoryLocation::GpuOnly,
+            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                | vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::TRANSFER_DST,
+        })?;
         Ok(Self {
             pipeline,
             color_factor,
             albedo,
             normal,
             buffer,
+            name,
         })
     }
 
@@ -69,22 +67,38 @@ impl<A: Allocator> Material<A> {
             .as_ref()
             .map(|_| TextureFlags::Normal)
             .unwrap_or(TextureFlags::empty());
+        if let Some(debug_utils) = immediate.get_device().get_debug_utils() {
+            self.buffer.set_name(
+                debug_utils,
+                format!("{}_material_buffer", self.name).as_str(),
+            )?;
+        }
         self.buffer.upload(
             immediate,
             allocator,
             &[CMaterial {
                 texture_flags: texture_flags.bits(),
-                color_factor: self.color_factor,
+                color_factor: self.color_factor.to_array(),
                 albedo: self
                     .albedo
                     .as_ref()
-                    .map(|tex| tex.get_image().id())
-                    .unwrap_or(u32::MAX as u64) as u32,
+                    .map(|tex| tex.get_image().id() as u32)
+                    .unwrap_or(0),
+                albedo_sampler: self
+                    .albedo
+                    .as_ref()
+                    .map(|tex| tex.get_sampler().id() as u32)
+                    .unwrap_or(0),
                 normal: self
                     .normal
                     .as_ref()
-                    .map(|tex| tex.get_image().id())
-                    .unwrap_or(u32::MAX as u64) as u32,
+                    .map(|tex| tex.get_image().id() as u32)
+                    .unwrap_or(0),
+                normal_sampler: self
+                    .normal
+                    .as_ref()
+                    .map(|tex| tex.get_sampler().id() as u32)
+                    .unwrap_or(0),
             }],
         )?;
         Ok(())
@@ -112,7 +126,9 @@ bitflags! {
 pub struct CMaterial {
     /// Bit flags of enabled textures
     texture_flags: u32,
-    color_factor: glam::Vec4,
+    color_factor: [f32; 4],
     albedo: u32,
+    albedo_sampler: u32,
     normal: u32,
+    normal_sampler: u32,
 }

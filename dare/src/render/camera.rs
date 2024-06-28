@@ -4,7 +4,7 @@ use dagal::winit::keyboard::{KeyCode, PhysicalKey};
 
 #[derive(Debug, Default)]
 pub struct Camera {
-    velocity: glam::Vec3,
+    relative_velocity: glam::Vec3,
     position: glam::Vec3,
     button_down: bool,
     pitch: f32,
@@ -22,8 +22,10 @@ impl Camera {
     }
 
     pub fn get_rotation_matrix(&self) -> glam::Mat4 {
-        let pitch_rotation = glam::Quat::from_axis_angle(glam::Vec3::from([1.0, 0.0, 0.0]), self.pitch);
-        let yaw_rotation = glam::Quat::from_axis_angle(glam::Vec3::from([0.0, -1.0, 0.0]), self.yaw);
+        let pitch_rotation =
+            glam::Quat::from_axis_angle(glam::Vec3::from([1.0, 0.0, 0.0]), self.pitch);
+        let yaw_rotation =
+            glam::Quat::from_axis_angle(glam::Vec3::from([0.0, -1.0, 0.0]), self.yaw);
         glam::Mat4::from_quat(yaw_rotation) * glam::Mat4::from_quat(pitch_rotation)
     }
 
@@ -39,37 +41,32 @@ impl Camera {
     }
 
     fn update_velocity(&mut self) {
-        let rotation = self.get_rotation_matrix();
-        let forward = rotation.transform_vector3(glam::Vec3::new(0.0, 0.0, -1.0));
-        let right = rotation.transform_vector3(glam::Vec3::new(1.0, 0.0, 0.0));
-        let up = glam::Vec3::cross(forward, right);
-
         let mut direction = glam::Vec3::ZERO;
 
         if self.keys.contains(&KeyCode::KeyW) {
-            direction += forward;
+            direction += glam::Vec3::new(0.0, 0.0, -1.0);
         }
         if self.keys.contains(&KeyCode::KeyS) {
-            direction -= forward;
+            direction -= glam::Vec3::new(0.0, 0.0, -1.0);
         }
         if self.keys.contains(&KeyCode::KeyA) {
-            direction -= right;
+            direction += glam::Vec3::new(-1.0, 0.0, 0.0);
         }
         if self.keys.contains(&KeyCode::KeyD) {
-            direction += right;
+            direction -= glam::Vec3::new(-1.0, 0.0, 0.0);
         }
         if self.keys.contains(&KeyCode::KeyQ) {
-            direction += up;
+            direction += glam::Vec3::new(0.0, 1.0, 0.0);
         }
         if self.keys.contains(&KeyCode::KeyE) {
-            direction -= up;
+            direction -= glam::Vec3::new(0.0, 1.0, 0.0);
         }
 
         if direction.length_squared() > 0.0 {
             direction = direction.normalize();
         }
 
-        self.velocity = direction;
+        self.relative_velocity = direction;
     }
 
     pub fn process_mouse_input(&mut self, pos: glam::Vec2, dt: f32) {
@@ -96,6 +93,8 @@ impl Camera {
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.position += self.velocity * self.speed * dt;
+        let rotation = self.get_rotation_matrix();
+        let global_velocity = rotation.transform_vector3(self.relative_velocity);
+        self.position += global_velocity * self.speed * dt;
     }
 }

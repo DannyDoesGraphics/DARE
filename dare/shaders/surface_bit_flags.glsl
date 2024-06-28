@@ -1,8 +1,11 @@
-const uint Normal = 0x1;
-const uint Tangent = 0x2;
-const uint UV = 0x3;
+const uint SURFACE_NORMAL_BIT = 1 << 0;
+const uint SURFACE_TANGENT_BIT = 1 << 1;
+const uint SURFACE_UV_BIT = 1 << 2;
+
+const uint MATERIAL_ALBEDO_BIT = 1 << 0;
+const uint MATERIAL_NORMAL_BIT = 1 << 1;
 
 /// Checks if a given bit flag is set
-bool isFlagSet(in uint bit, in uint flag) {
-    return (bit & flag) != 0;
+bool is_flag_set(in uint bit, in uint flag) {
+    return (bit & flag) == flag;
 }
