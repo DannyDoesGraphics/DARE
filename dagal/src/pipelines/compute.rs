@@ -3,7 +3,6 @@ use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
-use tracing::trace;
 
 use crate::pipelines::traits::PipelineBuilder;
 use crate::traits::Destructible;

@@ -4,7 +4,6 @@ use anyhow::Result;
 use ash::prelude::VkResult;
 use ash::vk;
 use ash::vk::Handle;
-use tracing::trace;
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;

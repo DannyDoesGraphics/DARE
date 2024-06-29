@@ -8,8 +8,6 @@ use std::collections::HashSet;
 use std::ffi::c_char;
 use std::sync::{Arc, Weak};
 
-use tracing::trace;
-
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
 struct LogicalDeviceInner {

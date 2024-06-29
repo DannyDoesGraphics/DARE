@@ -4,7 +4,6 @@ use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-use tracing::trace;
 
 use crate::resource::traits::Resource;
 use crate::traits::Destructible;

@@ -7,7 +7,6 @@ use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
 use derivative::Derivative;
-use tracing::trace;
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;

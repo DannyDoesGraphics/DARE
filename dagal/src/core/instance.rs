@@ -3,7 +3,6 @@ use std::ops::Deref;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
-use tracing::trace;
 
 use crate::traits::Destructible;
 

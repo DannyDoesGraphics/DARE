@@ -3,7 +3,6 @@ use ash;
 use ash::vk;
 use derivative::Derivative;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use tracing::trace;
 
 use crate::traits::Destructible;
 

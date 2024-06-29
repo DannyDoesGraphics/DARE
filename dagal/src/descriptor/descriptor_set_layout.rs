@@ -1,6 +1,5 @@
 use ash::vk;
 use ash::vk::Handle;
-use tracing::trace;
 
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;

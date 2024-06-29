@@ -182,12 +182,16 @@ impl<A: Allocator> Surface<A> {
                 | vk::BufferUsageFlags::TRANSFER_DST,
         })?;
         if let Some(debug) = builder.gpu_rt.get_device().clone().get_debug_utils() {
-            builder.gpu_rt.with_buffer_mut(&builder.positions, |buffer| {
-                buffer.set_name(debug, format!("{}_position", builder.name).as_str())
-            })??;
-            builder.gpu_rt.with_buffer_mut(&builder.indices, |buffer| {
-                buffer.set_name(debug, format!("{}_indices", builder.name).as_str())
-            })??;
+            builder
+                .gpu_rt
+                .with_buffer_mut(&builder.positions, |buffer| {
+                    buffer.set_name(debug, format!("{}_position", builder.name).as_str())
+                })??;
+            builder
+                .gpu_rt
+                .with_buffer_mut(&builder.indices, |buffer| {
+                    buffer.set_name(debug, format!("{}_indices", builder.name).as_str())
+                })??;
             if let Some(normal) = builder.normals.as_ref() {
                 builder.gpu_rt.with_buffer_mut(normal, |buffer| {
                     buffer.set_name(debug, format!("{}_uv", builder.name).as_str())

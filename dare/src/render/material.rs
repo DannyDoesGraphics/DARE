@@ -32,7 +32,7 @@ impl<A: Allocator> Material<A> {
         name: String,
         device: dagal::device::LogicalDevice,
     ) -> Result<Self> {
-        let mut buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+        let buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
             device: device.clone(),
             allocator,
             size: std::mem::size_of::<CMaterial>() as vk::DeviceSize,

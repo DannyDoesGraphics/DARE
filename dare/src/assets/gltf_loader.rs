@@ -1,15 +1,15 @@
-use std::{mem, path, ptr};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+use std::{mem, path, ptr};
 
 use anyhow::Result;
 use bytemuck::{cast_slice, Pod};
 use futures::prelude::*;
-use gltf::Gltf;
 use gltf::texture::{MagFilter, WrappingMode};
+use gltf::Gltf;
 use image::{ColorType, EncodableLayout, GenericImageView};
 use rayon::prelude::*;
 use tokio::sync::{RwLock, SemaphorePermit};
@@ -19,17 +19,16 @@ use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocatio
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::descriptor::bindless::bindless::ResourceInput;
-use dagal::descriptor::DescriptorInfo::Image;
 use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::GraphicsPipeline;
 use dagal::resource;
-use dagal::resource::traits::{Nameable, Resource};
+use dagal::resource::traits::Resource;
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::ImmediateSubmit;
 
-use crate::{assets, render, util};
 use crate::render::SurfaceHandleBuilder;
 use crate::util::handle;
+use crate::{assets, render};
 
 /// Responsible for loading gltf assets
 const CHUNK_MAX_SIZE: usize = 10usize.pow(9); // 1 GiB
@@ -126,10 +125,10 @@ impl<'a> GltfLoader<'a> {
     }
 
     fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
-                              where
-                                  T: Pod,
-                                  U: Pod,
-                                  T: Into<U>,
+    where
+        T: Pod,
+        U: Pod,
+        T: Into<U>,
     {
         let from_slice: Vec<T> = cast_slice(&slice).to_vec();
         let to_slice: Vec<U> = from_slice.into_iter().map(|x| x.into()).collect();
@@ -474,7 +473,7 @@ impl<'a> GltfLoader<'a> {
         // Add staging buffers
         let mut images: Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)> =
             Vec::with_capacity(allocated_images.iter().map(|c| c.chunks.len()).sum());
-        for (id, mut chunk) in allocated_images.into_iter().enumerate() {
+        for (id, chunk) in allocated_images.into_iter().enumerate() {
             if chunk.chunks.is_empty() {
                 continue;
             }
@@ -632,7 +631,8 @@ impl<'a> GltfLoader<'a> {
                             handle::ImageViewHandle::new(image_view_handle, gpu_rt.clone()),
                         ))
                     })
-                    .collect::<Result<Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)>>>()?,
+                    .collect::<Result<Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)>>>(
+                    )?,
             );
         }
         println!("Loaded images {:?}", images.len());
@@ -660,7 +660,7 @@ impl<'a> GltfLoader<'a> {
                 String::from("default"),
                 gpu_rt.get_device().clone(),
             )
-                .unwrap();
+            .unwrap();
             material.upload_material(self.immediate, allocator).unwrap();
             Arc::new(material)
         }];
@@ -693,7 +693,7 @@ impl<'a> GltfLoader<'a> {
                                 )),
                             gpu_rt.get_device().clone(),
                         )
-                            .unwrap();
+                        .unwrap();
                         material.upload_material(self.immediate, allocator).unwrap();
                         Some(Arc::new(material))
                     }
@@ -782,7 +782,7 @@ impl<'a> GltfLoader<'a> {
                 resource::Buffer<A>,
                 Vec<Subchunk<AccessorAllocation<A>>>,
             )>(1);
-            let mut tasks: Vec<tokio::task::JoinHandle<()>> = mesh_allocations
+            let tasks: Vec<tokio::task::JoinHandle<()>> = mesh_allocations
                 .into_iter()
                 .enumerate()
                 .map(|(id, mut subchunk)| {
@@ -852,7 +852,7 @@ impl<'a> GltfLoader<'a> {
                                     | vk::BufferUsageFlags::INDEX_BUFFER
                                     | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                             })
-                                .unwrap();
+                            .unwrap();
                         subchunk.handle.buffer = Some(buffer);
                         // clean up
                         initial_permit.forget();
@@ -865,7 +865,8 @@ impl<'a> GltfLoader<'a> {
                         finished_guard.push(subchunk);
                         let finished_pool_size: usize =
                             finished_guard.iter().map(|sc| sc.size).sum();
-                        let remaining_tasks = remaining_tasks.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                        let remaining_tasks =
+                            remaining_tasks.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
                         if finished_pool_size >= CHUNK_MAX_SIZE || remaining_tasks <= 1 {
                             let mut chunk_length: usize = 0;
                             // set offsets
@@ -887,13 +888,20 @@ impl<'a> GltfLoader<'a> {
                                     size: finished_pool_size as vk::DeviceSize,
                                     memory_type: MemoryLocation::CpuToGpu,
                                     usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-                                }).unwrap();
+                                })
+                                .unwrap();
 
                             // Use unsafe code to allow parallel writes
                             finished_subchunks.par_iter_mut().for_each(|subchunk| {
-                                let dst_ptr: *mut u8 = staging_buffer.mapped_ptr().unwrap().as_ptr() as *mut u8;
+                                let dst_ptr: *mut u8 =
+                                    staging_buffer.mapped_ptr().unwrap().as_ptr() as *mut u8;
                                 unsafe {
-                                    ptr::copy_nonoverlapping(subchunk.handle.data.as_deref().unwrap().as_ptr() as *mut u8, dst_ptr.add(subchunk.offset), subchunk.size);
+                                    ptr::copy_nonoverlapping(
+                                        subchunk.handle.data.as_deref().unwrap().as_ptr()
+                                            as *mut u8,
+                                        dst_ptr.add(subchunk.offset),
+                                        subchunk.size,
+                                    );
                                     drop(subchunk.handle.data.take());
                                     cpu_memory_pool.add_permits(subchunk.size);
                                 }
@@ -916,7 +924,6 @@ impl<'a> GltfLoader<'a> {
                 join_handles_stream.push(handle);
             }
 
-
             loop {
                 tokio::select! {
                     Some((staging_buffer, mut subchunks)) = reciever.recv() => {
@@ -932,7 +939,7 @@ impl<'a> GltfLoader<'a> {
                                     ]);
                                 }
                             }
-                            println!("Transferred {} tasks to the GPU, remaining: {}", subchunks.len(), )
+                            println!("Coped {} accessors' staging buffers to GPU buffer, remaining: {}", subchunks.len(), remaining_tasks.fetch_add(0, std::sync::atomic::Ordering::SeqCst));
                             total_subchunks.append(&mut subchunks);
                         });
                     },
@@ -982,10 +989,16 @@ impl<'a> GltfLoader<'a> {
                                         return None;
                                     }
                                     let indices = primitive.indices().unwrap();
-                                    assert_eq!(indices.dimensions(), gltf::accessor::Dimensions::Scalar);
+                                    assert_eq!(
+                                        indices.dimensions(),
+                                        gltf::accessor::Dimensions::Scalar
+                                    );
                                     let positions =
                                         primitive.get(&gltf::Semantic::Positions).unwrap();
-                                    assert_eq!(positions.dimensions(), gltf::accessor::Dimensions::Vec3);
+                                    assert_eq!(
+                                        positions.dimensions(),
+                                        gltf::accessor::Dimensions::Vec3
+                                    );
                                     let normal = primitive.get(&gltf::Semantic::Normals);
                                     let uv = primitive.get(&gltf::Semantic::TexCoords(0));
                                     Some(Arc::new({
@@ -1005,7 +1018,9 @@ impl<'a> GltfLoader<'a> {
                                                     .clone(),
                                                 indices: accessors
                                                     .remove(&(
-                                                        mesh.index(), primitive.index(), indices.index()
+                                                        mesh.index(),
+                                                        primitive.index(),
+                                                        indices.index(),
                                                     ))
                                                     .unwrap(),
                                                 positions: accessors
@@ -1034,9 +1049,9 @@ impl<'a> GltfLoader<'a> {
                                                         .unwrap_or(mesh_id.to_string().as_str()),
                                                     primitive_id
                                                 )
-                                                    .as_str(),
+                                                .as_str(),
                                             })
-                                                .unwrap();
+                                            .unwrap();
                                         surface
                                             .upload(self.immediate, allocator, node.transform)
                                             .unwrap();

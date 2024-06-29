@@ -2,7 +2,6 @@ use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
-use tracing::trace;
 
 use crate::traits::Destructible;
 

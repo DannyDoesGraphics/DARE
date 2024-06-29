@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use std::ptr;
 
 use ash::vk;
-use tracing::trace;
 
 use crate::resource::traits::AsRaw;
 use crate::traits::Destructible;
