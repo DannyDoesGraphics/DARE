@@ -1,20 +1,25 @@
-use std::{path, ptr};
+use std::{mem, path, ptr};
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 use anyhow::Result;
 use bytemuck::{cast_slice, Pod};
+use futures::prelude::*;
 use gltf::Gltf;
 use gltf::texture::{MagFilter, WrappingMode};
 use image::{ColorType, EncodableLayout, GenericImageView};
 use rayon::prelude::*;
+use tokio::sync::{RwLock, SemaphorePermit};
 use tracing::warn;
 
-use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
+use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::descriptor::bindless::bindless::ResourceInput;
+use dagal::descriptor::DescriptorInfo::Image;
 use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::GraphicsPipeline;
 use dagal::resource;
@@ -23,9 +28,12 @@ use dagal::util::free_list_allocator::Handle;
 use dagal::util::ImmediateSubmit;
 
 use crate::{assets, render, util};
+use crate::render::SurfaceHandleBuilder;
 use crate::util::handle;
 
 /// Responsible for loading gltf assets
+const CHUNK_MAX_SIZE: usize = 10usize.pow(9); // 1 GiB
+const MAX_MEMORY_USAGE: usize = 4 * 10usize.pow(9); // Max amount of memory that can be used at any time to load meshes in
 
 /// Struct which loads GLTF assets
 #[derive(Debug)]
@@ -33,23 +41,57 @@ pub struct GltfLoader<'a> {
     immediate: &'a mut ImmediateSubmit,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Semantic {
+    Semantic(gltf::Semantic),
+    Indices,
+}
+
+struct Chunk<T> {
+    length: usize,
+    chunks: Vec<Subchunk<T>>,
+}
+
+impl<T> Chunk<T> {
+    fn chunkify(subchunks: Vec<Subchunk<T>>, size_limit: usize) -> Vec<Self> {
+        let mut chunks: Vec<Chunk<T>> = Vec::new();
+        let mut current_chunk: Chunk<T> = Chunk::default();
+        let mut current_chunk_size: usize = 0;
+        for mut subchunk in subchunks {
+            if current_chunk_size >= size_limit {
+                let mut old = Chunk::default();
+                std::mem::swap(&mut old, &mut current_chunk);
+                chunks.push(old);
+                current_chunk_size = 0;
+            }
+            subchunk.offset = current_chunk_size;
+            current_chunk_size += subchunk.size;
+            current_chunk.length = current_chunk_size;
+            current_chunk.chunks.push(subchunk);
+        }
+        chunks
+    }
+}
+
+struct Subchunk<T> {
+    handle: T,
+    offset: usize,
+    size: usize,
+}
+
+impl<T> Default for Chunk<T> {
+    fn default() -> Self {
+        Self {
+            length: 0,
+            chunks: vec![],
+        }
+    }
+}
+
 /// Represents a flatten node
 struct FlattenNode<'a> {
     handle: gltf::Node<'a>,
     transform: glam::Mat4,
-}
-
-/// Same as [`gltf::Semantic`], but contains an extra enum for index usage
-#[derive(Clone, Hash, PartialEq, Eq)]
-enum AccessorUsageFlags {
-    Index,
-    Semantic(gltf::Semantic),
-}
-
-/// Tracks accessors and their usages
-struct AccessorUsages<'a> {
-    handle: gltf::Accessor<'a>,
-    usage: HashSet<AccessorUsageFlags>,
 }
 
 impl<'a> GltfLoader<'a> {
@@ -81,18 +123,6 @@ impl<'a> GltfLoader<'a> {
                 nodes
             })
             .collect()
-    }
-
-    async fn load_semantic<'b>(meshes: &[gltf::Mesh<'b>], usage: AccessorUsageFlags) -> Vec<f32> {
-        for mesh in meshes {
-            for primitive in mesh.primitives() {
-                let accessor: gltf::Accessor = match &usage {
-                    AccessorUsageFlags::Index => primitive.indices().unwrap(),
-                    AccessorUsageFlags::Semantic(semantic) => primitive.get(semantic).unwrap(),
-                };
-            }
-        }
-        vec![]
     }
 
     fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
@@ -215,14 +245,14 @@ impl<'a> GltfLoader<'a> {
     }
 
     /// Loads meshes from a gltf scene and uploads their buffer info onto the gpu
-    pub fn load_assets<A: Allocator>(
+    pub async fn load_assets<A: Allocator + 'static>(
         &mut self,
-        allocator: &mut ArcAllocator<A>,
+        allocator: &'a mut ArcAllocator<A>,
         mut gpu_rt: GPUResourceTable<A>,
         path: path::PathBuf,
         pipeline: Arc<render::pipeline::Pipeline<GraphicsPipeline>>,
     ) -> Result<(Vec<Arc<render::Material<A>>>, Vec<assets::mesh::Mesh<A>>)> {
-        let gltf = Gltf::open(path.clone())?;
+        let gltf: Arc<Gltf> = Arc::new(Gltf::open(path.clone())?);
         let parent_path = path.parent().unwrap().to_path_buf();
         let scene = gltf.default_scene().expect("No default scene found.");
         let mut child_indices: HashSet<usize> = HashSet::new();
@@ -334,64 +364,80 @@ impl<'a> GltfLoader<'a> {
                 .collect::<Result<Vec<handle::SamplerHandle<A>>>>()?,
         );
         println!("Loaded samplers");
-        let images: Result<Vec<image::DynamicImage>> = gltf
+        let images: Result<Vec<image::DynamicImage>> = (&gltf)
             .images()
             .collect::<Vec<gltf::image::Image>>()
             .into_par_iter()
             .map(|image| Self::load_image(gltf.blob.as_deref(), image, parent_path.clone()))
             .collect();
         let images: Vec<image::DynamicImage> = images.unwrap();
-        let images: Result<Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)>> = gltf
-            .images()
-            .zip(images)
-            .map(|(gltf_image, image)| {
+        #[derive(Debug)]
+        struct GLTFImage<'a, A: Allocator = GPUAllocatorImpl> {
+            gltf_image: gltf::image::Image<'a>,
+            image: image::RgbaImage,
+            vk_image: resource::Image<A>,
+            vk_image_view: resource::ImageView,
+        }
+
+        impl<'a, A: Allocator> GLTFImage<'a, A> {
+            pub fn decompose(self) -> (resource::Image<A>, resource::ImageView) {
+                (self.vk_image, self.vk_image_view)
+            }
+        }
+
+        let allocated_images: Vec<Chunk<GLTFImage<A>>> = {
+            let mut allocated_images: Vec<Chunk<GLTFImage<A>>> = Vec::new();
+            let mut current_chunk: Chunk<GLTFImage<A>> = Chunk::default();
+            let mut current_size: usize = 0;
+            for (gltf_image, image) in gltf.images().zip(&images) {
                 let image = image.to_rgba8();
+                let size_bytes = mem::size_of_val(image.as_bytes());
                 let format = vk::Format::R8G8B8A8_SRGB;
 
                 let mip_levels = image.height().ilog2().max(1);
                 let device = gpu_rt.get_device().clone();
-                let (image_handle, image_view_handle) = gpu_rt.new_image(
-                    ResourceInput::ResourceCI(resource::ImageCreateInfo::NewAllocated {
-                        device: device.clone(),
-                        allocator,
-                        location: MemoryLocation::GpuOnly,
-                        image_ci: vk::ImageCreateInfo {
-                            s_type: vk::StructureType::IMAGE_CREATE_INFO,
-                            p_next: ptr::null(),
-                            flags: vk::ImageCreateFlags::empty(),
-                            image_type: vk::ImageType::TYPE_2D,
-                            format,
-                            extent: vk::Extent3D {
-                                width: image.width(),
-                                height: image.height(),
-                                depth: 1,
-                            },
-                            mip_levels,
-                            array_layers: 1,
-                            samples: vk::SampleCountFlags::TYPE_1,
-                            tiling: vk::ImageTiling::LINEAR,
-                            usage: vk::ImageUsageFlags::TRANSFER_DST
-                                | vk::ImageUsageFlags::TRANSFER_SRC
-                                | vk::ImageUsageFlags::SAMPLED,
-                            sharing_mode: if device.get_used_queue_families().len() == 1 {
-                                vk::SharingMode::EXCLUSIVE
-                            } else {
-                                vk::SharingMode::CONCURRENT
-                            },
-                            queue_family_index_count: device.get_used_queue_families().len() as u32,
-                            p_queue_family_indices: device.get_used_queue_families().as_ptr(),
-                            initial_layout: vk::ImageLayout::UNDEFINED,
-                            _marker: Default::default(),
+                let vk_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
+                    device: device.clone(),
+                    allocator,
+                    location: MemoryLocation::GpuOnly,
+                    image_ci: vk::ImageCreateInfo {
+                        s_type: vk::StructureType::IMAGE_CREATE_INFO,
+                        p_next: ptr::null(),
+                        flags: vk::ImageCreateFlags::empty(),
+                        image_type: vk::ImageType::TYPE_2D,
+                        format,
+                        extent: vk::Extent3D {
+                            width: image.width(),
+                            height: image.height(),
+                            depth: 1,
                         },
-                        name: gltf_image.name(),
-                    }),
-                    ResourceInput::ResourceCI(resource::ImageViewCreateInfo::FromCreateInfo {
+                        mip_levels,
+                        array_layers: 1,
+                        samples: vk::SampleCountFlags::TYPE_1,
+                        tiling: vk::ImageTiling::LINEAR,
+                        usage: vk::ImageUsageFlags::TRANSFER_DST
+                            | vk::ImageUsageFlags::TRANSFER_SRC
+                            | vk::ImageUsageFlags::SAMPLED,
+                        sharing_mode: if device.get_used_queue_families().len() == 1 {
+                            vk::SharingMode::EXCLUSIVE
+                        } else {
+                            vk::SharingMode::CONCURRENT
+                        },
+                        queue_family_index_count: device.get_used_queue_families().len() as u32,
+                        p_queue_family_indices: device.get_used_queue_families().as_ptr(),
+                        initial_layout: vk::ImageLayout::UNDEFINED,
+                        _marker: Default::default(),
+                    },
+                    name: gltf_image.name(),
+                })?;
+                let vk_image_view =
+                    resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                         device: gpu_rt.get_device().clone(),
                         create_info: vk::ImageViewCreateInfo {
                             s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                             p_next: ptr::null(),
                             flags: vk::ImageViewCreateFlags::empty(),
-                            image: vk::Image::null(),
+                            image: vk_image.handle(),
                             view_type: vk::ImageViewType::TYPE_2D,
                             format,
                             components: vk::ComponentMapping::default(),
@@ -400,28 +446,111 @@ impl<'a> GltfLoader<'a> {
                             ),
                             _marker: Default::default(),
                         },
-                    }),
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                )?;
-                gpu_rt.with_image(&image_handle, |vk_image| {
-                    let mut staging_buffer =
-                        resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                            device: gpu_rt.get_device().clone(),
-                            allocator,
-                            size: std::mem::size_of_val(image.as_bytes()) as vk::DeviceAddress,
-                            memory_type: MemoryLocation::CpuToGpu,
-                            usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-                        })?;
-                    staging_buffer.write(0, image.as_bytes())?;
-                    self.immediate.submit(|ctx| {
-                        vk_image.transition(
-                            ctx.cmd,
-                            ctx.queue,
-                            vk::ImageLayout::UNDEFINED,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        );
+                    })?;
+                current_chunk.chunks.push(Subchunk {
+                    handle: GLTFImage {
+                        gltf_image,
+                        image,
+                        vk_image,
+                        vk_image_view,
+                    },
+                    offset: current_size,
+                    size: size_bytes,
+                });
+                current_size += size_bytes;
+                current_chunk.length = current_size;
+
+                if current_size >= CHUNK_MAX_SIZE {
+                    let mut old: Chunk<GLTFImage<A>> = Chunk::default();
+                    mem::swap(&mut old, &mut current_chunk);
+                    allocated_images.push(old);
+                    current_size = 0;
+                }
+            }
+            allocated_images.push(current_chunk);
+            allocated_images
+        };
+
+        // Add staging buffers
+        let mut images: Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)> =
+            Vec::with_capacity(allocated_images.iter().map(|c| c.chunks.len()).sum());
+        for (id, mut chunk) in allocated_images.into_iter().enumerate() {
+            if chunk.chunks.is_empty() {
+                continue;
+            }
+            println!("Loading {id}/{}", images.len());
+            // make staging buffers + uploading
+            let staging = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                device: gpu_rt.get_device().clone(),
+                allocator,
+                size: chunk.length as vk::DeviceSize,
+                memory_type: MemoryLocation::CpuToGpu,
+                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
+            })?;
+            chunk
+                .chunks
+                .par_iter()
+                .map(|image| {
+                    let ptr: *mut u8 = staging.mapped_ptr().unwrap().as_ptr() as *mut u8;
+                    unsafe {
+                        let slice =
+                            std::slice::from_raw_parts_mut(ptr.add(image.offset), image.size);
+                        slice.copy_from_slice(image.handle.image.as_bytes());
+                    }
+                })
+                .collect::<()>();
+
+            // Copy all data in parallel + submit commands
+            self.immediate.submit(|ctx| {
+                let cmd = ctx.cmd.handle();
+                let queue = ctx.queue;
+                let image_barrier: Vec<vk::ImageMemoryBarrier2> = chunk
+                    .chunks
+                    .iter()
+                    .map(|image| vk::ImageMemoryBarrier2 {
+                        s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                        p_next: ptr::null(),
+                        src_stage_mask: vk::PipelineStageFlags2::TOP_OF_PIPE,
+                        src_access_mask: vk::AccessFlags2::empty(),
+                        dst_stage_mask: vk::PipelineStageFlags2::TRANSFER,
+                        dst_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
+                        old_layout: vk::ImageLayout::UNDEFINED,
+                        new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        src_queue_family_index: queue.get_family_index(),
+                        dst_queue_family_index: queue.get_family_index(),
+                        image: image.handle.vk_image.handle(),
+                        subresource_range: resource::Image::image_subresource_range(
+                            vk::ImageAspectFlags::COLOR,
+                        ),
+                        _marker: Default::default(),
+                    })
+                    .collect();
+                unsafe {
+                    ctx.device.get_handle().cmd_pipeline_barrier2(
+                        cmd,
+                        &vk::DependencyInfo {
+                            s_type: vk::StructureType::DEPENDENCY_INFO,
+                            p_next: ptr::null(),
+                            dependency_flags: vk::DependencyFlags::empty(),
+                            memory_barrier_count: 0,
+                            p_memory_barriers: ptr::null(),
+                            buffer_memory_barrier_count: 0,
+                            p_buffer_memory_barriers: ptr::null(),
+                            image_memory_barrier_count: image_barrier.len() as u32,
+                            p_image_memory_barriers: image_barrier.as_ptr(),
+                            _marker: Default::default(),
+                        },
+                    );
+                }
+                println!("Copied from cpu to gpu");
+
+                // copy
+                chunk
+                    .chunks
+                    .iter()
+                    .map(|image| {
                         let copy_info = vk::BufferImageCopy {
-                            buffer_offset: 0,
+                            buffer_offset: image.offset as vk::DeviceAddress,
                             buffer_row_length: 0,
                             buffer_image_height: 0,
                             image_subresource: vk::ImageSubresourceLayers {
@@ -431,34 +560,82 @@ impl<'a> GltfLoader<'a> {
                                 layer_count: 1,
                             },
                             image_offset: Default::default(),
-                            image_extent: vk_image.extent(),
+                            image_extent: image.handle.vk_image.extent(),
                         };
                         unsafe {
                             ctx.device.get_handle().cmd_copy_buffer_to_image(
                                 ctx.cmd.handle(),
-                                staging_buffer.handle(),
-                                vk_image.handle(),
+                                staging.handle(),
+                                image.handle.vk_image.handle(),
                                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                 &[copy_info],
                             );
                         }
-                        vk_image.transition(
-                            ctx.cmd,
-                            ctx.queue,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        );
-                    });
-                    Ok::<(), anyhow::Error>(())
-                })??;
-                Ok((
-                    handle::ImageHandle::new(image_handle, gpu_rt.clone()),
-                    handle::ImageViewHandle::new(image_view_handle, gpu_rt.clone()),
-                ))
-            })
-            .collect();
-        println!("Loaded images");
-        let images: Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)> = images?;
+                    })
+                    .collect::<()>();
+                println!("Copied staging to image");
+
+                // transfer
+                let image_barrier: Vec<vk::ImageMemoryBarrier2> = chunk
+                    .chunks
+                    .iter()
+                    .map(|image| vk::ImageMemoryBarrier2 {
+                        s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                        p_next: ptr::null(),
+                        src_stage_mask: vk::PipelineStageFlags2::TRANSFER,
+                        src_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
+                        dst_stage_mask: vk::PipelineStageFlags2::ALL_GRAPHICS,
+                        dst_access_mask: vk::AccessFlags2::MEMORY_WRITE
+                            | vk::AccessFlags2::MEMORY_READ,
+                        old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        src_queue_family_index: queue.get_family_index(),
+                        dst_queue_family_index: queue.get_family_index(),
+                        image: image.handle.vk_image.handle(),
+                        subresource_range: resource::Image::image_subresource_range(
+                            vk::ImageAspectFlags::COLOR,
+                        ),
+                        _marker: Default::default(),
+                    })
+                    .collect();
+                unsafe {
+                    ctx.device.get_handle().cmd_pipeline_barrier2(
+                        cmd,
+                        &vk::DependencyInfo {
+                            s_type: vk::StructureType::DEPENDENCY_INFO,
+                            p_next: ptr::null(),
+                            dependency_flags: vk::DependencyFlags::empty(),
+                            memory_barrier_count: 0,
+                            p_memory_barriers: ptr::null(),
+                            buffer_memory_barrier_count: 0,
+                            p_buffer_memory_barriers: ptr::null(),
+                            image_memory_barrier_count: image_barrier.len() as u32,
+                            p_image_memory_barriers: image_barrier.as_ptr(),
+                            _marker: Default::default(),
+                        },
+                    );
+                }
+            });
+            images.append(
+                &mut chunk
+                    .chunks
+                    .into_iter()
+                    .map(|image| {
+                        let (image, image_view) = image.handle.decompose();
+                        let (image_handle, image_view_handle) = gpu_rt.new_image(
+                            ResourceInput::Resource(image),
+                            ResourceInput::Resource(image_view),
+                            vk::ImageLayout::GENERAL,
+                        )?;
+                        Ok((
+                            handle::ImageHandle::new(image_handle, gpu_rt.clone()),
+                            handle::ImageViewHandle::new(image_view_handle, gpu_rt.clone()),
+                        ))
+                    })
+                    .collect::<Result<Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)>>>()?,
+            );
+        }
+        println!("Loaded images {:?}", images.len());
         let textures: Vec<render::Texture<A>> = gltf
             .textures()
             .map(|gltf_texture| {
@@ -524,68 +701,368 @@ impl<'a> GltfLoader<'a> {
                 .collect(),
         );
         println!("Loaded materials");
-        let mut mesh_surfaces: HashMap<usize, Vec<Arc<render::Surface<A>>>> = HashMap::new();
-        let meshes: Vec<assets::mesh::Mesh<A>> = nodes.into_iter().filter_map(|node| {
-            if let Some(mesh) = node.handle.mesh() {
-                let primitives: Vec<Arc<render::Surface<A>>> = mesh_surfaces.entry(mesh.index()).or_insert_with(|| {
-                    mesh.primitives().flat_map(|primitive| {
-                        if let (Some(index_accessor), Some(vertex_accessor)) = (primitive.indices(), primitive.get(&gltf::Semantic::Positions)) {
-                            let indices: Vec<u8> = Self::load_accessor(gltf.blob.as_deref(), index_accessor.clone(), parent_path.clone());
-                            let vertices: Vec<u8> = Self::load_accessor(gltf.blob.as_deref(), vertex_accessor.clone(), parent_path.clone());
-                            let uvs: Option<Vec<u8>> = {
-                                if let Some(uv_accessor) = primitive.get(&gltf::Semantic::TexCoords(0)) {
-                                    let uvs = Self::load_accessor(gltf.blob.as_deref(), uv_accessor.clone(), parent_path.clone());
-                                    let uvs = Self::cast_bytes(uv_accessor.data_type(), gltf::accessor::DataType::F32, uvs);
-                                    Some(uvs)
-                                } else {
+
+        // Load all mesh resources
+        struct AccessorAllocation<A: Allocator = GPUAllocatorImpl> {
+            data: Option<Vec<u8>>,
+            buffer: Option<resource::Buffer<A>>,
+            semantic: Semantic,
+            mesh_index: usize,
+            primitive_index: usize,
+            accessor_index: usize,
+        }
+        impl<A: Allocator> AccessorAllocation<A> {
+            pub fn new(
+                primitive: &gltf::Primitive,
+                semantic: Semantic,
+                mesh_index: usize,
+            ) -> Option<Self> {
+                let accessor: Option<gltf::Accessor> = match &semantic {
+                    Semantic::Semantic(semantic) => primitive.get(semantic),
+                    Semantic::Indices => primitive.indices(),
+                };
+
+                if let Some(accessor) = accessor {
+                    let accessor_index: usize = accessor.index();
+                    Some(AccessorAllocation {
+                        data: None,
+                        buffer: None,
+                        semantic,
+                        mesh_index,
+                        primitive_index: primitive.index(),
+                        accessor_index,
+                    })
+                } else {
+                    None
+                }
+            }
+        }
+        let meshes: Vec<gltf::Mesh> = gltf.meshes().collect();
+        let accessors: Vec<gltf::Accessor> = gltf.accessors().collect();
+        let mesh_allocations: Vec<Subchunk<AccessorAllocation<A>>> = meshes.into_iter().flat_map(|mesh| {
+            mesh.primitives().filter_map(|primitive| {
+                if primitive.indices().is_none() || primitive.get(&gltf::Semantic::Positions).is_none() {
+                    return None;
+                }
+                let mut accessor_allocations: Vec<Subchunk<AccessorAllocation<A>>> = Vec::new();
+                for semantic in [Semantic::Indices, Semantic::Semantic(gltf::Semantic::Positions), Semantic::Semantic(gltf::Semantic::Normals), Semantic::Semantic(gltf::Semantic::TexCoords(0))] {
+                    if let Some(accessor_allocation) = AccessorAllocation::new(&primitive, semantic, mesh.index()) {
+                        let accessor = accessors.get(accessor_allocation.accessor_index).unwrap();
+                        let size: usize = match accessor.view() {
+                            None => {
+                                warn!("There is not a full implementation of sparse accessors yet");
+                                accessor.sparse().as_ref().unwrap().indices().view().buffer().length() + accessor.sparse().as_ref().unwrap().values().view().buffer().length()
+                            }
+                            Some(view) => {
+                                view.buffer().length()
+                            }
+                        };
+                        accessor_allocations.push(
+                            Subchunk {
+                                handle: accessor_allocation,
+                                offset: 0,
+                                // get the size that would be for loading in the gltf buffers
+                                size,
+                            }
+                        );
+                    }
+                }
+                Some(accessor_allocations)
+            }).flatten().collect::<Vec<Subchunk<AccessorAllocation<A>>>>()
+        }).collect::<Vec<Subchunk<AccessorAllocation<A>>>>();
+        // Massively multi-thread mesh loading
+        let mesh_allocation_size = mesh_allocations.len();
+        let accessors: Vec<Subchunk<AccessorAllocation<A>>> = {
+            let finished_pool: Arc<RwLock<Vec<Subchunk<AccessorAllocation<A>>>>> =
+                Arc::new(RwLock::new(Default::default()));
+            let cpu_memory_pool: Arc<tokio::sync::Semaphore> =
+                Arc::new(tokio::sync::Semaphore::new(MAX_MEMORY_USAGE));
+            let remaining_tasks = Arc::new(AtomicUsize::new(mesh_allocation_size));
+            let (chunk_found_sender, mut reciever) = tokio::sync::mpsc::channel::<(
+                resource::Buffer<A>,
+                Vec<Subchunk<AccessorAllocation<A>>>,
+            )>(1);
+            let mut tasks: Vec<tokio::task::JoinHandle<()>> = mesh_allocations
+                .into_iter()
+                .enumerate()
+                .map(|(id, mut subchunk)| {
+                    let cpu_memory_pool: Arc<tokio::sync::Semaphore> = cpu_memory_pool.clone();
+                    let chunk_found_sender = chunk_found_sender.clone();
+                    let gltf: Arc<Gltf> = gltf.clone();
+                    let parent_path = parent_path.clone();
+                    let allocator = allocator.clone();
+                    let device = gpu_rt.get_device().clone();
+                    let finished_pool = finished_pool.clone();
+                    let remaining_tasks: Arc<AtomicUsize> = remaining_tasks.clone();
+                    tokio::task::spawn(async move {
+                        println!("Loading {id}/{} primitive", mesh_allocation_size - 1);
+                        // process data
+                        let initial_permit = cpu_memory_pool
+                            .acquire_many(subchunk.size as u32)
+                            .await
+                            .unwrap();
+                        let accessor = gltf
+                            .accessors()
+                            .nth(subchunk.handle.accessor_index)
+                            .unwrap();
+                        let data: Vec<u8> = Self::load_accessor(
+                            gltf.blob.as_deref(),
+                            accessor.clone(),
+                            parent_path,
+                        );
+                        let data: Vec<u8> = Self::cast_bytes(
+                            accessor.data_type(),
+                            match subchunk.handle.semantic {
+                                Semantic::Semantic(_) => gltf::accessor::DataType::F32,
+                                Semantic::Indices => gltf::accessor::DataType::U32,
+                            },
+                            data,
+                        );
+                        subchunk.handle.data = Some(data);
+                        // adjust semaphores + update size
+                        let data_size: usize =
+                            mem::size_of_val(subchunk.handle.data.as_deref().unwrap());
+                        let new_permit: Option<SemaphorePermit> =
+                            match data_size.cmp(&subchunk.size) {
+                                Ordering::Less => {
+                                    cpu_memory_pool.add_permits(subchunk.size - data_size);
                                     None
                                 }
+                                Ordering::Equal => None,
+                                Ordering::Greater => Some(
+                                    cpu_memory_pool
+                                        .acquire_many((data_size - subchunk.size) as u32)
+                                        .await
+                                        .unwrap(),
+                                ),
                             };
-                            let indices = Self::cast_bytes(index_accessor.data_type(), gltf::accessor::DataType::U32, indices);
-                            let vertices = Self::cast_bytes(vertex_accessor.data_type(), gltf::accessor::DataType::F32, vertices);
-                            assert_eq!(vertices.len() % 12, 0);
-                            let mut surface = render::Surface::from_primitives(render::SurfaceBuilder {
-                                gpu_rt: gpu_rt.clone(),
-                                material: materials[primitive.material().index().map(|id| id + 1).unwrap_or(0)].clone(),
-                                allocator,
-                                immediate: self.immediate,
-                                indices,
-                                vertices,
-                                normals: None,
-                                uv: uvs,
-                                total_indices: index_accessor.count() as u32,
-                                first_index: 0,
-                                name: mesh.name().unwrap_or("gltf_primitive"),
+                        subchunk.size = data_size;
+
+                        // create buffer
+                        let mut allocator = allocator.clone();
+                        let buffer =
+                            resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                                device: device.clone(),
+                                allocator: &mut allocator,
+                                size: subchunk.size as vk::DeviceAddress,
+                                memory_type: MemoryLocation::GpuOnly,
+                                usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                                    | vk::BufferUsageFlags::STORAGE_BUFFER
+                                    | vk::BufferUsageFlags::VERTEX_BUFFER
+                                    | vk::BufferUsageFlags::INDEX_BUFFER
+                                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                             })
-                                .map_err(|e| {
-                                    warn!("Unable to primitive surface id: {} on mesh: {:?} (id: {})", primitive.index(), mesh.name(), mesh.index());
-                                    e
-                                }).unwrap();
-                            surface.upload(self.immediate, allocator, glam::Mat4::IDENTITY).unwrap();
-                            Some(Arc::new(surface))
-                        } else {
-                            warn!("Mesh primitive in {:?} (id: {}) does not have an index buffer. Skipping.", mesh.name(), mesh.index());
-                            None
+                                .unwrap();
+                        subchunk.handle.buffer = Some(buffer);
+                        // clean up
+                        initial_permit.forget();
+                        if let Some(permit) = new_permit {
+                            permit.forget();
                         }
-                    }).collect::<Vec<Arc<render::Surface<A>>>>()
-                }).clone();
-                Some(assets::mesh::Mesh::new(
-                    mesh.name().map(|n| n.to_string()),
-                    node.transform.w_axis.truncate(),
-                    glam::Vec3::new(
-                        node.transform.x_axis.length(),
-                        node.transform.y_axis.length(),
-                        node.transform.z_axis.length()
-                    ),
-                    glam::Quat::from_mat4(
-                        &node.transform
-                    ),
-                    primitives
-                ))
-            } else {
-                None
+
+                        // check if finished pool has sufficient size
+                        let mut finished_guard = finished_pool.write().await;
+                        finished_guard.push(subchunk);
+                        let finished_pool_size: usize =
+                            finished_guard.iter().map(|sc| sc.size).sum();
+                        let remaining_tasks = remaining_tasks.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                        if finished_pool_size >= CHUNK_MAX_SIZE || remaining_tasks <= 1 {
+                            let mut chunk_length: usize = 0;
+                            // set offsets
+                            let mut finished_subchunks: Vec<Subchunk<AccessorAllocation<A>>> =
+                                finished_guard
+                                    .drain(..)
+                                    .map(|mut subchunk| {
+                                        subchunk.offset = chunk_length;
+                                        chunk_length += subchunk.size;
+                                        subchunk
+                                    })
+                                    .collect();
+                            drop(finished_guard);
+                            // make staging
+                            let staging_buffer =
+                                resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                                    device,
+                                    allocator: &mut allocator,
+                                    size: finished_pool_size as vk::DeviceSize,
+                                    memory_type: MemoryLocation::CpuToGpu,
+                                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
+                                }).unwrap();
+
+                            // Use unsafe code to allow parallel writes
+                            finished_subchunks.par_iter_mut().for_each(|subchunk| {
+                                let dst_ptr: *mut u8 = staging_buffer.mapped_ptr().unwrap().as_ptr() as *mut u8;
+                                unsafe {
+                                    ptr::copy_nonoverlapping(subchunk.handle.data.as_deref().unwrap().as_ptr() as *mut u8, dst_ptr.add(subchunk.offset), subchunk.size);
+                                    drop(subchunk.handle.data.take());
+                                    cpu_memory_pool.add_permits(subchunk.size);
+                                }
+                            });
+
+                            chunk_found_sender
+                                .send((staging_buffer, finished_subchunks))
+                                .await
+                                .unwrap();
+                        }
+                    })
+                })
+                .collect();
+            drop(chunk_found_sender);
+            assert_eq!(tasks.len(), mesh_allocation_size);
+
+            let mut total_subchunks: Vec<Subchunk<AccessorAllocation<A>>> = Vec::new();
+            let mut join_handles_stream = stream::FuturesUnordered::new();
+            for handle in tasks {
+                join_handles_stream.push(handle);
             }
-        }).collect();
+
+
+            loop {
+                tokio::select! {
+                    Some((staging_buffer, mut subchunks)) = reciever.recv() => {
+                       self.immediate.submit(|ctx| {
+                            for subchunk in subchunks.iter() {
+                                unsafe {
+                                    ctx.device.get_handle().cmd_copy_buffer(ctx.cmd.handle(), staging_buffer.handle(), subchunk.handle.buffer.as_ref().unwrap().handle(), &[
+                                        vk::BufferCopy {
+                                            dst_offset: 0,
+                                            src_offset: subchunk.offset as vk::DeviceAddress,
+                                            size: subchunk.size as vk::DeviceAddress,
+                                        }
+                                    ]);
+                                }
+                            }
+                            println!("Transferred {} tasks to the GPU, remaining: {}", subchunks.len(), )
+                            total_subchunks.append(&mut subchunks);
+                        });
+                    },
+                    Some(_) = join_handles_stream.next() => {
+                        println!("A task completed, remaining: {}", remaining_tasks.fetch_add(0, std::sync::atomic::Ordering::SeqCst));
+                    },
+                    else => {
+                        break;
+                    },
+                }
+            }
+            total_subchunks
+        };
+        assert_eq!(accessors.len(), mesh_allocation_size);
+
+        let mut accessors: HashMap<(usize, usize, usize), Handle<resource::Buffer<A>>> = accessors
+            .into_iter()
+            .map(|accessor| {
+                (
+                    (
+                        accessor.handle.mesh_index,
+                        accessor.handle.primitive_index,
+                        accessor.handle.accessor_index,
+                    ),
+                    gpu_rt
+                        .new_buffer(ResourceInput::Resource(accessor.handle.buffer.unwrap()))
+                        .unwrap(),
+                )
+            })
+            .collect();
+
+        let mut mesh_surfaces: HashMap<usize, Vec<Arc<render::Surface<A>>>> = HashMap::new();
+        let meshes: Vec<assets::mesh::Mesh<A>> = nodes
+            .into_iter()
+            .enumerate()
+            .filter_map(|(mesh_id, node)| {
+                if let Some(mesh) = node.handle.mesh() {
+                    let primitives: Vec<Arc<render::Surface<A>>> = mesh_surfaces
+                        .entry(mesh.index())
+                        .or_insert_with(|| {
+                            mesh.primitives()
+                                .enumerate()
+                                .filter_map(|(primitive_id, primitive)| {
+                                    if primitive.indices().is_none()
+                                        || primitive.get(&gltf::Semantic::Positions).is_none()
+                                    {
+                                        return None;
+                                    }
+                                    let indices = primitive.indices().unwrap();
+                                    assert_eq!(indices.dimensions(), gltf::accessor::Dimensions::Scalar);
+                                    let positions =
+                                        primitive.get(&gltf::Semantic::Positions).unwrap();
+                                    assert_eq!(positions.dimensions(), gltf::accessor::Dimensions::Vec3);
+                                    let normal = primitive.get(&gltf::Semantic::Normals);
+                                    let uv = primitive.get(&gltf::Semantic::TexCoords(0));
+                                    Some(Arc::new({
+                                        let mut surface =
+                                            render::Surface::from_handles(SurfaceHandleBuilder {
+                                                gpu_rt: gpu_rt.clone(),
+                                                allocator,
+                                                material: materials
+                                                    .get(
+                                                        primitive
+                                                            .material()
+                                                            .index()
+                                                            .map(|id| id + 1)
+                                                            .unwrap_or(0),
+                                                    )
+                                                    .unwrap()
+                                                    .clone(),
+                                                indices: accessors
+                                                    .remove(&(
+                                                        mesh.index(), primitive.index(), indices.index()
+                                                    ))
+                                                    .unwrap(),
+                                                positions: accessors
+                                                    .remove(&(
+                                                        mesh.index(),
+                                                        primitive.index(),
+                                                        positions.index(),
+                                                    ))
+                                                    .unwrap()
+                                                    .clone(),
+                                                normals: None,
+                                                uv: uv.map(|accessor| {
+                                                    accessors
+                                                        .remove(&(
+                                                            mesh.index(),
+                                                            primitive.index(),
+                                                            accessor.index(),
+                                                        ))
+                                                        .unwrap()
+                                                }),
+                                                total_indices: indices.count() as u32,
+                                                first_index: 0,
+                                                name: format!(
+                                                    "primitive_{}_{}",
+                                                    mesh.name()
+                                                        .unwrap_or(mesh_id.to_string().as_str()),
+                                                    primitive_id
+                                                )
+                                                    .as_str(),
+                                            })
+                                                .unwrap();
+                                        surface
+                                            .upload(self.immediate, allocator, node.transform)
+                                            .unwrap();
+                                        surface
+                                    }))
+                                })
+                                .collect::<Vec<Arc<render::Surface<A>>>>()
+                        })
+                        .clone();
+
+                    Some(assets::mesh::Mesh::new(
+                        mesh.name().map(|n| n.to_string()),
+                        node.transform.w_axis.truncate(),
+                        glam::Vec3::new(
+                            node.transform.x_axis.length(),
+                            node.transform.y_axis.length(),
+                            node.transform.z_axis.length(),
+                        ),
+                        glam::Quat::from_mat4(&node.transform),
+                        primitives,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
         println!("Loaded meshes");
         Ok((materials, meshes))
     }

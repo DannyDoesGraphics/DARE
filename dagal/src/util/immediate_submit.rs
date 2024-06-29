@@ -1,7 +1,8 @@
-use crate::command::command_buffer::CmdBuffer;
-use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
+
+use crate::command::command_buffer::CmdBuffer;
+use crate::traits::Destructible;
 
 /// Adds a basic struct which can immediately submit all commands
 #[derive(Debug)]
@@ -89,5 +90,9 @@ impl ImmediateSubmit {
     /// Get a reference to the underlying device
     pub fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
+    }
+
+    pub fn get_queue(&self) -> &crate::device::Queue {
+        &self.queue
     }
 }

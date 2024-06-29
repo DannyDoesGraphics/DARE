@@ -639,14 +639,20 @@ impl RenderContext {
             let pipeline = Arc::new(render::pipeline::Pipeline::new(pipeline, Arc::new(layout)));
 
             let (materials, meshes): (Vec<Arc<render::Material>>, Vec<assets::mesh::Mesh>) =
-                assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
-                    .load_assets(
-                        &mut self.allocator,
-                        self.gpu_resource_table.clone(),
-                        std::path::PathBuf::from("C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf"),
-                        pipeline,
-                    )
-                    .unwrap();
+                tokio::task::block_in_place(|| {
+                    let handle = tokio::runtime::Handle::current();
+                    handle
+                        .block_on(
+                            assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
+                                .load_assets(
+                                    &mut self.allocator,
+                                    self.gpu_resource_table.clone(),
+                                    std::path::PathBuf::from("C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf"),
+                                    pipeline,
+                                ),
+                        )
+                        .unwrap()
+                });
             self.materials = materials;
             self.meshes = meshes;
         }
@@ -1237,11 +1243,9 @@ impl winit::application::ApplicationHandler for App {
             .as_mut()
             .unwrap()
             .build_swapchain(self.window.as_ref().unwrap());
-        self.render_context
-            .as_mut()
-            .unwrap()
-            .create_draw_image()
-            .unwrap();
+        if let Some(render_context) = self.render_context.as_mut() {
+            render_context.create_draw_image().unwrap();
+        }
     }
 
     fn window_event(
@@ -1356,7 +1360,8 @@ impl winit::application::ApplicationHandler for App {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::TRACE)
         .finish();

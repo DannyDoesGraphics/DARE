@@ -10,5 +10,7 @@ void main() {
     gl_Position = pc.scene_data.view_proj * pc.model_transform * position;
     if (is_flag_set(pc.surface.bit_flag, SURFACE_UV_BIT)) {
         out_uv = pc.surface.uv.vectors[gl_VertexIndex];
+    } else {
+        out_uv = vec2(0.0);
     }
 }

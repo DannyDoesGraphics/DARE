@@ -42,6 +42,19 @@ pub struct SurfaceBuilder<'a, A: Allocator> {
     pub name: &'a str,
 }
 
+pub struct SurfaceHandleBuilder<'a, A: Allocator> {
+    pub gpu_rt: GPUResourceTable<A>,
+    pub allocator: &'a mut ArcAllocator<A>,
+    pub material: Arc<render::Material<A>>,
+    pub indices: Handle<resource::Buffer<A>>,
+    pub positions: Handle<resource::Buffer<A>>,
+    pub normals: Option<Handle<resource::Buffer<A>>>,
+    pub uv: Option<Handle<resource::Buffer<A>>>,
+    pub total_indices: u32,
+    pub first_index: u32,
+    pub name: &'a str,
+}
+
 impl<A: Allocator> Drop for Surface<A> {
     fn drop(&mut self) {
         self.gpu_rt.free_buffer(self.vertex_buffer.clone()).unwrap();
@@ -151,6 +164,47 @@ impl<A: Allocator> Surface<A> {
             index_buffer,
             normal_buffer: None,
             uv_buffer,
+            buffer,
+            gpu_rt: builder.gpu_rt,
+            index_count: builder.total_indices,
+            first_index: builder.first_index,
+        })
+    }
+
+    pub fn from_handles(mut builder: SurfaceHandleBuilder<A>) -> Result<Self> {
+        let buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+            device: builder.gpu_rt.get_device().clone(),
+            allocator: builder.allocator,
+            size: std::mem::size_of::<CSurface>() as vk::DeviceSize,
+            memory_type: MemoryLocation::GpuOnly,
+            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                | vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::TRANSFER_DST,
+        })?;
+        if let Some(debug) = builder.gpu_rt.get_device().clone().get_debug_utils() {
+            builder.gpu_rt.with_buffer_mut(&builder.positions, |buffer| {
+                buffer.set_name(debug, format!("{}_position", builder.name).as_str())
+            })??;
+            builder.gpu_rt.with_buffer_mut(&builder.indices, |buffer| {
+                buffer.set_name(debug, format!("{}_indices", builder.name).as_str())
+            })??;
+            if let Some(normal) = builder.normals.as_ref() {
+                builder.gpu_rt.with_buffer_mut(normal, |buffer| {
+                    buffer.set_name(debug, format!("{}_uv", builder.name).as_str())
+                })??;
+            }
+            if let Some(uv) = builder.uv.as_ref() {
+                builder.gpu_rt.with_buffer_mut(uv, |buffer| {
+                    buffer.set_name(debug, format!("{}_uv", builder.name).as_str())
+                })??;
+            }
+        }
+        Ok(Self {
+            material: builder.material,
+            vertex_buffer: builder.positions,
+            index_buffer: builder.indices,
+            normal_buffer: builder.normals,
+            uv_buffer: builder.uv,
             buffer,
             gpu_rt: builder.gpu_rt,
             index_count: builder.total_indices,

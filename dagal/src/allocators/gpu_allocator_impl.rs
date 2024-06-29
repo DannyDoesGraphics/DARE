@@ -5,7 +5,6 @@ use std::sync::{Arc, RwLock};
 use anyhow::Result;
 use ash::vk;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};
-use tracing::trace;
 
 use crate::allocators::Allocator;
 use crate::traits::Destructible;
@@ -44,7 +43,7 @@ impl GPUAllocatorImpl {
             .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
         if let Some(handle) = allocation.handle.take() {
             #[cfg(feature = "log-lifetimes")]
-            trace!("Destroying VkMemory {:p}", unsafe { handle.memory() });
+            tracing::trace!("Destroying VkMemory {:p}", unsafe { handle.memory() });
             guard.as_mut().unwrap().free(handle)?;
         }
         Ok(())
@@ -77,7 +76,8 @@ impl Allocator for GPUAllocatorImpl {
             allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
         };
         let handle = guard.as_mut().unwrap().allocate(&allocate_ci)?;
-        trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
+        #[cfg(feature = "log-lifetimes")]
+        tracing::trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
 
         Ok(GPUAllocatorAllocation {
             handle: Some(handle),

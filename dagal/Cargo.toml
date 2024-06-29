@@ -24,7 +24,7 @@ glam = "0.28.0"
 winit = { version = "0.30.0", optional = false }
 
 [features]
-default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "log-lifetimes", "log-memory-allocations", "shaderc", "raii"]
+default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "shaderc", "raii"]
 # Adds support for winit into dagal
 winit = ["dep:winit"]
 # Adds support for gpu-allocator for the primary allocation
