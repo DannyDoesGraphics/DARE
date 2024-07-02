@@ -23,6 +23,8 @@ use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
 
+use crate::render::scene_data::SceneData;
+
 mod assets;
 mod ray_tracing;
 mod render;
@@ -50,7 +52,6 @@ struct RenderContext {
     meshes: Vec<assets::mesh::Mesh<GPUAllocatorImpl>>,
     materials: Vec<Arc<render::Material<GPUAllocatorImpl>>>,
     draw_context: render::draw_context::DrawContext<GPUAllocatorImpl>,
-    scene_data: resource::Buffer<GPUAllocatorImpl>,
 
     gradient_pipeline: dagal::pipelines::ComputePipeline,
     gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
@@ -90,6 +91,7 @@ struct Frame {
     swapchain_semaphore: dagal::sync::BinarySemaphore,
     render_semaphore: dagal::sync::BinarySemaphore,
     render_fence: dagal::sync::Fence,
+    scene_data_buffer: resource::Buffer<GPUAllocatorImpl>,
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +237,16 @@ impl RenderContext {
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
+                let scene_data_buffer =
+                    resource::Buffer::new(
+                        resource::BufferCreateInfo::NewEmptyBuffer {
+                            device: device.clone(),
+                            allocator: &mut allocator,
+                            size: mem::size_of::<SceneData>() as vk::DeviceSize,
+                            memory_type: MemoryLocation::CpuToGpu,
+                            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
+                        }
+                    ).unwrap();
 
                 Frame {
                     command_pool,
@@ -242,6 +254,7 @@ impl RenderContext {
                     swapchain_semaphore,
                     render_semaphore,
                     render_fence,
+                    scene_data_buffer
                 }
             })
             .collect();
@@ -288,18 +301,6 @@ impl RenderContext {
             .unwrap()
             .build(device.clone())
             .unwrap();
-        let mut scene_data = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-            device: device.clone(),
-            allocator: &mut allocator,
-            size: mem::size_of::<assets::scene_data::SceneData>() as vk::DeviceSize,
-            memory_type: MemoryLocation::CpuToGpu,
-            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                | vk::BufferUsageFlags::STORAGE_BUFFER,
-        })
-            .unwrap();
-        scene_data
-            .set_name(device.get_debug_utils().unwrap(), "scene_data")
-            .unwrap();
 
         let mut app = Self {
             instance,
@@ -343,7 +344,6 @@ impl RenderContext {
             error_checkerboard_image: None,
 
             draw_context: Default::default(),
-            scene_data,
         };
         // create default images
         // create default texture data
@@ -650,7 +650,8 @@ impl RenderContext {
                                     &mut self.allocator,
                                     self.gpu_resource_table.clone(),
                                     std::path::PathBuf::from(
-                                        "./dare/assets/Sponza/glTF/Sponza.gltf",
+                                        //"./dare/assets/Sponza/glTF/Sponza.gltf",
+                                        "C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf"
                                     ),
                                     pipeline,
                                 ),
@@ -717,12 +718,10 @@ impl RenderContext {
                 })
                 .collect(),
         );
+    }
 
-        let mut scene_data = self
-            .scene_data
-            .mapped_ptr()
-            .unwrap()
-            .cast::<assets::scene_data::SceneData>();
+    fn update_scene_data(&mut self) {
+        let mut scene_data = self.frames.get(self.frame_number % self.frames.len()).unwrap().scene_data_buffer.mapped_ptr().unwrap().cast::<SceneData>();
         let extent = self.draw_image.as_ref().unwrap().extent();
         unsafe {
             let mut proj = glam::Mat4::perspective_rh(
@@ -812,6 +811,14 @@ impl RenderContext {
         }
     }
 
+    fn sort_draw_context(&mut self) {
+        self.draw_context.surfaces.sort_by(|a, b| {
+            a.surface.material().get_pipeline().get_pipeline().handle().cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
+             .then_with(|| a.surface.material().get_pipeline().get_layout().handle().cmp(&b.surface.material().get_pipeline().get_layout().handle()))
+             .then_with(|| a.surface.get_index_buffer().id().cmp(&b.surface.get_index_buffer().id()))
+        });
+    }
+
     /// Draws a mesh
     fn draw_mesh(&self, cmd: &dagal::command::CommandBufferRecording) -> Result<()> {
         let dynamic_rendering_context = cmd.dynamic_rendering();
@@ -854,8 +861,10 @@ impl RenderContext {
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
         }
+        let frame = self.frames.get(self.frame_number % self.frames.len()).unwrap();
         let mut last_pipeline: vk::Pipeline = vk::Pipeline::null();
-        let mut last_index: vk::Buffer = vk::Buffer::null();
+        let mut last_layout: vk::PipelineLayout = vk::PipelineLayout::null();
+        let mut last_index_buffer: vk::Buffer = vk::Buffer::null();
         for draw in self.draw_context.surfaces.iter() {
             unsafe {
                 if last_pipeline != draw.surface.material().get_pipeline().get_pipeline().handle() {
@@ -868,6 +877,9 @@ impl RenderContext {
                             .get_pipeline()
                             .handle(),
                     );
+                    last_pipeline = draw.surface.material().get_pipeline().get_pipeline().handle();
+                }
+                if last_layout != draw.surface.material().get_pipeline().get_layout().handle() {
                     self.device.get_handle().cmd_bind_descriptor_sets(
                         cmd.handle(),
                         vk::PipelineBindPoint::GRAPHICS,
@@ -876,12 +888,12 @@ impl RenderContext {
                         &[self.gpu_resource_table.get_descriptor_set().unwrap()],
                         &[],
                     );
-                    last_pipeline = draw.surface.material().get_pipeline().get_pipeline().handle();
+                    last_layout = draw.surface.material().get_pipeline().get_layout().handle();
                 }
                 let index_buffer = self.gpu_resource_table
                                        .with_buffer(draw.surface.get_index_buffer(), |buf| buf.handle())
                     ?;
-                if last_index != index_buffer {
+                if last_index_buffer != index_buffer {
                     self.device.get_handle().cmd_bind_index_buffer(
                         cmd.handle(),
                         self.gpu_resource_table
@@ -890,10 +902,11 @@ impl RenderContext {
                         0,
                         vk::IndexType::UINT32,
                     );
+                    last_index_buffer = index_buffer;
                 }
-            }
+            };
             let push_constants = render::push_constants::RasterizationPushConstant {
-                scene_data: self.scene_data.address(),
+                scene_data: frame.scene_data_buffer.address(),
                 surface_data: draw.surface.get_buffer().address(),
                 model_transform: draw.local_transform,
             };
@@ -1068,6 +1081,7 @@ impl RenderContext {
     // Deals with drawing
     fn draw(&mut self) {
         self.update_scene();
+        self.sort_draw_context();
         // clear out last frame
         let swapchain_frame = self
             .frames
@@ -1089,8 +1103,8 @@ impl RenderContext {
         {
             return;
         }
-
-        let swapchain_frame = self.frames.get(self.frame_number % FRAME_OVERLAP).unwrap();
+        self.update_scene_data();
+        let swapchain_frame = self.frames.get(self.frame_number % self.frames.len()).unwrap();
         // get swapchain image
         let swapchain_image_index = self.swapchain.as_ref().unwrap().next_image_index(
             1000000000,

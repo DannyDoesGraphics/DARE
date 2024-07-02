@@ -155,8 +155,8 @@ impl<'a> Resource<'a> for DescriptorPool {
     type HandleType = vk::DescriptorPool;
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             DescriptorPoolCreateInfo::FromVk {
@@ -187,7 +187,7 @@ impl<'a> Resource<'a> for DescriptorPool {
 
                 let handle = unsafe { device.get_handle().create_descriptor_pool(&pool_ci, None)? };
                 #[cfg(feature = "log-lifetimes")]
-                trace!("Creating VkDescriptorPool {:p}", handle);
+                tracing::trace!("Creating VkDescriptorPool {:p}", handle);
                 let mut handle = Self { handle, device };
                 crate::resource::traits::update_name(&mut handle, name);
                 Ok(handle)
@@ -258,7 +258,7 @@ impl DescriptorPool {
 impl Destructible for DescriptorPool {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroyed VkDescriptorPool {:p}", self.handle);
+        tracing::trace!("Destroyed VkDescriptorPool {:p}", self.handle);
 
         unsafe {
             self.device
