@@ -43,47 +43,6 @@ pub enum Semantic {
     Indices,
 }
 
-struct Chunk<T> {
-    length: usize,
-    chunks: Vec<Subchunk<T>>,
-}
-
-impl<T> Chunk<T> {
-    fn chunkify(subchunks: Vec<Subchunk<T>>, size_limit: usize) -> Vec<Self> {
-        let mut chunks: Vec<Chunk<T>> = Vec::new();
-        let mut current_chunk: Chunk<T> = Chunk::default();
-        let mut current_chunk_size: usize = 0;
-        for mut subchunk in subchunks {
-            if current_chunk_size >= size_limit {
-                let mut old = Chunk::default();
-                std::mem::swap(&mut old, &mut current_chunk);
-                chunks.push(old);
-                current_chunk_size = 0;
-            }
-            subchunk.offset = current_chunk_size;
-            current_chunk_size += subchunk.size;
-            current_chunk.length = current_chunk_size;
-            current_chunk.chunks.push(subchunk);
-        }
-        chunks
-    }
-}
-
-struct Subchunk<T> {
-    handle: T,
-    offset: usize,
-    size: usize,
-}
-
-impl<T> Default for Chunk<T> {
-    fn default() -> Self {
-        Self {
-            length: 0,
-            chunks: vec![],
-        }
-    }
-}
-
 /// Represents a flatten node
 struct FlattenNode<'a> {
     handle: gltf::Node<'a>,
@@ -639,17 +598,17 @@ impl<'a> GltfLoader<'a> {
                         let device = gpu_rt.get_device().clone();
                         let vk_fence: dagal::sync::Fence =
                             dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty())?;
-                        let mut command_buffer: Option<dagal::command::CommandBuffer> = None;
-                        let mut command_pool: Option<dagal::command::CommandPool> = None;
+                        let mut _command_buffer: Option<dagal::command::CommandBuffer> = None;
+                        let mut _command_pool: Option<dagal::command::CommandPool> = None;
                         {
                             let vk_guard = vk_queue.lock().unwrap();
-                            command_pool = Some(dagal::command::CommandPool::new(
+                            _command_pool = Some(dagal::command::CommandPool::new(
                                 device.clone(),
                                 &vk_guard,
                                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                             )?);
                             let vk_command_buffer: dagal::command::CommandBuffer =
-                                command_pool.as_ref().unwrap().allocate(1)?.pop().unwrap();
+                                _command_pool.as_ref().unwrap().allocate(1)?.pop().unwrap();
                             vk_command_buffer.reset(vk::CommandBufferResetFlags::empty())?;
 
                             let vk_command_buffer = vk_command_buffer
@@ -763,7 +722,7 @@ impl<'a> GltfLoader<'a> {
                             }
                             let raw_command_buffer = vk_command_buffer.handle();
                             let vk_command_buffer = vk_command_buffer.end()?;
-                            command_buffer = Some(vk_command_buffer
+                            _command_buffer = Some(vk_command_buffer
                                 .submit(
                                     vk_guard.handle(),
                                     &[dagal::command::CommandBufferExecutable::submit_info_sync(
@@ -966,7 +925,15 @@ impl<'a> GltfLoader<'a> {
                                                     })
                                                     .unwrap()
                                                     .clone(),
-                                                normals: None,
+                                                normals: normal.map(|accessor| {
+                                                    accessors
+                                                        .remove(&AccessorIndex {
+                                                            mesh_index: mesh.index(),
+                                                            primitive_index: primitive.index(),
+                                                            accessor_index: accessor.index(),
+                                                        })
+                                                        .unwrap()
+                                                }),
                                                 uv: uv.map(|accessor| {
                                                     accessors
                                                         .remove(&AccessorIndex {
