@@ -35,6 +35,8 @@ struct App {
     pub window: Option<winit::window::Window>,
     pub render_context: Option<RenderContext>,
     previous: Option<std::time::Instant>,
+    dts: Vec<f64>,
+    frame_number: u128,
 }
 
 struct RenderContext {
@@ -648,7 +650,7 @@ impl RenderContext {
                                     &mut self.allocator,
                                     self.gpu_resource_table.clone(),
                                     std::path::PathBuf::from(
-                                        "C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
+                                        "./dare/assets/Sponza/glTF/Sponza.gltf",
                                     ),
                                     pipeline,
                                 ),
@@ -1360,6 +1362,15 @@ impl winit::application::ApplicationHandler for App {
         }
         if let Some(render_context) = self.render_context.as_mut() {
             render_context.camera.update(dt as f32);
+            // update fps
+            self.dts.push(dt);
+            let sum = self.dts.iter().sum::<f64>();
+            if sum >= 1.0 {
+                let fps = self.dts.len() as f64 / sum;
+                window.set_title(format!("DARE | DT: {dt} | Avg. FPS: {fps}").as_str());
+                self.dts.clear();
+            }
+            self.frame_number += 1;
         }
     }
 
