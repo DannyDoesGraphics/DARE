@@ -1,7 +1,7 @@
+use std::{ptr, thread};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::{ptr, thread};
 
 use anyhow::Result;
 use ash::vk;
@@ -97,7 +97,7 @@ impl Fence {
 impl Destructible for Fence {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkFence {:p}", self.handle);
+        tracing::trace!("Destroying VkFence {:p}", self.handle);
 
         unsafe {
             self.device.get_handle().destroy_fence(self.handle, None);
