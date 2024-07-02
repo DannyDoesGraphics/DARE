@@ -11,8 +11,6 @@ use futures::prelude::*;
 use gltf::image::Source;
 use gltf::texture::{MagFilter, WrappingMode};
 use gltf::Gltf;
-use image::GenericImageView;
-use rayon::prelude::*;
 
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -30,9 +28,8 @@ use crate::util::handle;
 use crate::{assets, render};
 
 /// Responsible for loading gltf assets
-const CHUNK_MAX_SIZE: usize = 10usize.pow(9); // 1 GiB
 const CPU_MAX_MEMORY_USAGE: usize = 4 * 10usize.pow(9); // Max amount of memory that can be used at any time to load meshes in
-const GPU_MAX_MEMORY_USAGE: usize = 10usize.pow(9); // Max amount of memory that can be used during transfer
+const GPU_MAX_MEMORY_USAGE: usize = 2 * 10usize.pow(9); // Max amount of memory that can be used during transfer
 
 /// Struct which loads GLTF assets
 #[derive(Debug)]
@@ -193,7 +190,7 @@ impl<'a> GltfLoader<'a> {
                     blob[start..end].iter().copied()
                 })
                 .collect()
-        } else if let Some(sparse) = accessor.sparse() {
+        } else if accessor.sparse().is_some() {
             unimplemented!()
         } else {
             panic!("Expected an accessor that is either sparse or non-sparse, but got none.")
@@ -208,7 +205,7 @@ impl<'a> GltfLoader<'a> {
     ) -> Result<image::DynamicImage> {
         let mut buffer: Vec<u8> = Vec::new();
         let buf: Vec<u8> = match image.source() {
-            gltf::image::Source::View { view, mime_type } => {
+            Source::View { view, .. } => {
                 let total_offset: usize = view.offset();
                 let glob =
                     Self::load_buffer_source(blob, &mut buffer, view.buffer().source(), path)?;
@@ -219,11 +216,10 @@ impl<'a> GltfLoader<'a> {
                     .collect();
                 glob
             }
-            gltf::image::Source::Uri { uri, mime_type } => {
+            Source::Uri { uri, .. } => {
                 assert!(!uri.starts_with("data"));
                 path.push(path::PathBuf::from(uri));
-                let buf = tokio::fs::read(path).await?;
-                buf
+                std::fs::read(path)?
             }
         };
         Ok(image::load_from_memory(&buf)?)
@@ -239,7 +235,7 @@ impl<'a> GltfLoader<'a> {
     ) -> Result<(Vec<Arc<render::Material<A>>>, Vec<assets::mesh::Mesh<A>>)> {
         let gltf: Arc<Gltf> = Arc::new(Gltf::open(path.clone())?);
         let parent_path = path.parent().unwrap().to_path_buf();
-        let scene = gltf.default_scene().expect("No default scene found.");
+        gltf.default_scene().expect("No default scene found.");
         let mut child_indices: HashSet<usize> = HashSet::new();
         for node in gltf.nodes() {
             for child in node.children() {
@@ -390,8 +386,8 @@ impl<'a> GltfLoader<'a> {
                 .images()
                 .map(|gltf_image| {
                     let size: usize = match gltf_image.source() {
-                        Source::View { view, mime_type } => view.buffer().length(),
-                        Source::Uri { uri, mime_type } => {
+                        Source::View { view, .. } => view.buffer().length(),
+                        Source::Uri { uri, .. } => {
                             assert!(!uri.starts_with("data"));
                             let mut parent_path: path::PathBuf = parent_path.clone();
                             parent_path.push(uri);
@@ -471,7 +467,7 @@ impl<'a> GltfLoader<'a> {
                 Arc::new(tokio::sync::Semaphore::new(GPU_MAX_MEMORY_USAGE));
             let vk_queue_family_index: u32 = self.immediate.get_queue().get_family_index();
             let vk_queue: Arc<Mutex<dagal::device::Queue>> =
-                Arc::new(Mutex::new(self.immediate.get_queue().clone()));
+                Arc::new(Mutex::new(*self.immediate.get_queue()));
             let tasks: Vec<tokio::task::JoinHandle<Result<AssetFinished<A>>>> = assets_to_load
                 .into_iter()
                 .map(|asset_to_load| {
@@ -487,10 +483,7 @@ impl<'a> GltfLoader<'a> {
                         let mut image_extents: Option<vk::Extent3D> = None;
                         let data: Vec<u8> = match &asset_to_load.asset {
                             AssetLoading::Accessor {
-                                index,
-                                primitive,
-                                mesh_index,
-                                semantic,
+                                index, semantic, ..
                             } => {
                                 let accessor: gltf::Accessor =
                                     gltf.accessors().nth(*index).unwrap();
@@ -543,7 +536,6 @@ impl<'a> GltfLoader<'a> {
                             .acquire_many(data_size as u32)
                             .await?
                             .forget();
-                        println!("Uploading to GPU...");
                         let staging_buffer =
                             resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
                                 device: gpu_rt.get_device().clone(),
@@ -558,17 +550,14 @@ impl<'a> GltfLoader<'a> {
                             drop(data);
                             cpu_memory_pool.add_permits(data_size);
                         }
-                        println!("Uploaded");
 
                         let resource: AssetFinished<A> = match &asset_to_load.asset {
                             AssetLoading::Accessor {
                                 index: accessor_index,
                                 primitive: primitive_index,
                                 mesh_index,
-                                semantic,
+                                ..
                             } => {
-                                let accessor: gltf::Accessor =
-                                    gltf.accessors().nth(*accessor_index).unwrap();
                                 let buffer = resource::Buffer::new(
                                     resource::BufferCreateInfo::NewEmptyBuffer {
                                         device: gpu_rt.get_device().clone(),
@@ -592,7 +581,6 @@ impl<'a> GltfLoader<'a> {
                                 }
                             }
                             AssetLoading::Image { index } => {
-                                let image: gltf::Image = gltf.images().nth(*index).unwrap();
                                 let extent = image_extents.unwrap();
                                 let vk_image = resource::Image::<A>::new(
                                     resource::ImageCreateInfo::NewAllocated {
@@ -651,9 +639,8 @@ impl<'a> GltfLoader<'a> {
                         let device = gpu_rt.get_device().clone();
                         let vk_fence: dagal::sync::Fence =
                             dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty())?;
+                        let mut command_buffer: Option<dagal::command::CommandBuffer> = None;
                         let mut command_pool: Option<dagal::command::CommandPool> = None;
-
-                        println!("Copying...");
                         {
                             let vk_guard = vk_queue.lock().unwrap();
                             command_pool = Some(dagal::command::CommandPool::new(
@@ -661,21 +648,18 @@ impl<'a> GltfLoader<'a> {
                                 &vk_guard,
                                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                             )?);
-                            let command_buffer: dagal::command::CommandBuffer =
+                            let vk_command_buffer: dagal::command::CommandBuffer =
                                 command_pool.as_ref().unwrap().allocate(1)?.pop().unwrap();
+                            vk_command_buffer.reset(vk::CommandBufferResetFlags::empty())?;
 
-                            let command_buffer = command_buffer
+                            let vk_command_buffer = vk_command_buffer
                                 .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
                                 .unwrap();
 
                             match &resource {
-                                AssetFinished::Image {
-                                    image,
-                                    image_view,
-                                    index,
-                                } => unsafe {
+                                AssetFinished::Image { image, .. } => unsafe {
                                     device.get_handle().cmd_pipeline_barrier2(
-                                        command_buffer.handle(),
+                                        vk_command_buffer.handle(),
                                         &vk::DependencyInfo {
                                             s_type: vk::StructureType::DEPENDENCY_INFO,
                                             p_next: ptr::null(),
@@ -709,7 +693,7 @@ impl<'a> GltfLoader<'a> {
                                     );
 
                                     device.get_handle().cmd_copy_buffer_to_image(
-                                        command_buffer.handle(),
+                                        vk_command_buffer.handle(),
                                         staging_buffer.handle(),
                                         image.handle(),
                                         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -729,7 +713,7 @@ impl<'a> GltfLoader<'a> {
                                     );
 
                                     device.get_handle().cmd_pipeline_barrier2(
-                                        command_buffer.handle(),
+                                        vk_command_buffer.handle(),
                                         &vk::DependencyInfo {
                                             s_type: vk::StructureType::DEPENDENCY_INFO,
                                             p_next: ptr::null(),
@@ -764,9 +748,9 @@ impl<'a> GltfLoader<'a> {
                                         },
                                     );
                                 },
-                                AssetFinished::Buffer { buffer, index } => unsafe {
+                                AssetFinished::Buffer { buffer, .. } => unsafe {
                                     device.get_handle().cmd_copy_buffer(
-                                        command_buffer.handle(),
+                                        vk_command_buffer.handle(),
                                         staging_buffer.handle(),
                                         buffer.handle(),
                                         &[vk::BufferCopy {
@@ -777,9 +761,9 @@ impl<'a> GltfLoader<'a> {
                                     )
                                 },
                             }
-                            let raw_command_buffer = command_buffer.handle();
-                            let command_buffer = command_buffer.end()?;
-                            command_buffer
+                            let raw_command_buffer = vk_command_buffer.handle();
+                            let vk_command_buffer = vk_command_buffer.end()?;
+                            command_buffer = Some(vk_command_buffer
                                 .submit(
                                     vk_guard.handle(),
                                     &[dagal::command::CommandBufferExecutable::submit_info_sync(
@@ -791,12 +775,10 @@ impl<'a> GltfLoader<'a> {
                                     )],
                                     vk_fence.handle(),
                                 )
-                                .unwrap();
+                                .unwrap());
                             drop(vk_guard);
-                            println!("Submitted!");
                         }
                         vk_fence.await?;
-                        println!("Copied!");
                         drop(staging_buffer);
                         gpu_memory_pool.add_permits(data_size);
                         Ok(resource)
@@ -833,7 +815,7 @@ impl<'a> GltfLoader<'a> {
             let images: Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)> = images
                 .into_iter()
                 .enumerate()
-                .map(|(index, mut image)| {
+                .map(|(_, mut image)| {
                     let image = image.take().unwrap();
                     let image_handle = gpu_rt.new_image(
                         ResourceInput::Resource(image.0),
@@ -924,7 +906,6 @@ impl<'a> GltfLoader<'a> {
                 .collect(),
         );
         println!("Loaded materials");
-        let meshes: Vec<gltf::Mesh> = gltf.meshes().collect();
         let mut mesh_surfaces: HashMap<usize, Vec<Arc<render::Surface<A>>>> = HashMap::new();
         let meshes: Vec<assets::mesh::Mesh<A>> = nodes
             .into_iter()
