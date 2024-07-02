@@ -1,12 +1,14 @@
-use crate::device::physical_device::PhysicalDevice;
-use crate::traits::Destructible;
+use std::collections::HashSet;
+use std::ffi::c_char;
+use std::sync::{Arc, Weak};
+
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-use std::collections::HashSet;
-use std::ffi::c_char;
-use std::sync::{Arc, Weak};
+
+use crate::device::physical_device::PhysicalDevice;
+use crate::traits::Destructible;
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
@@ -35,7 +37,7 @@ impl PartialEq for LogicalDeviceInner {
 impl Destructible for LogicalDeviceInner {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkDevice {:p}", self.handle.handle());
+        tracing::trace!("Destroying VkDevice {:p}", self.handle.handle());
 
         unsafe {
             self.handle.destroy_device(None);
@@ -100,7 +102,7 @@ impl LogicalDevice {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkDevice {:p}", device.handle());
+        tracing::trace!("Creating VkDevice {:p}", device.handle());
 
         let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
         if device_ci.debug_utils {

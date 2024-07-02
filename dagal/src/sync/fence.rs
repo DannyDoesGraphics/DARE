@@ -31,7 +31,7 @@ impl Fence {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkFence {:p}", handle);
+        tracing::trace!("Creating VkFence {:p}", handle);
 
         Ok(Self {
             handle,

@@ -47,7 +47,7 @@ impl ImmediateSubmit {
     }
 
     /// Immediately submit a function which fills out a command buffer
-    pub fn submit<T: FnOnce(ImmediateSubmitContext)>(&self, function: T) {
+    pub fn submit<T: FnOnce(ImmediateSubmitContext) -> R, R>(&self, function: T) -> R {
         unsafe {
             self.device
                 .get_handle()
@@ -67,7 +67,7 @@ impl ImmediateSubmit {
             cmd: &cmd,
             queue: &self.queue,
         };
-        function(context);
+        let r = function(context);
         let cmd = cmd.end().unwrap();
         let raw_cmd = cmd.handle();
         cmd.submit(
@@ -85,6 +85,7 @@ impl ImmediateSubmit {
         unsafe {
             self.fence.wait(9999999999).unwrap_unchecked();
         }
+        r
     }
 
     /// Get a reference to the underlying device

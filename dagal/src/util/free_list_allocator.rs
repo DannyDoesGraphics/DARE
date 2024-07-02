@@ -107,7 +107,11 @@ impl<T> FreeList<T> {
             guard.free_ids.remove(0)
         };
 
-        guard.resources.push(Some(resource));
+        if guard.resources.len() > id as usize {
+            guard.resources[id as usize] = Some(resource);
+        } else {
+            guard.resources.push(Some(resource));
+        }
         Ok(Handle {
             id,
             _marker: Default::default(),
