@@ -1,16 +1,16 @@
+use std::{mem, path, ptr};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::windows::prelude::MetadataExt;
 use std::sync::Arc;
-use std::{mem, path, ptr};
 
 use anyhow::Result;
 use bytemuck::{cast_slice, Pod};
 use futures::prelude::*;
+use gltf::Gltf;
 use gltf::image::Source;
 use gltf::texture::{MagFilter, WrappingMode};
-use gltf::Gltf;
 
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -23,9 +23,9 @@ use dagal::resource::traits::Resource;
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::ImmediateSubmit;
 
+use crate::{assets, render};
 use crate::render::SurfaceHandleBuilder;
 use crate::util::handle;
-use crate::{assets, render};
 
 /// Responsible for loading gltf assets
 const CPU_MAX_MEMORY_USAGE: usize = 4 * 10usize.pow(9); // Max amount of memory that can be used at any time to load meshes in
@@ -55,17 +55,17 @@ impl<'a> GltfLoader<'a> {
     }
 
     /// Flattens node tree and applies transformations from the parent nodes
-    fn flatten_node_tree<'b>(
+    fn flatten_node_tree(
         parent_transform: glam::Mat4,
-        roots: Vec<gltf::Node<'b>>,
-    ) -> Vec<FlattenNode<'b>> {
+        roots: Vec<gltf::Node>,
+    ) -> Vec<FlattenNode> {
         roots
             .into_iter()
             .flat_map(|node| {
-                let children: Vec<gltf::Node<'b>> = node.children().collect();
+                let children: Vec<gltf::Node> = node.children().collect();
                 let transform: glam::Mat4 =
                     parent_transform * glam::Mat4::from_cols_array_2d(&node.transform().matrix());
-                let mut nodes: Vec<FlattenNode<'b>> = vec![FlattenNode {
+                let mut nodes: Vec<FlattenNode> = vec![FlattenNode {
                     handle: node.clone(),
                     transform,
                 }];
@@ -81,10 +81,10 @@ impl<'a> GltfLoader<'a> {
     }
 
     fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
-    where
-        T: Pod,
-        U: Pod,
-        T: Into<U>,
+                              where
+                                  T: Pod,
+                                  U: Pod,
+                                  T: Into<U>,
     {
         let from_slice: Vec<T> = cast_slice(&slice).to_vec();
         let to_slice: Vec<U> = from_slice.into_iter().map(|x| x.into()).collect();
@@ -379,36 +379,36 @@ impl<'a> GltfLoader<'a> {
                                     Semantic::Semantic(gltf::Semantic::Normals),
                                     Semantic::Semantic(gltf::Semantic::TexCoords(0)),
                                 ]
-                                .into_iter()
-                                .filter_map(|semantic| {
-                                    let accessor: gltf::Accessor = match &semantic {
-                                        Semantic::Semantic(semantic) => {
-                                            gltf_primitive.get(semantic)?
-                                        }
-                                        Semantic::Indices => gltf_primitive.indices()?,
-                                    };
-                                    let size: usize = match accessor.view() {
-                                        None => unimplemented!(),
-                                        Some(view) => match view.buffer().source() {
-                                            gltf::buffer::Source::Bin => 0,
-                                            gltf::buffer::Source::Uri(uri) => {
-                                                let mut parent_path = parent_path.clone();
-                                                parent_path.push(uri);
-                                                parent_path.metadata().unwrap().len() as usize
+                                    .into_iter()
+                                    .filter_map(|semantic| {
+                                        let accessor: gltf::Accessor = match &semantic {
+                                            Semantic::Semantic(semantic) => {
+                                                gltf_primitive.get(semantic)?
                                             }
-                                        },
-                                    };
-                                    Some(AssetToLoad {
-                                        size,
-                                        asset: AssetLoading::Accessor {
-                                            index: accessor.index(),
-                                            primitive: gltf_primitive.index(),
-                                            mesh_index: gltf_mesh.index(),
-                                            semantic,
-                                        },
+                                            Semantic::Indices => gltf_primitive.indices()?,
+                                        };
+                                        let size: usize = match accessor.view() {
+                                            None => unimplemented!(),
+                                            Some(view) => match view.buffer().source() {
+                                                gltf::buffer::Source::Bin => 0,
+                                                gltf::buffer::Source::Uri(uri) => {
+                                                    let mut parent_path = parent_path.clone();
+                                                    parent_path.push(uri);
+                                                    parent_path.metadata().unwrap().len() as usize
+                                                }
+                                            },
+                                        };
+                                        Some(AssetToLoad {
+                                            size,
+                                            asset: AssetLoading::Accessor {
+                                                index: accessor.index(),
+                                                primitive: gltf_primitive.index(),
+                                                mesh_index: gltf_mesh.index(),
+                                                semantic,
+                                            },
+                                        })
                                     })
-                                })
-                                .collect::<Vec<AssetToLoad>>(),
+                                    .collect::<Vec<AssetToLoad>>(),
                             )
                         })
                         .flatten()
@@ -580,9 +580,9 @@ impl<'a> GltfLoader<'a> {
                                             format: vk::Format::R8G8B8A8_SRGB,
                                             components: vk::ComponentMapping::default(),
                                             subresource_range:
-                                                resource::image::Image::image_subresource_range(
-                                                    vk::ImageAspectFlags::COLOR,
-                                                ),
+                                            resource::image::Image::image_subresource_range(
+                                                vk::ImageAspectFlags::COLOR,
+                                            ),
                                             _marker: Default::default(),
                                         },
                                     },
@@ -631,7 +631,7 @@ impl<'a> GltfLoader<'a> {
                                                 s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
                                                 p_next: ptr::null(),
                                                 src_stage_mask:
-                                                    vk::PipelineStageFlags2::TOP_OF_PIPE,
+                                                vk::PipelineStageFlags2::TOP_OF_PIPE,
                                                 src_access_mask: vk::AccessFlags2::empty(),
                                                 dst_stage_mask: vk::PipelineStageFlags2::TRANSFER,
                                                 dst_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
@@ -641,9 +641,9 @@ impl<'a> GltfLoader<'a> {
                                                 dst_queue_family_index: vk_queue_family_index,
                                                 image: image.handle(),
                                                 subresource_range:
-                                                    resource::Image::image_subresource_range(
-                                                        vk::ImageAspectFlags::COLOR,
-                                                    ),
+                                                resource::Image::image_subresource_range(
+                                                    vk::ImageAspectFlags::COLOR,
+                                                ),
                                                 _marker: Default::default(),
                                             },
                                             _marker: Default::default(),
@@ -687,19 +687,19 @@ impl<'a> GltfLoader<'a> {
                                                 src_stage_mask: vk::PipelineStageFlags2::TRANSFER,
                                                 src_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
                                                 dst_stage_mask:
-                                                    vk::PipelineStageFlags2::ALL_GRAPHICS,
+                                                vk::PipelineStageFlags2::ALL_GRAPHICS,
                                                 dst_access_mask: vk::AccessFlags2::MEMORY_WRITE
                                                     | vk::AccessFlags2::MEMORY_READ,
                                                 old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                                 new_layout:
-                                                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                                                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                                                 src_queue_family_index: vk_queue_family_index,
                                                 dst_queue_family_index: vk_queue_family_index,
                                                 image: image.handle(),
                                                 subresource_range:
-                                                    resource::Image::image_subresource_range(
-                                                        vk::ImageAspectFlags::COLOR,
-                                                    ),
+                                                resource::Image::image_subresource_range(
+                                                    vk::ImageAspectFlags::COLOR,
+                                                ),
                                                 _marker: Default::default(),
                                             },
                                             _marker: Default::default(),
@@ -823,7 +823,7 @@ impl<'a> GltfLoader<'a> {
                 String::from("default"),
                 gpu_rt.get_device().clone(),
             )
-            .unwrap();
+                .unwrap();
             material.upload_material(self.immediate, allocator).unwrap();
             Arc::new(material)
         }];
@@ -856,7 +856,7 @@ impl<'a> GltfLoader<'a> {
                                 )),
                             gpu_rt.get_device().clone(),
                         )
-                        .unwrap();
+                            .unwrap();
                         material.upload_material(self.immediate, allocator).unwrap();
                         Some(Arc::new(material))
                     }
@@ -950,9 +950,9 @@ impl<'a> GltfLoader<'a> {
                                                         .unwrap_or(mesh_id.to_string().as_str()),
                                                     primitive_id
                                                 )
-                                                .as_str(),
+                                                    .as_str(),
                                             })
-                                            .unwrap();
+                                                .unwrap();
                                         surface
                                             .upload(self.immediate, allocator, node.transform)
                                             .unwrap();
