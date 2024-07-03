@@ -130,7 +130,7 @@ impl<A: Allocator> Buffer<A> {
                         );
                     }
                 }
-            }))
+            }))?;
         }
         drop(staging_buffer);
         Ok(())

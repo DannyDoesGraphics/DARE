@@ -98,7 +98,7 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
     let logical_device = logical_device
         .build(test_vulkan.instance.get_instance())
         .unwrap();
-    let compute_queue = compute_queue.borrow().get_queues()[0];
+    let compute_queue = compute_queue.borrow().get_queues()[0].clone();
     TestVulkan {
         compute_queue: Some(compute_queue),
         device: Some(logical_device),

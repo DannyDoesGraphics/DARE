@@ -1,12 +1,11 @@
-use std::{mem, path, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
+use std::{mem, path, ptr, slice};
 
 use anyhow::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -14,7 +13,7 @@ use dagal::descriptor::bindless::bindless::ResourceInput;
 use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
-use dagal::resource::traits::{Nameable, Resource};
+use dagal::resource::traits::{Resource};
 use dagal::shader::{ShaderCCompiler, ShaderCompiler};
 use dagal::traits::Destructible;
 use dagal::util::free_list_allocator::Handle;
@@ -22,6 +21,7 @@ use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
+use dagal::{resource, winit};
 
 use crate::render::scene_data::SceneData;
 
@@ -206,13 +206,14 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-            .unwrap();
+        .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
-        let graphics_queue = graphics_queue.borrow().get_queues()[0];
+        let graphics_queue = graphics_queue.borrow().get_queues()[0].clone();
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
-        let immediate_submit = ImmediateSubmit::new(device.clone(), graphics_queue).unwrap();
+        let immediate_submit =
+            ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
 
         let frames: Vec<Frame> = (0..FRAME_OVERLAP)
             .map(|_| {
@@ -221,32 +222,32 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                    .unwrap();
+                .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
                 let scene_data_buffer =
-                    resource::Buffer::new(
-                        resource::BufferCreateInfo::NewEmptyBuffer {
-                            device: device.clone(),
-                            allocator: &mut allocator,
-                            size: mem::size_of::<SceneData>() as vk::DeviceSize,
-                            memory_type: MemoryLocation::CpuToGpu,
-                            usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
-                        }
-                    ).unwrap();
+                    resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                        device: device.clone(),
+                        allocator: &mut allocator,
+                        size: mem::size_of::<SceneData>() as vk::DeviceSize,
+                        memory_type: MemoryLocation::CpuToGpu,
+                        usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                            | vk::BufferUsageFlags::STORAGE_BUFFER,
+                    })
+                    .unwrap();
 
                 Frame {
                     command_pool,
@@ -254,7 +255,7 @@ impl RenderContext {
                     swapchain_semaphore,
                     render_semaphore,
                     render_fence,
-                    scene_data_buffer
+                    scene_data_buffer,
                 }
             })
             .collect();
@@ -273,7 +274,7 @@ impl RenderContext {
                 name: None,
             },
         )
-            .unwrap();
+        .unwrap();
 
         let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
@@ -349,16 +350,16 @@ impl RenderContext {
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-               .new_sampler(ResourceInput::ResourceCI(
-                   resource::SamplerCreateInfo::FromCreateInfo {
-                       device: app.device.clone(),
-                       create_info: vk::SamplerCreateInfo::default()
-                           .mag_filter(vk::Filter::NEAREST)
-                           .min_filter(vk::Filter::NEAREST),
-                       name: None,
-                   },
-               ))
-               .unwrap(),
+                .new_sampler(ResourceInput::ResourceCI(
+                    resource::SamplerCreateInfo::FromCreateInfo {
+                        device: app.device.clone(),
+                        create_info: vk::SamplerCreateInfo::default()
+                            .mag_filter(vk::Filter::NEAREST)
+                            .min_filter(vk::Filter::NEAREST),
+                        name: None,
+                    },
+                ))
+                .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -434,7 +435,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-            .unwrap();
+        .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -506,7 +507,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
@@ -536,7 +537,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("GBuffer Depth"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             create_info: vk::ImageViewCreateInfo {
@@ -554,7 +555,7 @@ impl RenderContext {
             },
             device: self.device.clone(),
         })
-            .unwrap();
+        .unwrap();
         let depth_image_view =
             resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -572,7 +573,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-                .unwrap();
+            .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -590,7 +591,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-                .unwrap(),
+            .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -651,7 +652,7 @@ impl RenderContext {
                                     self.gpu_resource_table.clone(),
                                     std::path::PathBuf::from(
                                         //"./dare/assets/Sponza/glTF/Sponza.gltf",
-                                        "C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf"
+                                        "C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
                                     ),
                                     pipeline,
                                 ),
@@ -721,7 +722,14 @@ impl RenderContext {
     }
 
     fn update_scene_data(&mut self) {
-        let mut scene_data = self.frames.get(self.frame_number % self.frames.len()).unwrap().scene_data_buffer.mapped_ptr().unwrap().cast::<SceneData>();
+        let mut scene_data = self
+            .frames
+            .get(self.frame_number % self.frames.len())
+            .unwrap()
+            .scene_data_buffer
+            .mapped_ptr()
+            .unwrap()
+            .cast::<SceneData>();
         let extent = self.draw_image.as_ref().unwrap().extent();
         unsafe {
             let mut proj = glam::Mat4::perspective_rh(
@@ -813,9 +821,26 @@ impl RenderContext {
 
     fn sort_draw_context(&mut self) {
         self.draw_context.surfaces.sort_by(|a, b| {
-            a.surface.material().get_pipeline().get_pipeline().handle().cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
-             .then_with(|| a.surface.material().get_pipeline().get_layout().handle().cmp(&b.surface.material().get_pipeline().get_layout().handle()))
-             .then_with(|| a.surface.get_index_buffer().id().cmp(&b.surface.get_index_buffer().id()))
+            a.surface
+                .material()
+                .get_pipeline()
+                .get_pipeline()
+                .handle()
+                .cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
+                .then_with(|| {
+                    a.surface
+                        .material()
+                        .get_pipeline()
+                        .get_layout()
+                        .handle()
+                        .cmp(&b.surface.material().get_pipeline().get_layout().handle())
+                })
+                .then_with(|| {
+                    a.surface
+                        .get_index_buffer()
+                        .id()
+                        .cmp(&b.surface.get_index_buffer().id())
+                })
         });
     }
 
@@ -861,13 +886,23 @@ impl RenderContext {
                 .get_handle()
                 .cmd_set_scissor(cmd.handle(), 0, &[scissor]);
         }
-        let frame = self.frames.get(self.frame_number % self.frames.len()).unwrap();
+        let frame = self
+            .frames
+            .get(self.frame_number % self.frames.len())
+            .unwrap();
         let mut last_pipeline: vk::Pipeline = vk::Pipeline::null();
         let mut last_layout: vk::PipelineLayout = vk::PipelineLayout::null();
         let mut last_index_buffer: vk::Buffer = vk::Buffer::null();
         for draw in self.draw_context.surfaces.iter() {
             unsafe {
-                if last_pipeline != draw.surface.material().get_pipeline().get_pipeline().handle() {
+                if last_pipeline
+                    != draw
+                        .surface
+                        .material()
+                        .get_pipeline()
+                        .get_pipeline()
+                        .handle()
+                {
                     self.device.get_handle().cmd_bind_pipeline(
                         cmd.handle(),
                         vk::PipelineBindPoint::GRAPHICS,
@@ -877,7 +912,12 @@ impl RenderContext {
                             .get_pipeline()
                             .handle(),
                     );
-                    last_pipeline = draw.surface.material().get_pipeline().get_pipeline().handle();
+                    last_pipeline = draw
+                        .surface
+                        .material()
+                        .get_pipeline()
+                        .get_pipeline()
+                        .handle();
                 }
                 if last_layout != draw.surface.material().get_pipeline().get_layout().handle() {
                     self.device.get_handle().cmd_bind_descriptor_sets(
@@ -890,9 +930,9 @@ impl RenderContext {
                     );
                     last_layout = draw.surface.material().get_pipeline().get_layout().handle();
                 }
-                let index_buffer = self.gpu_resource_table
-                                       .with_buffer(draw.surface.get_index_buffer(), |buf| buf.handle())
-                    ?;
+                let index_buffer = self
+                    .gpu_resource_table
+                    .with_buffer(draw.surface.get_index_buffer(), |buf| buf.handle())?;
                 if last_index_buffer != index_buffer {
                     self.device.get_handle().cmd_bind_index_buffer(
                         cmd.handle(),
@@ -972,7 +1012,7 @@ impl RenderContext {
             },
             name,
         })
-            .unwrap();
+        .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -994,7 +1034,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-            .unwrap();
+        .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -1028,7 +1068,7 @@ impl RenderContext {
                 memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-                .unwrap();
+            .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -1104,7 +1144,10 @@ impl RenderContext {
             return;
         }
         self.update_scene_data();
-        let swapchain_frame = self.frames.get(self.frame_number % self.frames.len()).unwrap();
+        let swapchain_frame = self
+            .frames
+            .get(self.frame_number % self.frames.len())
+            .unwrap();
         // get swapchain image
         let swapchain_image_index = self.swapchain.as_ref().unwrap().next_image_index(
             1000000000,
@@ -1193,9 +1236,10 @@ impl RenderContext {
                 .render_semaphore
                 .submit_info(vk::PipelineStageFlags2::ALL_GRAPHICS)],
         );
+        let vk_guard = self.graphics_queue.acquire_queue_lock().unwrap();
         let cmd = cmd
             .submit(
-                self.graphics_queue.handle(),
+                *vk_guard,
                 &[submit_info],
                 swapchain_frame.render_fence.handle(),
             )
@@ -1217,7 +1261,7 @@ impl RenderContext {
                 .as_ref()
                 .unwrap()
                 .get_ext()
-                .queue_present(self.graphics_queue.handle(), &present_info)
+                .queue_present(*vk_guard, &present_info)
             {
                 Ok(_) => {}
                 Err(error) => match error {

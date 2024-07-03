@@ -155,8 +155,8 @@ impl<'a> Resource<'a> for DescriptorPool {
     type HandleType = vk::DescriptorPool;
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             DescriptorPoolCreateInfo::FromVk {

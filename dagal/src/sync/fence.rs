@@ -1,7 +1,7 @@
-use std::{ptr, thread};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{ptr, thread};
 
 use anyhow::Result;
 use ash::vk;

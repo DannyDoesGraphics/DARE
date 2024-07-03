@@ -212,17 +212,22 @@ impl<'a> LogicalDeviceBuilder<'a> {
             self.request_queues.into_iter().zip(queue_slotting.iter())
         {
             for allocation in queue_allocations.iter() {
-                queue_request
-                    .borrow_mut()
-                    .queues
-                    .push(device.get_queue(&vk::DeviceQueueInfo2 {
-                        s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-                        p_next: ptr::null(),
-                        flags: vk::DeviceQueueCreateFlags::empty(),
-                        queue_family_index: allocation.family_index,
-                        queue_index: allocation.index,
-                        _marker: Default::default(),
-                    }));
+                let queue_flags: vk::QueueFlags = queue_request.borrow().family_flags;
+                let dedicated: bool = queue_request.borrow().dedicated;
+                queue_request.borrow_mut().queues.push(unsafe {
+                    device.get_queue(
+                        &vk::DeviceQueueInfo2 {
+                            s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                            p_next: ptr::null(),
+                            flags: vk::DeviceQueueCreateFlags::empty(),
+                            queue_family_index: allocation.family_index,
+                            queue_index: allocation.index,
+                            _marker: Default::default(),
+                        },
+                        dedicated,
+                        queue_flags,
+                    )
+                });
             }
         }
         Ok(device)

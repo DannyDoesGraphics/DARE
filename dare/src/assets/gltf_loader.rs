@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::windows::prelude::MetadataExt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{mem, path, ptr};
 
 use anyhow::Result;
@@ -425,8 +425,7 @@ impl<'a> GltfLoader<'a> {
             let gpu_memory_pool: Arc<tokio::sync::Semaphore> =
                 Arc::new(tokio::sync::Semaphore::new(GPU_MAX_MEMORY_USAGE));
             let vk_queue_family_index: u32 = self.immediate.get_queue().get_family_index();
-            let vk_queue: Arc<Mutex<dagal::device::Queue>> =
-                Arc::new(Mutex::new(*self.immediate.get_queue()));
+            let vk_queue: dagal::device::Queue = self.immediate.get_queue().clone();
             let tasks: Vec<tokio::task::JoinHandle<Result<AssetFinished<A>>>> = assets_to_load
                 .into_iter()
                 .map(|asset_to_load| {
@@ -601,10 +600,10 @@ impl<'a> GltfLoader<'a> {
                         let mut _command_buffer: Option<dagal::command::CommandBuffer> = None;
                         let mut _command_pool: Option<dagal::command::CommandPool> = None;
                         {
-                            let vk_guard = vk_queue.lock().unwrap();
+                            let vk_guard = vk_queue.acquire_queue_lock()?;
                             _command_pool = Some(dagal::command::CommandPool::new(
                                 device.clone(),
-                                &vk_guard,
+                                &vk_queue,
                                 vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                             )?);
                             let vk_command_buffer: dagal::command::CommandBuffer =
@@ -724,7 +723,7 @@ impl<'a> GltfLoader<'a> {
                             let vk_command_buffer = vk_command_buffer.end()?;
                             _command_buffer = Some(vk_command_buffer
                                 .submit(
-                                    vk_guard.handle(),
+                                    *vk_guard,
                                     &[dagal::command::CommandBufferExecutable::submit_info_sync(
                                         &[dagal::command::CommandBufferExecutable::submit_info(
                                             raw_command_buffer,

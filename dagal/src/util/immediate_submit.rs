@@ -47,7 +47,7 @@ impl ImmediateSubmit {
     }
 
     /// Immediately submit a function which fills out a command buffer
-    pub fn submit<T: FnOnce(ImmediateSubmitContext) -> R, R>(&self, function: T) -> R {
+    pub fn submit<T: FnOnce(ImmediateSubmitContext) -> R, R>(&self, function: T) -> Result<R> {
         unsafe {
             self.device
                 .get_handle()
@@ -70,8 +70,9 @@ impl ImmediateSubmit {
         let r = function(context);
         let cmd = cmd.end().unwrap();
         let raw_cmd = cmd.handle();
+        let queue = self.queue.acquire_queue_lock()?;
         cmd.submit(
-            self.queue.handle(),
+            *queue,
             &[crate::command::CommandBufferExecutable::submit_info_sync(
                 &[crate::command::CommandBufferExecutable::submit_info(
                     raw_cmd,
@@ -85,7 +86,7 @@ impl ImmediateSubmit {
         unsafe {
             self.fence.wait(9999999999).unwrap_unchecked();
         }
-        r
+        Ok(r)
     }
 
     /// Get a reference to the underlying device

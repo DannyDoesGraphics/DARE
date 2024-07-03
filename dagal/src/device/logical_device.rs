@@ -152,9 +152,20 @@ impl LogicalDevice {
     }
 
     /// Acquire a [`device::Queue`](crate::device::Queue)
-    pub fn get_queue(&self, queue_info: &vk::DeviceQueueInfo2) -> crate::device::Queue {
+    pub unsafe fn get_queue(
+        &self,
+        queue_info: &vk::DeviceQueueInfo2,
+        dedicated: bool,
+        queue_flags: vk::QueueFlags,
+    ) -> crate::device::Queue {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
-        crate::device::Queue::new(queue, queue_info.queue_family_index, queue_info.queue_index)
+        crate::device::Queue::new(
+            queue,
+            queue_info.queue_family_index,
+            queue_info.queue_index,
+            dedicated,
+            queue_flags,
+        )
     }
 
     pub fn get_used_queue_families(&self) -> &[u32] {
