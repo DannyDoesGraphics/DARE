@@ -10,7 +10,7 @@ use bytemuck::{cast_slice, Pod};
 use futures::prelude::*;
 use gltf::Gltf;
 use gltf::image::Source;
-use gltf::texture::{MagFilter, WrappingMode};
+use gltf::texture::{MagFilter, MinFilter, WrappingMode};
 
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -47,6 +47,24 @@ pub enum Semantic {
 struct FlattenNode<'a> {
     handle: gltf::Node<'a>,
     transform: glam::Mat4,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+struct AccessorIndex {
+    mesh_index: usize,
+    primitive_index: usize,
+    accessor_index: usize,
+}
+enum AssetFinished<A: Allocator = GPUAllocatorImpl> {
+    Image {
+        index: usize,
+        image: resource::Image<A>,
+        image_view: resource::ImageView,
+    },
+    Buffer {
+        index: AccessorIndex,
+        buffer: resource::Buffer<A>,
+    },
 }
 
 impl<'a> GltfLoader<'a> {
@@ -184,6 +202,20 @@ impl<'a> GltfLoader<'a> {
         Ok(image::load_from_memory(&buf)?)
     }
 
+    pub async fn generate_mipmaps<A: Allocator>(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, image: AssetFinished<A>) -> Result<AssetFinished<A>> {
+        match image {
+            AssetFinished::Image { index, image, image_view } => {
+                let image = render::image::generate_mip_maps(device, queue, image).await?;
+                Ok(AssetFinished::Image {
+                    index,
+                    image,
+                    image_view,
+                })
+            },
+            _ => unimplemented!()
+        }
+    }
+
     /// Loads meshes from a gltf scene and uploads their buffer info onto the gpu
     pub async fn load_assets<A: Allocator + 'static>(
         &mut self,
@@ -227,7 +259,7 @@ impl<'a> GltfLoader<'a> {
                         compare_enable: 0,
                         compare_op: vk::CompareOp::NEVER,
                         min_lod: 0.0,
-                        max_lod: 0.0,
+                        max_lod: vk::LOD_CLAMP_NONE,
                         border_color: Default::default(),
                         unnormalized_coordinates: 0,
                         _marker: Default::default(),
@@ -256,13 +288,21 @@ impl<'a> GltfLoader<'a> {
                                     })
                                     .unwrap_or_default(),
                                 min_filter: sampler
-                                    .mag_filter()
+                                    .min_filter()
                                     .map(|min_filter| match min_filter {
-                                        MagFilter::Nearest => vk::Filter::NEAREST,
-                                        MagFilter::Linear => vk::Filter::LINEAR,
+                                        MinFilter::Nearest => vk::Filter::NEAREST,
+                                        MinFilter::Linear => vk::Filter::LINEAR,
+                                        MinFilter::NearestMipmapNearest => vk::Filter::NEAREST,
+                                        MinFilter::LinearMipmapNearest => vk::Filter::NEAREST,
+                                        MinFilter::NearestMipmapLinear => vk::Filter::LINEAR,
+                                        MinFilter::LinearMipmapLinear => vk::Filter::LINEAR,
                                     })
                                     .unwrap_or_default(),
-                                mipmap_mode: vk::SamplerMipmapMode::default(),
+                                mipmap_mode: if Some(MinFilter::NearestMipmapNearest) == sampler.min_filter() || Some(MinFilter::LinearMipmapNearest) == sampler.min_filter() {
+                                    vk::SamplerMipmapMode::NEAREST
+                                } else {
+                                    vk::SamplerMipmapMode::LINEAR
+                                },
                                 address_mode_u: match sampler.wrap_s() {
                                     WrappingMode::ClampToEdge => {
                                         vk::SamplerAddressMode::CLAMP_TO_EDGE
@@ -288,7 +328,7 @@ impl<'a> GltfLoader<'a> {
                                 compare_enable: 0,
                                 compare_op: vk::CompareOp::NEVER,
                                 min_lod: 0.0,
-                                max_lod: 0.0,
+                                max_lod: vk::LOD_CLAMP_NONE,
                                 border_color: Default::default(),
                                 unnormalized_coordinates: 0,
                                 _marker: Default::default(),
@@ -303,19 +343,9 @@ impl<'a> GltfLoader<'a> {
                 })
                 .collect::<Result<Vec<handle::SamplerHandle<A>>>>()?,
         );
+
         println!("Loaded samplers");
 
-        enum AssetFinished<A: Allocator = GPUAllocatorImpl> {
-            Image {
-                index: usize,
-                image: resource::Image<A>,
-                image_view: resource::ImageView,
-            },
-            Buffer {
-                index: AccessorIndex,
-                buffer: resource::Buffer<A>,
-            },
-        }
         enum AssetLoading {
             Accessor {
                 index: usize,
@@ -331,13 +361,6 @@ impl<'a> GltfLoader<'a> {
         struct AssetToLoad {
             size: usize,
             asset: AssetLoading,
-        }
-
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-        struct AccessorIndex {
-            mesh_index: usize,
-            primitive_index: usize,
-            accessor_index: usize,
         }
 
         let assets_to_load: Vec<AssetToLoad> = {
@@ -552,7 +575,7 @@ impl<'a> GltfLoader<'a> {
                                             image_type: vk::ImageType::TYPE_2D,
                                             format: vk::Format::R8G8B8A8_SRGB,
                                             extent,
-                                            mip_levels: extent.height.ilog2().max(1),
+                                            mip_levels: extent.height.max(extent.width).ilog2().max(1),
                                             array_layers: 1,
                                             samples: vk::SampleCountFlags::TYPE_1,
                                             tiling: vk::ImageTiling::LINEAR,
@@ -719,15 +742,13 @@ impl<'a> GltfLoader<'a> {
                                     )
                                 },
                             }
-                            let raw_command_buffer = vk_command_buffer.handle();
                             let vk_command_buffer = vk_command_buffer.end()?;
+                            let submit_info = vk_command_buffer.submit_info();
                             _command_buffer = Some(vk_command_buffer
                                 .submit(
                                     *vk_guard,
                                     &[dagal::command::CommandBufferExecutable::submit_info_sync(
-                                        &[dagal::command::CommandBufferExecutable::submit_info(
-                                            raw_command_buffer,
-                                        )],
+                                        &[submit_info],
                                         &[],
                                         &[],
                                     )],
@@ -738,17 +759,20 @@ impl<'a> GltfLoader<'a> {
                         }
                         vk_fence.await?;
                         drop(staging_buffer);
+
+
                         gpu_memory_pool.add_permits(data_size);
                         Ok(resource)
                     })
                 })
                 .collect();
             let mut futures = stream::FuturesUnordered::new();
+            let mut image_mipmaps = stream::FuturesUnordered::new();
             for task in tasks {
                 futures.push(task);
             }
-            let mut images: Vec<Option<(resource::Image<A>, resource::ImageView)>> =
-                (0..gltf.images().len()).map(|_| None).collect();
+            let mut images: Vec<(Option<resource::Image<A>>, Option<resource::ImageView>)> =
+                (0..gltf.images().len()).map(|_| (None, None)).collect();
             let mut accessors: HashMap<AccessorIndex, resource::Buffer<A>> = HashMap::new();
             loop {
                 tokio::select! {
@@ -757,12 +781,25 @@ impl<'a> GltfLoader<'a> {
                         match asset {
                             AssetFinished::Image{ index,image,image_view  } => {
                                 println!("Loaded image {index}");
-                                images[index] = Some((image, image_view));
+                                image_mipmaps.push(Self::generate_mipmaps(gpu_rt.get_device().clone(), vk_queue.clone(), AssetFinished::<A>::Image {
+                                    index,
+                                    image,
+                                    image_view
+                                }));
                             },
                             AssetFinished::Buffer{index,buffer } => {
                                 println!("Loaded accessor {}", index.accessor_index);
                                 accessors.insert(index, buffer);
                             }
+                        }
+                    },
+                    Some(Ok(image)) = image_mipmaps.next() => {
+                        match image {
+                            AssetFinished::Image { index,image,image_view  } => {
+                                println!("Generated mip maps for image {index}");
+                                images[index] = (Some(image), Some(image_view));
+                            },
+                            _ => unimplemented!(),
                         }
                     },
                     else => {
@@ -772,12 +809,12 @@ impl<'a> GltfLoader<'a> {
             }
             let images: Vec<(handle::ImageHandle<A>, handle::ImageViewHandle<A>)> = images
                 .into_iter()
-                .enumerate()
-                .map(|(_, mut image)| {
-                    let image = image.take().unwrap();
+                .map(|(image, image_view)| {
+                    let image = image.unwrap();
+                    let image_view = image_view.unwrap();
                     let image_handle = gpu_rt.new_image(
-                        ResourceInput::Resource(image.0),
-                        ResourceInput::Resource(image.1),
+                        ResourceInput::Resource(image),
+                        ResourceInput::Resource(image_view),
                         vk::ImageLayout::GENERAL,
                     )?;
                     let image_handle = (

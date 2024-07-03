@@ -1,5 +1,3 @@
-use anyhow::Result;
-use ash::vk;
 /// Command buffers have been divided into 2 structs: [`CommandBuffer`] and [`CommandBufferRecording`].
 ///
 /// This type state ensures that no commands are submitted when they're not supposed to.
@@ -7,6 +5,9 @@ use ash::vk;
 /// deal with such.
 use std::ops::Deref;
 use std::ptr;
+
+use anyhow::Result;
+use ash::vk;
 
 #[derive(Debug, Clone)]
 pub struct CommandBuffer {
@@ -112,11 +113,11 @@ pub struct CommandBufferExecutable {
 impl CommandBufferExecutable {
     /// Quickly acquire a [`VkCommandBufferSubmitInfo`](vk::CommandBufferSubmitInfo) for
     /// a single [`VkCommandBuffer`](vk::CommandBuffer).
-    pub fn submit_info(command_buffer: vk::CommandBuffer) -> vk::CommandBufferSubmitInfo<'static> {
+    pub fn submit_info(&self) -> vk::CommandBufferSubmitInfo<'static> {
         vk::CommandBufferSubmitInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_SUBMIT_INFO,
             p_next: ptr::null(),
-            command_buffer,
+            command_buffer: self.handle,
             device_mask: 0,
             _marker: Default::default(),
         }

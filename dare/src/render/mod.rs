@@ -15,3 +15,4 @@ pub mod render_context;
 pub mod scene_data;
 pub mod surface;
 pub mod texture;
+pub mod image;

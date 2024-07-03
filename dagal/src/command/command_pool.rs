@@ -31,7 +31,7 @@ impl CommandPool {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Created VkCommandPool {:p}", handle);
+        tracing::trace!("Created VkCommandPool {:p}", handle);
 
         Ok(Self { handle, device })
     }
@@ -62,16 +62,16 @@ impl CommandPool {
                     _marker: Default::default(),
                 })
         }?
-        .into_iter()
-        .map(|buffer| crate::command::CommandBuffer::new(buffer, self.device.clone()))
-        .collect::<Vec<crate::command::CommandBuffer>>())
+            .into_iter()
+            .map(|buffer| crate::command::CommandBuffer::new(buffer, self.device.clone()))
+            .collect::<Vec<crate::command::CommandBuffer>>())
     }
 }
 
 impl Destructible for CommandPool {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkCommandPool {:p}", self.handle);
+        tracing::trace!("Destroying VkCommandPool {:p}", self.handle);
 
         unsafe {
             self.device

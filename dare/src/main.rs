@@ -1,11 +1,12 @@
+use std::{mem, ptr, slice};
 use std::io::Write;
 use std::sync::Arc;
-use std::{mem, path, ptr, slice};
 
 use anyhow::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
+use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -13,7 +14,7 @@ use dagal::descriptor::bindless::bindless::ResourceInput;
 use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
-use dagal::resource::traits::{Resource};
+use dagal::resource::traits::Resource;
 use dagal::shader::{ShaderCCompiler, ShaderCompiler};
 use dagal::traits::Destructible;
 use dagal::util::free_list_allocator::Handle;
@@ -21,7 +22,6 @@ use dagal::util::immediate_submit::ImmediateSubmitContext;
 use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
-use dagal::{resource, winit};
 
 use crate::render::scene_data::SceneData;
 
@@ -52,9 +52,6 @@ struct RenderContext {
     meshes: Vec<assets::mesh::Mesh<GPUAllocatorImpl>>,
     materials: Vec<Arc<render::Material<GPUAllocatorImpl>>>,
     draw_context: render::draw_context::DrawContext<GPUAllocatorImpl>,
-
-    gradient_pipeline: dagal::pipelines::ComputePipeline,
-    gradient_pipeline_layout: dagal::pipelines::PipelineLayout,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
     global_descriptor_pool: dagal::descriptor::DescriptorPool,
@@ -206,7 +203,7 @@ impl RenderContext {
             buffer_device_address: true,
             allocation_sizes: Default::default(),
         })
-        .unwrap();
+            .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
         assert!(!graphics_queue.borrow().get_queues().is_empty());
@@ -222,19 +219,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                .unwrap();
+                    .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                .unwrap();
+                    .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -247,7 +244,7 @@ impl RenderContext {
                         usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                             | vk::BufferUsageFlags::STORAGE_BUFFER,
                     })
-                    .unwrap();
+                        .unwrap();
 
                 Frame {
                     command_pool,
@@ -274,9 +271,8 @@ impl RenderContext {
                 name: None,
             },
         )
-        .unwrap();
+            .unwrap();
 
-        let compiler = dagal::shader::ShaderCCompiler::new();
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(
@@ -285,22 +281,6 @@ impl RenderContext {
                 vk::DescriptorSetLayoutCreateFlags::empty(),
                 None,
             )
-            .unwrap();
-        let gradient_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
-            .push_descriptor_sets(vec![draw_image_set_layout.handle()])
-            .push_push_constant_struct::<PushConstants>(vk::ShaderStageFlags::COMPUTE)
-            .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())
-            .unwrap();
-        let gradient_pipeline = dagal::pipelines::ComputePipelineBuilder::default()
-            .replace_layout(gradient_pipeline_layout.handle())
-            .replace_shader_from_source_file(
-                device.clone(),
-                &compiler,
-                path::PathBuf::from("./dare/shaders/gradient.comp"),
-                vk::ShaderStageFlags::COMPUTE,
-            )
-            .unwrap()
-            .build(device.clone())
             .unwrap();
 
         let mut app = Self {
@@ -335,9 +315,6 @@ impl RenderContext {
             global_descriptor_pool,
             draw_image_descriptor_set_layout: draw_image_set_layout,
 
-            gradient_pipeline,
-            gradient_pipeline_layout,
-
             sampler: None,
             white_image: None,
             black_image: None,
@@ -350,16 +327,16 @@ impl RenderContext {
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-                .new_sampler(ResourceInput::ResourceCI(
-                    resource::SamplerCreateInfo::FromCreateInfo {
-                        device: app.device.clone(),
-                        create_info: vk::SamplerCreateInfo::default()
-                            .mag_filter(vk::Filter::NEAREST)
-                            .min_filter(vk::Filter::NEAREST),
-                        name: None,
-                    },
-                ))
-                .unwrap(),
+               .new_sampler(ResourceInput::ResourceCI(
+                   resource::SamplerCreateInfo::FromCreateInfo {
+                       device: app.device.clone(),
+                       create_info: vk::SamplerCreateInfo::default()
+                           .mag_filter(vk::Filter::NEAREST)
+                           .min_filter(vk::Filter::NEAREST),
+                       name: None,
+                   },
+               ))
+               .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -435,7 +412,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-        .unwrap();
+            .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -507,7 +484,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
@@ -537,7 +514,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("GBuffer Depth"),
         })
-        .unwrap();
+            .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             create_info: vk::ImageViewCreateInfo {
@@ -555,7 +532,7 @@ impl RenderContext {
             },
             device: self.device.clone(),
         })
-        .unwrap();
+            .unwrap();
         let depth_image_view =
             resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -573,7 +550,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-            .unwrap();
+                .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -591,7 +568,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-            .unwrap(),
+                .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -620,7 +597,7 @@ impl RenderContext {
                 .set_polygon_mode(vk::PolygonMode::FILL)
                 .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
                 .set_multisampling_none()
-                .disable_blending()
+                .enable_blending_alpha_blend()
                 .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
                 .set_depth_format(self.depth_image.as_ref().unwrap().format())
                 .set_color_attachment(self.draw_image.as_ref().unwrap().format())
@@ -651,8 +628,8 @@ impl RenderContext {
                                     &mut self.allocator,
                                     self.gpu_resource_table.clone(),
                                     std::path::PathBuf::from(
-                                        //"./dare/assets/Sponza/glTF/Sponza.gltf",
-                                        "C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
+                                        "./dare/assets/Sponza/glTF/Sponza.gltf",
+                                        //"C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
                                     ),
                                     pipeline,
                                 ),
@@ -746,101 +723,28 @@ impl RenderContext {
         }
     }
 
-    // Draw into the background
-    fn draw_background(
-        device: &dagal::device::LogicalDevice,
-        cmd: &dagal::command::CommandBufferRecording,
-        draw_image: &resource::Image,
-        frame_number: usize,
-        gradient_pipeline: &dagal::pipelines::ComputePipeline,
-        gradient_layout: &dagal::pipelines::PipelineLayout,
-        gradient_descriptor_set: vk::DescriptorSet,
-    ) {
-        let flash = (frame_number as f64 / 120.0).sin().abs();
-        let clear_value = vk::ClearColorValue {
-            float32: [0.0, 0.0, flash as f32, 0.0],
-        };
-        let clear_range = resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR);
-        let last_binded_pipeline: vk::Pipeline = vk::Pipeline::null();
-        unsafe {
-            device.get_handle().cmd_bind_pipeline(
-                cmd.handle(),
-                vk::PipelineBindPoint::COMPUTE,
-                gradient_pipeline.handle(),
-            );
-            device.get_handle().cmd_bind_descriptor_sets(
-                cmd.handle(),
-                vk::PipelineBindPoint::COMPUTE,
-                gradient_layout.handle(),
-                0,
-                &[gradient_descriptor_set],
-                &[],
-            );
-            let pc = PushConstants {
-                data1: glam::Vec4::new(
-                    (((frame_number as f64 % f32::MAX as f64) / 240.0)
-                        .sin()
-                        .abs() as f32)
-                        + 1.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                ),
-                data2: glam::Vec4::new(
-                    0.0,
-                    0.0,
-                    (((frame_number as f64 % f32::MAX as f64) / 240.0)
-                        .cos()
-                        .abs() as f32)
-                        + 1.0,
-                    1.0,
-                ),
-                data3: glam::Vec4::splat(0.0),
-                data4: glam::Vec4::splat(0.0),
-            };
-            device.get_handle().cmd_push_constants(
-                cmd.handle(),
-                gradient_layout.handle(),
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                unsafe {
-                    slice::from_raw_parts(
-                        &pc as *const PushConstants as *const u8,
-                        mem::size_of::<PushConstants>(),
-                    )
-                },
-            );
-            device.get_handle().cmd_dispatch(
-                cmd.handle(),
-                (draw_image.extent().width as f32 / 16.0).ceil() as u32,
-                (draw_image.extent().height as f32 / 16.0).ceil() as u32,
-                1,
-            )
-        }
-    }
-
     fn sort_draw_context(&mut self) {
         self.draw_context.surfaces.sort_by(|a, b| {
             a.surface
-                .material()
-                .get_pipeline()
-                .get_pipeline()
-                .handle()
-                .cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
-                .then_with(|| {
-                    a.surface
-                        .material()
-                        .get_pipeline()
-                        .get_layout()
-                        .handle()
-                        .cmp(&b.surface.material().get_pipeline().get_layout().handle())
-                })
-                .then_with(|| {
-                    a.surface
-                        .get_index_buffer()
-                        .id()
-                        .cmp(&b.surface.get_index_buffer().id())
-                })
+             .material()
+             .get_pipeline()
+             .get_pipeline()
+             .handle()
+             .cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
+             .then_with(|| {
+                 a.surface
+                  .material()
+                  .get_pipeline()
+                  .get_layout()
+                  .handle()
+                  .cmp(&b.surface.material().get_pipeline().get_layout().handle())
+             })
+             .then_with(|| {
+                 a.surface
+                  .get_index_buffer()
+                  .id()
+                  .cmp(&b.surface.get_index_buffer().id())
+             })
         });
     }
 
@@ -897,11 +801,11 @@ impl RenderContext {
             unsafe {
                 if last_pipeline
                     != draw
-                        .surface
-                        .material()
-                        .get_pipeline()
-                        .get_pipeline()
-                        .handle()
+                    .surface
+                    .material()
+                    .get_pipeline()
+                    .get_pipeline()
+                    .handle()
                 {
                     self.device.get_handle().cmd_bind_pipeline(
                         cmd.handle(),
@@ -1012,7 +916,7 @@ impl RenderContext {
             },
             name,
         })
-        .unwrap();
+            .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
@@ -1034,7 +938,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-        .unwrap();
+            .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -1068,7 +972,7 @@ impl RenderContext {
                 memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-            .unwrap();
+                .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -1113,7 +1017,7 @@ impl RenderContext {
                         )
                     })
             })
-            .unwrap();
+            .unwrap().unwrap();
         drop(staging_buffer);
         allocated_image
     }
@@ -1174,7 +1078,6 @@ impl RenderContext {
         if self.resize_requested {
             return;
         }
-
         // transition
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -1182,15 +1085,17 @@ impl RenderContext {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
-        Self::draw_background(
-            &self.device,
-            &cmd,
-            self.draw_image.as_ref().unwrap(),
-            self.frame_number,
-            &self.gradient_pipeline,
-            &self.gradient_pipeline_layout,
-            self.draw_image_descriptors.as_ref().unwrap().handle(),
-        );
+        unsafe {
+            self.device.get_handle().cmd_clear_color_image(
+                cmd.handle(),
+                self.draw_image.as_ref().unwrap().handle(),
+                vk::ImageLayout::GENERAL,
+                &vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 0.0]
+                },
+                &[resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR)]
+            );
+        }
         // add a sync point
         self.draw_image.as_ref().unwrap().transition(
             &cmd,
@@ -1226,7 +1131,7 @@ impl RenderContext {
         );
         let cmd = cmd.end().unwrap();
 
-        let cmd_submit_info = dagal::command::CommandBufferExecutable::submit_info(cmd.handle());
+        let cmd_submit_info = cmd.submit_info();
         let submit_info = dagal::command::CommandBufferExecutable::submit_info_sync(
             &[cmd_submit_info],
             &[swapchain_frame

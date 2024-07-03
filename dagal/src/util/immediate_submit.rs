@@ -69,20 +69,18 @@ impl ImmediateSubmit {
         };
         let r = function(context);
         let cmd = cmd.end().unwrap();
-        let raw_cmd = cmd.handle();
+        let raw_cmd = cmd.submit_info();
         let queue = self.queue.acquire_queue_lock()?;
         cmd.submit(
             *queue,
             &[crate::command::CommandBufferExecutable::submit_info_sync(
-                &[crate::command::CommandBufferExecutable::submit_info(
-                    raw_cmd,
-                )],
+                &[raw_cmd],
                 &[],
                 &[],
             )],
             self.fence.handle(),
         )
-        .unwrap();
+           .unwrap();
         unsafe {
             self.fence.wait(9999999999).unwrap_unchecked();
         }
