@@ -10,7 +10,6 @@ struct PushConstant {
 
 struct FSin {
     float2 uv;
-    float3 position;
 }
 struct VSout {
     FSin stage;
@@ -27,9 +26,6 @@ VSout vertex_main(uint vertex_index: SV_VertexID) {
     float4 position = float4(pc.surface.positions[vertex_index], 1.0);
     VSout output;
     output.sv_position = mul(mul(position, pc.model_transform), pc.scene_data.view_proj);
-    output.stage.uv = position.xy;
-    output.stage.position = position.xyz;
-    
     if ((pc.surface.bit_flag & SurfaceFlags.UV) == SurfaceFlags.UV) {
         output.stage.uv = pc.surface.uv[vertex_index];
     }
