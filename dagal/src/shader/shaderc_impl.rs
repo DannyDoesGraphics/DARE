@@ -48,8 +48,6 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
             return Err(anyhow::Error::from(crate::DagalError::ShadercError));
         }
         let mut options = options.unwrap();
-        options.add_macro_definition("EP", Some("main"));
-        options.set_warnings_as_errors();
         let include_context = Arc::new(Mutex::new(super::glsl_preprocessor::IncludeContext::new()));
 
         options.set_include_callback({

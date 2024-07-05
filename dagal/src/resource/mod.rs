@@ -1,3 +1,4 @@
+pub use acceleration_structure::*;
 pub use buffer::{Buffer, BufferCreateInfo};
 pub use image::{Image, ImageCreateInfo};
 pub use image_view::{ImageView, ImageViewCreateInfo};
@@ -11,3 +12,4 @@ pub mod image_view;
 pub mod sampler;
 pub mod traits;
 pub mod typed_buffer_view;
+pub mod acceleration_structure;

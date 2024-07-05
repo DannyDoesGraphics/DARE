@@ -124,7 +124,7 @@ pub async fn generate_mip_maps<A: Allocator>(device: dagal::device::LogicalDevic
             extent = half_size;
         }
     }
-    image.transition(&cmd_buffer, &queue, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+    image.transition(&cmd_buffer, &queue, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::GENERAL);
     let cmd_buffer = cmd_buffer.end()?;
     unsafe {
         command_pool.get_device().get_handle().queue_submit2(

@@ -180,6 +180,11 @@ impl RenderContext {
                 scalar_block_layout: vk::TRUE,
                 ..Default::default()
             })
+            .attach_feature_1_1(vk::PhysicalDeviceVulkan11Features {
+                variable_pointers: vk::TRUE,
+                variable_pointers_storage_buffer: vk::TRUE,
+                ..Default::default()
+            })
             .attach_feature_1_0(vk::PhysicalDeviceFeatures {
                 shader_int64: vk::TRUE,
                 ..Default::default()
@@ -601,17 +606,27 @@ impl RenderContext {
                 .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
                 .set_depth_format(self.depth_image.as_ref().unwrap().format())
                 .set_color_attachment(self.draw_image.as_ref().unwrap().format())
-                .replace_shader_from_source_file(
+                /*.replace_shader_from_source_file(
                     self.device.clone(),
                     &compiler,
-                    std::path::PathBuf::from("./dare/shaders/material_mesh.vert"),
+                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.vertex.spv"),
+                    vk::ShaderStageFlags::VERTEX,
+                )*/
+                .replace_shader_from_spirv_file(
+                    self.device.clone(),
+                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.vert.spv"),
                     vk::ShaderStageFlags::VERTEX,
                 )
                 .unwrap()
-                .replace_shader_from_source_file(
+                /*.replace_shader_from_source_file(
                     self.device.clone(),
                     &compiler,
-                    std::path::PathBuf::from("./dare/shaders/material_mesh.frag"),
+                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.frag.spv"),
+                    vk::ShaderStageFlags::FRAGMENT,
+                )*/
+                .replace_shader_from_spirv_file(
+                    self.device.clone(),
+                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.frag.spv"),
                     vk::ShaderStageFlags::FRAGMENT,
                 )
                 .unwrap()
@@ -628,6 +643,8 @@ impl RenderContext {
                                     &mut self.allocator,
                                     self.gpu_resource_table.clone(),
                                     std::path::PathBuf::from(
+                                        //"./dare/assets/BoxTextured.glb",
+                                        //"./dare/assets/Triangle/Triangle.gltf",
                                         "./dare/assets/Sponza/glTF/Sponza.gltf",
                                         //"C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
                                     ),
@@ -717,9 +734,9 @@ impl RenderContext {
             );
             let view = self.camera.get_view_matrix();
             proj.y_axis.y *= -1.0;
-            scene_data.as_mut().proj = proj.to_cols_array();
-            scene_data.as_mut().view = view.to_cols_array();
-            scene_data.as_mut().view_proj = (proj * view).to_cols_array();
+            scene_data.as_mut().proj = proj.transpose().to_cols_array();
+            scene_data.as_mut().view = view.transpose().to_cols_array();
+            scene_data.as_mut().view_proj = (proj * view).transpose().to_cols_array();
         }
     }
 
@@ -852,7 +869,7 @@ impl RenderContext {
             let push_constants = render::push_constants::RasterizationPushConstant {
                 scene_data: frame.scene_data_buffer.address(),
                 surface_data: draw.surface.get_buffer().address(),
-                model_transform: draw.local_transform,
+                model_transform: draw.local_transform.transpose().to_cols_array(),
             };
             unsafe {
                 self.device.get_handle().cmd_push_constants(

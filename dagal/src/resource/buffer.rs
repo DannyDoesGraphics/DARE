@@ -1,7 +1,7 @@
+use std::{mem, ptr};
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::NonNull;
-use std::{mem, ptr};
 
 use anyhow::Result;
 use ash::vk;
@@ -39,7 +39,7 @@ impl<A: Allocator> Destructible for Buffer<A> {
     fn destroy(&mut self) {
         unsafe {
             #[cfg(feature = "log-lifetimes")]
-            trace!("Destroying VkBuffer {:p}", self.handle);
+            tracing::trace!("Destroying VkBuffer {:p}", self.handle);
 
             self.device.get_handle().destroy_buffer(self.handle, None);
             if let Some(mut allocation) = self.allocation.take() {

@@ -43,6 +43,9 @@ pub enum DagalError {
 
     #[error("No backing buffer found")]
     NoSuperBuffer,
+
+    #[error("Extension is not supported or enabled")]
+    NoExtensionSupported,
 }
 
 impl<T> From<PoisonError<T>> for DagalError {
