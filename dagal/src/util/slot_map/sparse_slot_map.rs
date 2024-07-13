@@ -1,12 +1,13 @@
 use anyhow::Result;
 
-use crate::util::slot_map::Slot;
 use crate::DagalError;
+use crate::util::slot_map::Slot;
+use crate::util::traits::SlotMap;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SlotEntry<T> {
-    data: Option<T>,
-    slot: Slot<T>,
+    pub data: Option<T>,
+    pub slot: Slot<T>,
 }
 
 impl<T> PartialEq for SlotEntry<T> {
@@ -55,16 +56,13 @@ impl<T> SparseSlotMap<T> {
 
     /// Insert an element into a sparse slot map
     pub fn insert(&mut self, data: T) -> Slot<T> {
-        let next_free_index = if self.free_list.is_empty() {
+        let next_free_index = self.free_list.pop().unwrap_or_else(|| {
             self.data.push(SlotEntry {
                 data: None,
                 slot: Slot::new(self.data.len() as u64, None),
             });
-            self.free_list.push(self.data.len() - 1);
             self.data.len() - 1
-        } else {
-            self.free_list.pop().unwrap()
-        };
+        });
         let slot = self.data.get_mut(next_free_index).unwrap();
         slot.data = Some(data);
 
@@ -95,7 +93,7 @@ impl<T> SparseSlotMap<T> {
         self.data.iter().filter(|data| data.data.is_some()).count()
     }
 
-    pub fn with_sampler<R, F: FnOnce(&T) -> R>(&self, slot: &Slot<T>, f: F) -> Result<R> {
+    pub fn with_slot<R, F: FnOnce(&T) -> R>(&self, slot: &Slot<T>, f: F) -> Result<R> {
         if !self.is_valid_slot(slot) {
             return Err(anyhow::Error::from(DagalError::InvalidSlotMapSlot));
         }
@@ -109,7 +107,7 @@ impl<T> SparseSlotMap<T> {
             .unwrap()))
     }
 
-    pub fn with_sampler_mut<R, F: FnOnce(&mut T) -> R>(
+    pub fn with_slot_mut<R, F: FnOnce(&mut T) -> R>(
         &mut self,
         slot: &mut Slot<T>,
         f: F,
@@ -125,8 +123,59 @@ impl<T> SparseSlotMap<T> {
             .as_mut()
             .unwrap()))
     }
+
+    pub fn get_data_len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=&SlotEntry<T>> {
+        self.data.iter().enumerate().map(|(index, entry)| {
+            entry
+        })
+    }
+
+    pub fn data_mut(&mut self) -> &mut Vec<SlotEntry<T>> {
+        &mut self.data
+    }
+
+    pub fn data(&self) -> &[SlotEntry<T>] {
+        self.data.as_slice()
+    }
 }
 
+/**
+impl<T> SlotMap<T> for SparseSlotMap<T> {
+    type Slot = SlotEntry<T>;
+
+    fn get_data(&self) -> &[Self::Slot] {
+        self.data.as_slice()
+    }
+
+    fn all_slot_len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn is_valid_slot(&self, slot: &Slot<T>) -> bool {
+        self
+            .data
+            .get(slot.id as usize)
+            .map(|slot_union| *slot == slot_union.slot && slot_union.data.is_some())
+            .unwrap_or(false)
+    }
+
+    fn insert(&mut self, element: T) -> Slot<T> {
+        todo!()
+    }
+
+    fn with_slot<R, F: FnOnce(&T) -> R>(&self, slot: &Slot<T>, func: F) -> Result<R> {
+        todo!()
+    }
+
+    fn with_slot_mut<R, F: FnOnce(&mut T) -> R>(&mut self, slot: &Slot<T>, func: F) -> Result<R> {
+        todo!()
+    }
+}
+ **/
 #[cfg(test)]
 mod tests {
     use crate::util::slot_map::Slot;

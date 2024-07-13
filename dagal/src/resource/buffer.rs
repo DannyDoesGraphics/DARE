@@ -11,7 +11,7 @@ use derivative::Derivative;
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Derivative, Debug)]
@@ -113,8 +113,8 @@ impl<A: Allocator> Buffer<A> {
         }
         {
             immediate.submit(Box::new({
-                let src_buffer = staging_buffer.handle();
-                let dst_buffer = self.handle();
+                let src_buffer = unsafe { *staging_buffer.as_raw() };
+                let dst_buffer = unsafe { *self.as_raw() };
                 move |context: ImmediateSubmitContext| {
                     let copy = vk::BufferCopy {
                         src_offset: 0,
@@ -163,7 +163,6 @@ impl<A: Allocator> Buffer<A> {
 
 impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
     type CreateInfo = BufferCreateInfo<'a, A>;
-    type HandleType = vk::Buffer;
     fn new(create_info: Self::CreateInfo) -> Result<Self> {
         return match create_info {
             BufferCreateInfo::NewEmptyBuffer {
@@ -239,17 +238,24 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
             }
         };
     }
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
 
-    fn get_handle(&self) -> &Self::HandleType {
+impl<A: Allocator> AsRaw for Buffer<A> {
+    type RawType = vk::Buffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

@@ -1,37 +1,13 @@
-use std::sync::Arc;
-
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::util::Slot;
 
-use crate::render;
+use crate::{physics, render};
+use crate::render::deferred_deletion::DeletionEntry;
 
+/// Describes a mesh at a high level including streaming said mesh in and out of gpu memory
 #[derive(Debug)]
 pub struct Mesh<A: Allocator = GPUAllocatorImpl> {
-    name: Option<String>,
-    pub position: glam::Vec3,
-    pub scale: glam::Vec3,
-    pub rotation: glam::Quat,
-    surfaces: Vec<Arc<render::Surface<A>>>,
-}
-
-impl<A: Allocator> Mesh<A> {
-    /// Get the underlying surfaces of a mesh
-    pub fn get_surfaces(&self) -> &[Arc<render::Surface<A>>] {
-        &self.surfaces
-    }
-
-    pub fn new(
-        name: Option<String>,
-        position: glam::Vec3,
-        scale: glam::Vec3,
-        rotation: glam::Quat,
-        surfaces: Vec<Arc<render::Surface<A>>>,
-    ) -> Self {
-        Self {
-            name,
-            position,
-            scale,
-            rotation,
-            surfaces,
-        }
-    }
+    handle: render::GPUResource<Slot<DeletionEntry<render::Mesh<A>>>>,
+    transform: physics::Transform,
+    name: String,
 }

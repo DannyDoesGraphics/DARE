@@ -7,6 +7,7 @@ use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
 use dagal::resource::traits::Resource;
+use dagal::traits::AsRaw;
 
 pub async fn generate_mip_maps<A: Allocator>(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, image: resource::Image<A>) -> Result<resource::Image<A>> {
     let mip_levels = image.mip_levels();
@@ -56,7 +57,7 @@ pub async fn generate_mip_maps<A: Allocator>(device: dagal::device::LogicalDevic
                               new_layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                               src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                               dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                              image: image.handle(),
+                              image: unsafe { *image.as_raw() },
                               subresource_range: vk::ImageSubresourceRange {
                                   aspect_mask: vk::ImageAspectFlags::COLOR,
                                   base_mip_level: mip_level,
@@ -110,9 +111,9 @@ pub async fn generate_mip_maps<A: Allocator>(device: dagal::device::LogicalDevic
                           &vk::BlitImageInfo2 {
                               s_type: vk::StructureType::BLIT_IMAGE_INFO_2,
                               p_next: ptr::null(),
-                              src_image: image.handle(),
+                              src_image: unsafe { *image.as_raw() },
                               src_image_layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                              dst_image: image.handle(),
+                              dst_image: unsafe { *image.as_raw() },
                               dst_image_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                               region_count: 1,
                               p_regions: &blit_region,

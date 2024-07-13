@@ -6,6 +6,7 @@ use ash::vk::Handle;
 use derivative::Derivative;
 
 use crate::resource::traits::{Nameable, Resource};
+use crate::traits::AsRaw;
 
 #[derive(Copy, Clone, Debug)]
 pub enum DescriptorInfo {
@@ -131,9 +132,9 @@ impl DescriptorSet {
                 let alloc_info = vk::DescriptorSetAllocateInfo {
                     s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
                     p_next: ptr::null(),
-                    descriptor_pool: pool.handle(),
+                    descriptor_pool: unsafe { *pool.as_raw() },
                     descriptor_set_count: 1,
-                    p_set_layouts: layout.get_handle(),
+                    p_set_layouts: unsafe { layout.as_raw() },
                     _marker: Default::default(),
                 };
                 let mut handle = unsafe {
@@ -236,7 +237,7 @@ impl Nameable for DescriptorSet {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

@@ -10,6 +10,7 @@ use bytemuck::{cast_slice, Pod};
 use futures::prelude::*;
 use gltf::Gltf;
 use gltf::image::Source;
+use gltf::material::AlphaMode;
 use gltf::texture::{MagFilter, MinFilter, WrappingMode};
 
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
@@ -20,6 +21,7 @@ use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::GraphicsPipeline;
 use dagal::resource;
 use dagal::resource::traits::Resource;
+use dagal::traits::AsRaw;
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::ImmediateSubmit;
 
@@ -223,7 +225,8 @@ impl<'a> GltfLoader<'a> {
         mut gpu_rt: GPUResourceTable<A>,
         path: path::PathBuf,
         pipeline: Arc<render::pipeline::Pipeline<GraphicsPipeline>>,
-    ) -> Result<(Vec<Arc<render::Material<A>>>, Vec<assets::mesh::Mesh<A>>)> {
+        scene: &mut assets::scene::Scene<A>,
+    ) -> Result<(Vec<Arc<render::Material<A>>>, Vec<render::Mesh<A>>)> {
         let gltf: Arc<Gltf> = Arc::new(Gltf::open(path.clone())?);
         let parent_path = path.parent().unwrap().to_path_buf();
         gltf.default_scene().expect("No default scene found.");
@@ -598,7 +601,7 @@ impl<'a> GltfLoader<'a> {
                                             s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                                             p_next: ptr::null(),
                                             flags: vk::ImageViewCreateFlags::empty(),
-                                            image: vk_image.handle(),
+                                            image: unsafe { *vk_image.as_raw() },
                                             view_type: vk::ImageViewType::TYPE_2D,
                                             format: vk::Format::R8G8B8A8_SRGB,
                                             components: vk::ComponentMapping::default(),
@@ -662,7 +665,7 @@ impl<'a> GltfLoader<'a> {
                                                 new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                                 src_queue_family_index: vk_queue_family_index,
                                                 dst_queue_family_index: vk_queue_family_index,
-                                                image: image.handle(),
+                                                image: unsafe { *image.as_raw() },
                                                 subresource_range:
                                                 resource::Image::image_subresource_range(
                                                     vk::ImageAspectFlags::COLOR,
@@ -675,8 +678,8 @@ impl<'a> GltfLoader<'a> {
 
                                     device.get_handle().cmd_copy_buffer_to_image(
                                         vk_command_buffer.handle(),
-                                        staging_buffer.handle(),
-                                        image.handle(),
+                                        *staging_buffer.as_raw(),
+                                        *image.as_raw(),
                                         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                         &[vk::BufferImageCopy {
                                             buffer_offset: 0,
@@ -718,7 +721,7 @@ impl<'a> GltfLoader<'a> {
                                                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                                                 src_queue_family_index: vk_queue_family_index,
                                                 dst_queue_family_index: vk_queue_family_index,
-                                                image: image.handle(),
+                                                image: unsafe { *image.as_raw() },
                                                 subresource_range:
                                                 resource::Image::image_subresource_range(
                                                     vk::ImageAspectFlags::COLOR,
@@ -732,8 +735,8 @@ impl<'a> GltfLoader<'a> {
                                 AssetFinished::Buffer { buffer, .. } => unsafe {
                                     device.get_handle().cmd_copy_buffer(
                                         vk_command_buffer.handle(),
-                                        staging_buffer.handle(),
-                                        buffer.handle(),
+                                        *staging_buffer.as_raw(),
+                                        *buffer.as_raw(),
                                         &[vk::BufferCopy {
                                             src_offset: 0,
                                             dst_offset: 0,
@@ -859,8 +862,8 @@ impl<'a> GltfLoader<'a> {
                 None,
                 String::from("default"),
                 gpu_rt.get_device().clone(),
-            )
-                .unwrap();
+                render::AlphaMode::Opaque,
+            ).unwrap();
             material.upload_material(self.immediate, allocator).unwrap();
             Arc::new(material)
         }];
@@ -892,6 +895,17 @@ impl<'a> GltfLoader<'a> {
                                     gltf_material.index().unwrap_or(0)
                                 )),
                             gpu_rt.get_device().clone(),
+                            match gltf_material.alpha_mode() {
+                                AlphaMode::Opaque => {
+                                    render::AlphaMode::Opaque
+                                }
+                                AlphaMode::Mask => {
+                                    render::AlphaMode::Mask(gltf_material.alpha_cutoff().unwrap())
+                                }
+                                AlphaMode::Blend => {
+                                    render::AlphaMode::Blend
+                                }
+                            }
                         )
                             .unwrap();
                         material.upload_material(self.immediate, allocator).unwrap();
@@ -902,7 +916,7 @@ impl<'a> GltfLoader<'a> {
         );
         println!("Loaded materials");
         let mut mesh_surfaces: HashMap<usize, Vec<Arc<render::Surface<A>>>> = HashMap::new();
-        let meshes: Vec<assets::mesh::Mesh<A>> = nodes
+        let meshes: Vec<render::Mesh<A>> = nodes
             .into_iter()
             .enumerate()
             .filter_map(|(mesh_id, node)| {
@@ -932,7 +946,7 @@ impl<'a> GltfLoader<'a> {
                                     let normal = primitive.get(&gltf::Semantic::Normals);
                                     let uv = primitive.get(&gltf::Semantic::TexCoords(0));
                                     Some(Arc::new({
-                                        let mut surface =
+                                        let surface =
                                             render::Surface::from_handles(SurfaceHandleBuilder {
                                                 gpu_rt: gpu_rt.clone(),
                                                 allocator,
@@ -979,6 +993,7 @@ impl<'a> GltfLoader<'a> {
                                                         })
                                                         .unwrap()
                                                 }),
+                                                total_vertices: positions.count() as u32,
                                                 total_indices: indices.count() as u32,
                                                 first_index: 0,
                                                 name: format!(
@@ -991,32 +1006,40 @@ impl<'a> GltfLoader<'a> {
                                             })
                                                 .unwrap();
                                         surface
-                                            .upload(self.immediate, allocator, node.transform)
-                                            .unwrap();
-                                        surface
                                     }))
                                 })
                                 .collect::<Vec<Arc<render::Surface<A>>>>()
                         })
                         .clone();
-
-                    Some(assets::mesh::Mesh::new(
-                        mesh.name().map(|n| n.to_string()),
-                        node.transform.w_axis.truncate(),
-                        glam::Vec3::new(
-                            node.transform.x_axis.length(),
-                            node.transform.y_axis.length(),
-                            node.transform.z_axis.length(),
-                        ),
-                        glam::Quat::from_mat4(&node.transform),
-                        primitives,
-                    ))
+                    Some(primitives.into_iter().map(|primitive| {
+                        render::Mesh::new(
+                            mesh.name().map(|n| n.to_string()),
+                            node.transform.w_axis.truncate(),
+                            glam::Vec3::new(
+                                node.transform.x_axis.length(),
+                                node.transform.y_axis.length(),
+                                node.transform.z_axis.length(),
+                            ),
+                            glam::Quat::from_mat4(&node.transform),
+                            primitive,
+                        )
+                    }).collect::<Vec<render::Mesh<A>>>())
                 } else {
                     None
                 }
             })
+            .flatten()
             .collect();
-        println!("Loaded meshes");
+        scene.insert_surfaces(
+            mesh_surfaces.values()
+                         .flatten()
+                         .cloned()
+                         .collect::<Vec<Arc<render::Surface<A>>>>().as_slice(),
+        );
+        let meshes_slots = scene.insert_meshes(
+            meshes.as_slice()
+        );
+        println!("Loaded {} meshes", meshes.len());
         Ok((materials, meshes))
     }
 }

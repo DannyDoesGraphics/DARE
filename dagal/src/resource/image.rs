@@ -8,7 +8,7 @@ use ash::vk::Handle;
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct Image<A: Allocator = GPUAllocatorImpl> {
@@ -164,7 +164,7 @@ impl<A: Allocator> Image<A> {
         let blint_info = vk::BlitImageInfo2 {
             s_type: vk::StructureType::BLIT_IMAGE_INFO_2,
             p_next: ptr::null(),
-            src_image: image.handle(),
+            src_image: unsafe { *image.as_raw() },
             src_image_layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
             dst_image: self.handle,
             dst_image_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -235,7 +235,6 @@ impl Image {
 
 impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     type CreateInfo = ImageCreateInfo<'a, A>;
-    type HandleType = vk::Image;
 
     ///
     /// # Examples
@@ -330,8 +329,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// drop(image);
     /// ```
     fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
@@ -365,7 +364,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
             } => {
                 let handle = unsafe { device.get_handle().create_image(&image_ci, None)? };
                 #[cfg(feature = "log-lifetimes")]
-                trace!("Created VkImage {:p}", handle);
+                tracing::trace!("Created VkImage {:p}", handle);
 
                 let mut handle = Self {
                     handle,
@@ -415,16 +414,24 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl<A: Allocator> AsRaw for Image<A> {
+    type RawType = vk::Image;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 
@@ -434,7 +441,7 @@ impl<A: Allocator> Nameable for Image<A> {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }
@@ -443,7 +450,7 @@ impl<A: Allocator> Nameable for Image<A> {
 impl<A: Allocator> Destructible for Image<A> {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkImage {:p}", self.handle);
+        tracing::trace!("Destroying VkImage {:p}", self.handle);
 
         if let Some(mut allocation) = self.allocation.take() {
             allocation.destroy();

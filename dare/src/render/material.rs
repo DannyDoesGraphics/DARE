@@ -12,6 +12,13 @@ use dagal::util::ImmediateSubmit;
 
 use crate::render;
 
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+pub enum AlphaMode {
+    Opaque,
+    Blend,
+    Mask(f32),
+}
+
 #[derive(Debug)]
 pub struct Material<A: Allocator = GPUAllocatorImpl> {
     color_factor: glam::Vec4,
@@ -20,6 +27,7 @@ pub struct Material<A: Allocator = GPUAllocatorImpl> {
     buffer: resource::Buffer<A>,
     name: String,
     pipeline: Arc<render::pipeline::Pipeline<GraphicsPipeline>>,
+    alpha_mode: AlphaMode,
 }
 
 impl<A: Allocator> Material<A> {
@@ -31,6 +39,7 @@ impl<A: Allocator> Material<A> {
         normal: Option<render::Texture<A>>,
         name: String,
         device: dagal::device::LogicalDevice,
+        alpha_mode: AlphaMode,
     ) -> Result<Self> {
         let buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
             device: device.clone(),
@@ -48,6 +57,7 @@ impl<A: Allocator> Material<A> {
             normal,
             buffer,
             name,
+            alpha_mode,
         })
     }
 
@@ -110,6 +120,10 @@ impl<A: Allocator> Material<A> {
 
     pub fn get_pipeline(&self) -> &Arc<render::pipeline::Pipeline<GraphicsPipeline>> {
         &self.pipeline
+    }
+
+    pub fn alpha_mode(&self) -> AlphaMode {
+        self.alpha_mode
     }
 }
 

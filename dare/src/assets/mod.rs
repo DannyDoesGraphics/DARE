@@ -2,3 +2,4 @@
 /// a specific resource
 pub mod gltf_loader;
 pub mod mesh;
+pub mod scene;

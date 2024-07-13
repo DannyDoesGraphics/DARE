@@ -5,7 +5,7 @@ use ash::vk;
 use ash::vk::Handle;
 
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 /// Allocates descriptor set layouts
 #[derive(Debug)]
@@ -152,11 +152,9 @@ pub enum DescriptorPoolCreateInfo<'a> {
 
 impl<'a> Resource<'a> for DescriptorPool {
     type CreateInfo = DescriptorPoolCreateInfo<'a>;
-    type HandleType = vk::DescriptorPool;
-
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             DescriptorPoolCreateInfo::FromVk {
@@ -218,16 +216,24 @@ impl<'a> Resource<'a> for DescriptorPool {
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for DescriptorPool {
+    type RawType = vk::DescriptorPool;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

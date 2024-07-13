@@ -1,22 +1,25 @@
-use std::sync::{Arc, RwLock};
 use std::{mem, ptr};
+use std::marker::PhantomData;
+use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use ash::vk;
 
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use crate::DagalError::PoisonError;
 use crate::descriptor::descriptor_set_layout_builder::DescriptorSetLayoutBinding;
 use crate::resource;
-use crate::resource::traits::Resource;
 use crate::resource::ImageViewCreateInfo;
+use crate::resource::traits::Resource;
+use crate::traits::AsRaw;
 use crate::util::free_list_allocator::Handle;
 use crate::util::FreeList;
-use crate::DagalError::PoisonError;
 
 #[derive(Debug)]
-pub enum GPUResource<'a, T: Resource<'a>> {
+pub enum GPUResource<'a, T: Resource<'a> + AsRaw> {
     Resource(T),
-    Raw(T::HandleType),
+    Raw(T::RawType),
+    _Phantom(PhantomData<&'a T>)
 }
 
 #[derive(Debug)]
@@ -151,7 +154,7 @@ impl<A: Allocator> GPUResourceTable<A> {
             .slot(0)
             .push_descriptor(crate::descriptor::DescriptorInfo::Buffer(
                 vk::DescriptorBufferInfo {
-                    buffer: bda_buffer.handle(),
+                    buffer: unsafe { *bda_buffer.as_raw() },
                     offset: 0,
                     range: vk::WHOLE_SIZE,
                 },
@@ -201,12 +204,14 @@ impl<A: Allocator> GPUResourceTable<A> {
     }
 
     pub fn get_descriptor_layout(&self) -> Result<vk::DescriptorSetLayout> {
-        Ok(self
-            .inner
-            .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))?
-            .set_layout
-            .handle())
+        Ok(unsafe {
+            *self
+                .inner
+                .read()
+                .map_err(|_| anyhow::Error::from(crate::DagalError::NoShaderDeviceAddress))?
+                .set_layout
+                .as_raw()
+        })
     }
 
     /// Create a new image view
@@ -303,8 +308,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         mut image_view_ci: ResourceInput<'a, resource::ImageView>,
         image_layout: vk::ImageLayout,
     ) -> Result<(Handle<resource::Image<A>>, Handle<resource::ImageView>)>
-    where
-        A: 'a,
+        where
+            A: 'a,
     {
         let image_handle = match image_ci {
             ResourceInput::Resource(image) => self.images.allocate(image)?,
@@ -315,12 +320,12 @@ impl<A: Allocator> GPUResourceTable<A> {
             ResourceInput::ResourceHandle(handle) => handle,
         };
         if let ResourceInput::ResourceCI(ImageViewCreateInfo::FromCreateInfo {
-            create_info, ..
-        }) = &mut image_view_ci
+                                             create_info, ..
+                                         }) = &mut image_view_ci
         {
             create_info.image = self
                 .images
-                .with_handle(&image_handle, |image| image.handle())?;
+                .with_handle(&image_handle, |image| unsafe { *image.as_raw() })?;
         }
         let image_view_handle = self.new_image_view(image_view_ci)?;
         let image_view = self.image_views.get_resource_handle(&image_view_handle)?;
@@ -387,8 +392,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         &mut self,
         buffer_input: ResourceInput<'a, resource::Buffer<A>>,
     ) -> Result<Handle<resource::Buffer<A>>>
-    where
-        A: 'a,
+        where
+            A: 'a,
     {
         let handle = match buffer_input {
             ResourceInput::Resource(buffer) => {
@@ -459,7 +464,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let typed_buffer = resource::TypedBufferView::new(
                     resource::TypedBufferCreateInfo::FromDagalBuffer { buffer },
                 )
-                .unwrap();
+                    .unwrap();
                 f(typed_buffer)
             })
         }

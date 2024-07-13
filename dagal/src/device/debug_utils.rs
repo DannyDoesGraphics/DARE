@@ -38,7 +38,7 @@ impl DebugMessenger {
         let handle = unsafe { ext.create_debug_utils_messenger(&debug_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkDebugUtilsMessenger {:p}", handle);
+        tracing::trace!("Creating VkDebugUtilsMessenger {:p}", handle);
 
         Ok(Self { handle, ext })
     }
@@ -47,7 +47,7 @@ impl DebugMessenger {
 impl Destructible for DebugMessenger {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkDebugUtilsMessenger {:p}", self.handle);
+        tracing::trace!("Destroying VkDebugUtilsMessenger {:p}", self.handle);
 
         unsafe { self.ext.destroy_debug_utils_messenger(self.handle, None) }
     }

@@ -6,7 +6,7 @@ use anyhow::Result;
 use derivative::Derivative;
 
 use crate::resource::traits::Resource;
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Copy, PartialOrd, Eq)]
 pub struct Handle<T> {
@@ -228,22 +228,24 @@ impl<T> FreeList<T> {
     }
 }
 
-impl<'a, T: Resource<'a>> FreeList<T> {
+impl<'a, T: Resource<'a> + AsRaw> FreeList<T> {
     /// If you're simply acquiring a resource's handle
-    pub fn get_resource_handle(&self, handle: &Handle<T>) -> Result<T::HandleType> {
+    pub fn get_resource_handle(&self, handle: &Handle<T>) -> Result<T::RawType> {
         if !self.is_valid(handle)? {
             return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
         }
-        Ok(self
-            .inner
-            .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
-            .resources
-            .get(handle.id as usize)
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .handle())
+        Ok(unsafe {
+            *self
+                .inner
+                .read()
+                .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+                .resources
+                .get(handle.id as usize)
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .as_raw()
+        })
     }
 }
 

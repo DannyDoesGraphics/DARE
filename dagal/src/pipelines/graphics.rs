@@ -5,7 +5,6 @@ use std::ptr;
 
 use ash::vk;
 
-use crate::resource::traits::AsRaw;
 use crate::traits::Destructible;
 
 #[derive(Debug)]
@@ -17,7 +16,7 @@ pub struct GraphicsPipeline {
 impl Destructible for GraphicsPipeline {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkPipeline {:p}", self.handle);
+        tracing::trace!("Destroying VkPipeline {:p}", self.handle);
 
         unsafe {
             self.device.get_handle().destroy_pipeline(self.handle, None);
@@ -42,13 +41,6 @@ impl super::Pipeline for GraphicsPipeline {
     }
 }
 
-impl AsRaw for GraphicsPipeline {
-    type AsRawType = vk::Pipeline;
-
-    unsafe fn as_raw(self) -> Self::AsRawType {
-        self.handle
-    }
-}
 
 #[derive(Debug)]
 pub struct GraphicsPipelineBuilder<'a> {
@@ -229,8 +221,8 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .unwrap()
         }
-        .pop()
-        .unwrap();
+            .pop()
+            .unwrap();
         // Clean up shaders
         for shader in self.shaders.into_values() {
             drop(shader)

@@ -2,7 +2,7 @@ use ash::vk;
 use ash::vk::Handle;
 
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct DescriptorSetLayout {
@@ -21,11 +21,10 @@ pub enum DescriptorSetLayoutCreateInfo<'a> {
 
 impl<'a> Resource<'a> for DescriptorSetLayout {
     type CreateInfo = DescriptorSetLayoutCreateInfo<'a>;
-    type HandleType = vk::DescriptorSetLayout;
 
     fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             DescriptorSetLayoutCreateInfo::FromVk {
@@ -40,16 +39,24 @@ impl<'a> Resource<'a> for DescriptorSetLayout {
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for DescriptorSetLayout {
+    type RawType = vk::DescriptorSetLayout;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 
@@ -68,7 +75,7 @@ impl Nameable for DescriptorSetLayout {
 impl Destructible for DescriptorSetLayout {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkDescriptorLayout {:p}", self.handle);
+        tracing::trace!("Destroying VkDescriptorLayout {:p}", self.handle);
         unsafe {
             self.device
                 .get_handle()

@@ -1,4 +1,5 @@
 use std::{mem, ptr, slice};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::sync::Arc;
 
@@ -16,18 +17,24 @@ use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::resource::traits::Resource;
 use dagal::shader::{ShaderCCompiler, ShaderCompiler};
-use dagal::traits::Destructible;
+use dagal::traits::{AsRaw, Destructible};
+use dagal::util::{ImmediateSubmit, Slot};
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::immediate_submit::ImmediateSubmitContext;
-use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
 
+use crate::assets::scene::Scene;
+use crate::render::AlphaMode;
+use crate::render::CMesh;
+use crate::render::deferred_deletion::DeletionEntry;
 use crate::render::scene_data::SceneData;
 
 mod assets;
 mod ray_tracing;
 mod render;
+mod traits;
+mod physics;
 mod util;
 
 const FRAME_OVERLAP: usize = 2;
@@ -49,8 +56,9 @@ struct RenderContext {
     sampler: Option<Handle<resource::Sampler>>,
 
     camera: render::camera::Camera,
-    meshes: Vec<assets::mesh::Mesh<GPUAllocatorImpl>>,
+    meshes: Vec<render::Mesh<GPUAllocatorImpl>>,
     materials: Vec<Arc<render::Material<GPUAllocatorImpl>>>,
+    scene: Scene,
     draw_context: render::draw_context::DrawContext<GPUAllocatorImpl>,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
@@ -288,6 +296,7 @@ impl RenderContext {
             )
             .unwrap();
 
+        let scene = Scene::new(device.clone(), &mut allocator).unwrap();
         let mut app = Self {
             instance,
             physical_device,
@@ -327,6 +336,7 @@ impl RenderContext {
             error_checkerboard_image: None,
 
             draw_context: Default::default(),
+            scene,
         };
         // create default images
         // create default texture data
@@ -450,7 +460,7 @@ impl RenderContext {
                 self.swapchain_images
                     .as_slice()
                     .iter()
-                    .map(|image| image.handle())
+                    .map(|image| unsafe { *image.as_raw() })
                     .collect::<Vec<vk::Image>>()
                     .as_slice(),
             )
@@ -526,7 +536,7 @@ impl RenderContext {
                 s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                 p_next: ptr::null(),
                 flags: vk::ImageViewCreateFlags::empty(),
-                image: image.handle(),
+                image: unsafe { *image.as_raw() },
                 view_type: vk::ImageViewType::TYPE_2D,
                 format: image.format(),
                 components: Default::default(),
@@ -544,7 +554,7 @@ impl RenderContext {
                     s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                     p_next: ptr::null(),
                     flags: vk::ImageViewCreateFlags::empty(),
-                    image: depth_image.handle(),
+                    image: unsafe { *depth_image.as_raw() },
                     view_type: vk::ImageViewType::TYPE_2D,
                     format: depth_image.format(),
                     components: Default::default(),
@@ -577,7 +587,7 @@ impl RenderContext {
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
-            image_view: self.draw_image_view.as_ref().unwrap().handle(),
+            image_view: unsafe { *self.draw_image_view.as_ref().unwrap().as_raw() },
             image_layout: vk::ImageLayout::GENERAL,
         };
         self.draw_image_descriptors.as_mut().unwrap().write(&[
@@ -587,7 +597,7 @@ impl RenderContext {
                 .ty(dagal::descriptor::DescriptorType::StorageImage)
                 .push_descriptor(dagal::descriptor::DescriptorInfo::Image(img_info)),
         ]);
-        if self.meshes.is_empty() {
+        if self.scene.meshes.deferred_elements.get_data_len() == 0 {
             // create pipelines
             let layout = dagal::pipelines::PipelineLayoutBuilder::default()
                 .push_descriptor_sets(vec![self.gpu_resource_table.get_descriptor_layout()?])
@@ -597,7 +607,7 @@ impl RenderContext {
                 .build(self.device.clone(), vk::PipelineLayoutCreateFlags::empty())?;
             let compiler = ShaderCCompiler::new();
             let pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
-                .replace_layout(layout.handle())
+                .replace_layout(unsafe { *layout.as_raw() })
                 .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
                 .set_polygon_mode(vk::PolygonMode::FILL)
                 .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
@@ -633,26 +643,28 @@ impl RenderContext {
                 .build(self.device.clone())?;
             let pipeline = Arc::new(render::pipeline::Pipeline::new(pipeline, Arc::new(layout)));
 
-            let (materials, meshes): (Vec<Arc<render::Material>>, Vec<assets::mesh::Mesh>) =
-                tokio::task::block_in_place(|| {
-                    let handle = tokio::runtime::Handle::current();
-                    handle
-                        .block_on(
-                            assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
-                                .load_assets(
-                                    &mut self.allocator,
-                                    self.gpu_resource_table.clone(),
-                                    std::path::PathBuf::from(
-                                        //"./dare/assets/BoxTextured.glb",
-                                        //"./dare/assets/Triangle/Triangle.gltf",
-                                        "./dare/assets/Sponza/glTF/Sponza.gltf",
-                                        //"C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
-                                    ),
-                                    pipeline,
+            let (materials, meshes) = tokio::task::block_in_place(|| {
+                let handle = tokio::runtime::Handle::current();
+                handle
+                    .block_on(
+                        assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
+                            .load_assets(
+                                &mut self.allocator,
+                                self.gpu_resource_table.clone(),
+                                std::path::PathBuf::from(
+                                    //"./dare/assets/BoxTextured.glb",
+                                    //"./dare/assets/Triangle/Triangle.gltf",
+                                    "./dare/assets/Sponza/glTF/Sponza.gltf",
+                                    //"C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
+                                    //"./dare/assets/deccer-cubes-main/SM_Deccer_Cubes_Textured_Complex.g",
                                 ),
-                        )
-                        .unwrap()
-                });
+                                pipeline,
+                                &mut self.scene,
+                            ),
+                    )
+                    .unwrap()
+            });
+            // keep lifetimes
             self.materials = materials;
             self.meshes = meshes;
         }
@@ -693,26 +705,35 @@ impl RenderContext {
     }
 
     fn update_scene(&mut self) {
+        // compare hashes before changing
+        let mut to_append = self
+            .scene
+            .meshes
+            .deferred_elements
+            .data()
+            .iter()
+            .map(|slot| slot.slot.clone())
+            .collect::<Vec<Slot<DeletionEntry<render::WeakMesh<GPUAllocatorImpl>>>>>();
+        let to_append_hash: u64 = {
+            let mut hasher = DefaultHasher::new();
+            to_append.hash(&mut hasher);
+            hasher.finish()
+        };
+        for mesh in self.draw_context.surfaces.iter_mut() {
+            self.scene.meshes.update(mesh).unwrap();
+        }
+        if self.draw_context.last_draw_hash == to_append_hash {
+            self.draw_context.difference = false;
+            return;
+        }
         self.draw_context.surfaces.clear();
-        self.draw_context.surfaces.append(
-            &mut self
-                .meshes
-                .iter()
-                .flat_map(|mesh| {
-                    mesh.get_surfaces()
-                        .iter()
-                        .map(|surface| render::draw_context::DrawSurface {
-                            surface: surface.clone(),
-                            local_transform: glam::Mat4::from_scale_rotation_translation(
-                                mesh.scale,
-                                mesh.rotation,
-                                mesh.position,
-                            ),
-                        })
-                        .collect::<Vec<render::draw_context::DrawSurface>>()
-                })
-                .collect(),
-        );
+        self.draw_context.surfaces.append(&mut to_append);
+        let hash_surface = self.draw_context.hash_surfaces();
+        self.scene
+            .upload_mesh_info(&mut self.allocator, &mut self.immediate_submit)
+            .unwrap();
+        self.draw_context.last_draw_hash = hash_surface;
+        self.draw_context.difference = true;
     }
 
     fn update_scene_data(&mut self) {
@@ -738,50 +759,74 @@ impl RenderContext {
             scene_data.as_mut().view = view.transpose().to_cols_array();
             scene_data.as_mut().view_proj = (proj * view).transpose().to_cols_array();
         }
+        self.scene.meshes.clear_elements();
+        self.scene.meshes.update_frame(1);
     }
 
     fn sort_draw_context(&mut self) {
+        let meshes = self.scene.get_scene_meshes();
+
         self.draw_context.surfaces.sort_by(|a, b| {
-            a.surface
-             .material()
-             .get_pipeline()
-             .get_pipeline()
-             .handle()
-             .cmp(&b.surface.material().get_pipeline().get_pipeline().handle())
-             .then_with(|| {
-                 a.surface
-                  .material()
-                  .get_pipeline()
-                  .get_layout()
-                  .handle()
-                  .cmp(&b.surface.material().get_pipeline().get_layout().handle())
-             })
-             .then_with(|| {
-                 a.surface
-                  .get_index_buffer()
-                  .id()
-                  .cmp(&b.surface.get_index_buffer().id())
-             })
+            let a = meshes.get(a.id() as usize).unwrap();
+            let b = meshes.get(b.id() as usize).unwrap();
+
+            match (a, b) {
+                (Some(a), Some(b)) => {
+                    match (
+                        a.element.surface.material().alpha_mode(),
+                        b.element.surface.material().alpha_mode(),
+                    ) {
+                        (AlphaMode::Opaque, AlphaMode::Opaque) => (),
+                        (AlphaMode::Opaque, _) => return std::cmp::Ordering::Less,
+                        (_, AlphaMode::Opaque) => return std::cmp::Ordering::Greater,
+                        _ => (),
+                    }
+
+                    a.element
+                     .surface
+                     .material()
+                     .get_pipeline()
+                     .get_pipeline()
+                     .handle()
+                     .cmp(&b.element.surface.material().get_pipeline().get_pipeline().handle())
+                     .then_with(|| unsafe {
+                         (*a.element.surface.material().get_pipeline().get_layout().as_raw())
+                             .cmp(b.element.surface.material().get_pipeline().get_layout().as_raw())
+                     })
+                     .then_with(|| {
+                         a.element
+                          .surface
+                          .get_index_buffer()
+                          .id()
+                          .cmp(&b.element.surface.get_index_buffer().id())
+                     })
+                },
+                (None, Some(_)) => std::cmp::Ordering::Less,
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
         });
     }
 
     /// Draws a mesh
     fn draw_mesh(&self, cmd: &dagal::command::CommandBufferRecording) -> Result<()> {
         let dynamic_rendering_context = cmd.dynamic_rendering();
-        let dynamic_rendering_context = dynamic_rendering_context
-            .push_image_as_color_attachment(
-                vk::ImageLayout::GENERAL,
-                self.draw_image_view.as_ref().unwrap(),
-                None,
-            )
-            .depth_attachment_info(
-                self.depth_image_view.as_ref().unwrap().handle(),
-                vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
-            )
-            .begin_rendering(vk::Extent2D {
-                width: self.draw_image.as_ref().unwrap().extent().width,
-                height: self.draw_image.as_ref().unwrap().extent().height,
-            });
+        let dynamic_rendering_context = unsafe {
+            dynamic_rendering_context
+                .push_image_as_color_attachment(
+                    vk::ImageLayout::GENERAL,
+                    self.draw_image_view.as_ref().unwrap(),
+                    None,
+                )
+                .depth_attachment_info(
+                    *self.depth_image_view.as_ref().unwrap().as_raw(),
+                    vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+                )
+                .begin_rendering(vk::Extent2D {
+                    width: self.draw_image.as_ref().unwrap().extent().width,
+                    height: self.draw_image.as_ref().unwrap().extent().height,
+                })
+        };
         let viewport = vk::Viewport {
             x: 0.0,
             y: 0.0,
@@ -814,7 +859,18 @@ impl RenderContext {
         let mut last_pipeline: vk::Pipeline = vk::Pipeline::null();
         let mut last_layout: vk::PipelineLayout = vk::PipelineLayout::null();
         let mut last_index_buffer: vk::Buffer = vk::Buffer::null();
-        for draw in self.draw_context.surfaces.iter() {
+        for draw_entry in self.draw_context.surfaces.iter() {
+            let draw = self
+                .scene
+                .meshes
+                .deferred_elements
+                .with_slot(draw_entry, |draw| {
+                    draw.element.as_mesh().as_ref().unwrap().clone()
+                });
+            if draw.is_err() {
+                continue;
+            }
+            let draw = draw.unwrap();
             unsafe {
                 if last_pipeline
                     != draw
@@ -840,25 +896,25 @@ impl RenderContext {
                         .get_pipeline()
                         .handle();
                 }
-                if last_layout != draw.surface.material().get_pipeline().get_layout().handle() {
+                if last_layout != *draw.surface.material().get_pipeline().get_layout().as_raw() {
                     self.device.get_handle().cmd_bind_descriptor_sets(
                         cmd.handle(),
                         vk::PipelineBindPoint::GRAPHICS,
-                        draw.surface.material().get_pipeline().get_layout().handle(),
+                        *draw.surface.material().get_pipeline().get_layout().as_raw(),
                         0,
                         &[self.gpu_resource_table.get_descriptor_set().unwrap()],
                         &[],
                     );
-                    last_layout = draw.surface.material().get_pipeline().get_layout().handle();
+                    last_layout = *draw.surface.material().get_pipeline().get_layout().as_raw();
                 }
                 let index_buffer = self
                     .gpu_resource_table
-                    .with_buffer(draw.surface.get_index_buffer(), |buf| buf.handle())?;
+                    .with_buffer(draw.surface.get_index_buffer(), |buf| *buf.as_raw())?;
                 if last_index_buffer != index_buffer {
                     self.device.get_handle().cmd_bind_index_buffer(
                         cmd.handle(),
                         self.gpu_resource_table
-                            .with_buffer(draw.surface.get_index_buffer(), |buf| buf.handle())
+                            .with_buffer(draw.surface.get_index_buffer(), |buf| *buf.as_raw())
                             .unwrap(),
                         0,
                         vk::IndexType::UINT32,
@@ -868,13 +924,20 @@ impl RenderContext {
             };
             let push_constants = render::push_constants::RasterizationPushConstant {
                 scene_data: frame.scene_data_buffer.address(),
-                surface_data: draw.surface.get_buffer().address(),
-                model_transform: draw.local_transform.transpose().to_cols_array(),
+                surface_data: self.scene.mesh_info_buffer.get_handle().address()
+                    + (draw_entry.id() as usize * mem::size_of::<CMesh>()) as vk::DeviceSize,
+                model_transform: glam::Mat4::from_scale_rotation_translation(
+                    draw.scale,
+                    draw.rotation,
+                    draw.translation,
+                )
+                    .transpose()
+                    .to_cols_array(),
             };
             unsafe {
                 self.device.get_handle().cmd_push_constants(
                     cmd.handle(),
-                    draw.surface.material().get_pipeline().get_layout().handle(),
+                    *draw.surface.material().get_pipeline().get_layout().as_raw(),
                     vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                     0,
                     slice::from_raw_parts(
@@ -947,7 +1010,7 @@ impl RenderContext {
                 s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                 p_next: ptr::null(),
                 flags: vk::ImageViewCreateFlags::empty(),
-                image: image.handle(),
+                image: unsafe { *image.as_raw() },
                 view_type: vk::ImageViewType::TYPE_2D,
                 format,
                 components: Default::default(),
@@ -1020,8 +1083,8 @@ impl RenderContext {
                         unsafe {
                             context.device.get_handle().cmd_copy_buffer_to_image(
                                 context.cmd.handle(),
-                                staging_buffer.handle(),
-                                image.handle(),
+                                *staging_buffer.as_raw(),
+                                *image.as_raw(),
                                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                 &[copy_region],
                             );
@@ -1034,7 +1097,8 @@ impl RenderContext {
                         )
                     })
             })
-            .unwrap().unwrap();
+            .unwrap()
+            .unwrap();
         drop(staging_buffer);
         allocated_image
     }
@@ -1042,7 +1106,9 @@ impl RenderContext {
     // Deals with drawing
     fn draw(&mut self) {
         self.update_scene();
-        self.sort_draw_context();
+        if self.draw_context.difference {
+            self.sort_draw_context();
+        }
         // clear out last frame
         let swapchain_frame = self
             .frames
@@ -1105,12 +1171,14 @@ impl RenderContext {
         unsafe {
             self.device.get_handle().cmd_clear_color_image(
                 cmd.handle(),
-                self.draw_image.as_ref().unwrap().handle(),
+                *self.draw_image.as_ref().unwrap().as_raw(),
                 vk::ImageLayout::GENERAL,
                 &vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0]
+                    float32: [0.0, 0.0, 0.0, 0.0],
                 },
-                &[resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR)]
+                &[resource::Image::image_subresource_range(
+                    vk::ImageAspectFlags::COLOR,
+                )],
             );
         }
         // add a sync point
@@ -1252,13 +1320,6 @@ impl winit::application::ApplicationHandler for App {
             None => return,
             Some(window) => window,
         };
-        let mut now = Some(std::time::Instant::now());
-        let dt = self
-            .previous
-            .map(|last| now.unwrap().duration_since(last))
-            .unwrap_or(std::time::Duration::new(0, 0));
-        mem::swap(&mut self.previous, &mut now);
-        let dt: f64 = dt.as_secs_f64();
 
         match event {
             winit::event::WindowEvent::CloseRequested => {
@@ -1279,6 +1340,21 @@ impl winit::application::ApplicationHandler for App {
             }
             winit::event::WindowEvent::RedrawRequested => {
                 if let Some(render_context) = self.render_context.as_mut() {
+                    let mut now = Some(std::time::Instant::now());
+                    let dt = self
+                        .previous
+                        .map(|last| now.unwrap().duration_since(last))
+                        .unwrap_or(std::time::Duration::new(0, 0));
+                    mem::swap(&mut self.previous, &mut now);
+                    let dt: f64 = dt.as_secs_f64();
+                    // update fps
+                    self.dts.push(dt);
+                    let sum = self.dts.iter().sum::<f64>();
+                    if sum >= 1.0 {
+                        let fps = self.dts.len() as f64 / sum;
+                        window.set_title(format!("DARE | DT: {dt} | Avg. FPS: {fps}").as_str());
+                        self.dts.clear();
+                    }
                     // do not draw if window size is impossibly small
                     render_context.camera.update(dt as f32);
                     if window.width() != 0
@@ -1286,6 +1362,7 @@ impl winit::application::ApplicationHandler for App {
                         && !render_context.resize_requested
                     {
                         render_context.draw();
+                        self.frame_number += 1;
                     }
                 }
             }
@@ -1321,6 +1398,7 @@ impl winit::application::ApplicationHandler for App {
                 delta,
                 phase,
             } => {
+                let dt = self.dts.last().cloned().unwrap_or(0.0);
                 if let Some(render_context) = self.render_context.as_mut() {
                     if let MouseScrollDelta::LineDelta(x, y) = delta {
                         render_context.camera.mouse_scrolled(y, dt as f32);
@@ -1331,6 +1409,7 @@ impl winit::application::ApplicationHandler for App {
                 device_id,
                 position,
             } => {
+                let dt = self.dts.last().cloned().unwrap_or(0.0);
                 if let Some(render_context) = self.render_context.as_mut() {
                     render_context.camera.process_mouse_input(
                         glam::Vec2::new(position.x as f32, position.y as f32),
@@ -1339,18 +1418,6 @@ impl winit::application::ApplicationHandler for App {
                 }
             }
             _ => {}
-        }
-        if let Some(render_context) = self.render_context.as_mut() {
-            render_context.camera.update(dt as f32);
-            // update fps
-            self.dts.push(dt);
-            let sum = self.dts.iter().sum::<f64>();
-            if sum >= 1.0 {
-                let fps = self.dts.len() as f64 / sum;
-                window.set_title(format!("DARE | DT: {dt} | Avg. FPS: {fps}").as_str());
-                self.dts.clear();
-            }
-            self.frame_number += 1;
         }
     }
 

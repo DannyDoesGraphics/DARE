@@ -1,4 +1,6 @@
+pub use gpu_resource::GPUResource;
 pub use material::*;
+pub use mesh::*;
 pub use surface::*;
 pub use texture::*;
 
@@ -16,3 +18,10 @@ pub mod scene_data;
 pub mod surface;
 pub mod texture;
 pub mod image;
+pub mod acceleration_structure;
+pub mod growable_buffer;
+pub mod deferred_deletion;
+mod backed_growable;
+pub mod backable;
+pub mod mesh;
+pub mod gpu_resource;

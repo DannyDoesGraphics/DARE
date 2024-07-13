@@ -3,7 +3,7 @@ use ash::vk;
 use ash::vk::Handle;
 
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct Sampler {
@@ -14,7 +14,7 @@ pub struct Sampler {
 impl Destructible for Sampler {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkSampler {:p}", self.handle);
+        tracing::trace!("Destroying VkSampler {:p}", self.handle);
         unsafe {
             self.device.get_handle().destroy_sampler(self.handle, None);
         }
@@ -59,11 +59,10 @@ pub enum SamplerCreateInfo<'a> {
 
 impl<'a> Resource<'a> for Sampler {
     type CreateInfo = SamplerCreateInfo<'a>;
-    type HandleType = vk::Sampler;
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             SamplerCreateInfo::FromCreateInfo {
@@ -73,7 +72,7 @@ impl<'a> Resource<'a> for Sampler {
             } => {
                 let handle = unsafe { device.get_handle().create_sampler(&create_info, None) }?;
                 #[cfg(feature = "log-lifetimes")]
-                trace!("Creating VkSampler {:p}", handle);
+                tracing::trace!("Creating VkSampler {:p}", handle);
 
                 let mut handle = Self { handle, device };
                 crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
@@ -83,16 +82,24 @@ impl<'a> Resource<'a> for Sampler {
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for Sampler {
+    type RawType = vk::Sampler;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 
@@ -102,7 +109,7 @@ impl Nameable for Sampler {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

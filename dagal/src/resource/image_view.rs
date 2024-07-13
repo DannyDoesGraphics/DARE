@@ -3,7 +3,7 @@ use ash::vk;
 use ash::vk::Handle;
 
 use crate::resource::traits::{Nameable, Resource};
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct ImageView {
@@ -107,11 +107,9 @@ pub enum ImageViewCreateInfo<'a> {
 
 impl<'a> Resource<'a> for ImageView {
     type CreateInfo = ImageViewCreateInfo<'a>;
-    type HandleType = vk::ImageView;
-
     fn new(create_info: ImageViewCreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             ImageViewCreateInfo::FromCreateInfo {
@@ -133,16 +131,24 @@ impl<'a> Resource<'a> for ImageView {
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for ImageView {
+    type RawType = vk::ImageView;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

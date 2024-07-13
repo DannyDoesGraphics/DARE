@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::ffi::c_char;
+use std::ptr;
 use std::sync::{Arc, Weak};
 
 use anyhow::Result;
@@ -7,7 +8,9 @@ use ash;
 use ash::vk;
 use derivative::Derivative;
 
+use crate::DagalError;
 use crate::device::physical_device::PhysicalDevice;
+use crate::resource::traits::{Nameable, Resource};
 use crate::traits::Destructible;
 
 #[derive(Clone, Derivative)]

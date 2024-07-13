@@ -2,6 +2,7 @@ use ash::vk;
 use ash::vk::Handle;
 
 use crate::resource::traits::{Nameable, Resource};
+use crate::traits::AsRaw;
 
 #[derive(Debug)]
 pub struct PipelineLayout {
@@ -33,11 +34,10 @@ impl Drop for PipelineLayout {
 
 impl<'a> Resource<'a> for PipelineLayout {
     type CreateInfo = PipelineLayoutCreateInfo<'a>;
-    type HandleType = vk::PipelineLayout;
 
     fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         let handle = match create_info {
             PipelineLayoutCreateInfo::CreateInfo {
@@ -50,7 +50,7 @@ impl<'a> Resource<'a> for PipelineLayout {
                         .get_handle()
                         .create_pipeline_layout(&create_info, None)
                 }
-                .unwrap();
+                    .unwrap();
                 let mut handle = Self { handle, device };
                 if let Some(name) = name {
                     if let Some(debug_utils) = handle.device.clone().get_debug_utils() {
@@ -71,16 +71,24 @@ impl<'a> Resource<'a> for PipelineLayout {
         Ok(handle)
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for PipelineLayout {
+    type RawType = vk::PipelineLayout;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> Self::HandleType {
-        self.handle
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 
-    fn get_device(&self) -> &crate::device::LogicalDevice {
-        &self.device
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

@@ -5,8 +5,9 @@ use ash::vk;
 
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::device::LogicalDevice;
-use crate::resource::traits::{Nameable, Resource};
 use crate::resource::Buffer;
+use crate::resource::traits::{Nameable, Resource};
+use crate::traits::AsRaw;
 
 /// Create a typed buffer view into a [`Buffer`]
 #[derive(Debug)]
@@ -21,12 +22,11 @@ pub enum TypedBufferCreateInfo<'a, A: Allocator> {
 
 impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBufferView<'a, T, A> {
     type CreateInfo = TypedBufferCreateInfo<'a, A>;
-    type HandleType = vk::Buffer;
 
     /// All size info is assumed to by scaled by the size of the type in the buffer
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             TypedBufferCreateInfo::FromDagalBuffer { buffer: handle } => Ok(Self {
@@ -36,16 +36,24 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBufferView<'a, T, A>
         }
     }
 
-    fn get_handle(&self) -> &Self::HandleType {
-        self.buffer.get_handle()
-    }
-
-    fn handle(&self) -> Self::HandleType {
-        self.buffer.handle()
-    }
-
     fn get_device(&self) -> &LogicalDevice {
         self.buffer.get_device()
+    }
+}
+
+impl<'a, T: Sized, A: Allocator> AsRaw for TypedBufferView<'a, T, A> {
+    type RawType = vk::Buffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        self.buffer.as_raw()
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        self.buffer.as_raw_mut()
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        unimplemented!()
     }
 }
 

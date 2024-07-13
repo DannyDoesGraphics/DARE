@@ -1,7 +1,10 @@
+use std::ptr;
+
+use ash::vk;
+
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::Resource;
-use ash::vk;
-use std::ptr;
+use crate::traits::AsRaw;
 
 /// Contains the dynamic render context which contains references to the original command buffer
 #[derive(Debug)]
@@ -31,7 +34,7 @@ impl<'a> DynamicRenderContext<'a> {
         self.color_attachments.push(vk::RenderingAttachmentInfo {
             s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
             p_next: ptr::null(),
-            image_view: image_view.handle(),
+            image_view: unsafe { *image_view.as_raw() },
             image_layout,
             load_op: match clear_value {
                 None => vk::AttachmentLoadOp::LOAD,

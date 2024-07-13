@@ -608,6 +608,7 @@ dependencies = [
  "bytemuck",
  "clap",
  "dagal",
+ "derivative",
  "futures",
  "glam",
  "gltf",
