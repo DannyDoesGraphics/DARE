@@ -23,7 +23,7 @@ pub struct AssetContainerSlot<T: 'static + AssetDescriptor> {
 }
 
 /// Quick access to the underlying asset container type
-pub type AssetContainer<T: 'static> = DashMap<String, AssetContainerSlot<T>>;
+pub type AssetContainer<T> = DashMap<String, AssetContainerSlot<T>>;
 
 #[derive(Debug)]
 pub struct AssetManagerInner {

@@ -12,7 +12,7 @@ pub struct Image<A: Allocator> {
     _maker: PhantomData<A>
 }
 
-impl<A: Allocator> super::asset::AssetDescriptor for Image<A> {
+impl<A: Allocator + 'static> super::asset::AssetDescriptor for Image<A> {
     type Loaded = ImageLoaded;
     type Metadata = ImageMetaData<A>;
 }
