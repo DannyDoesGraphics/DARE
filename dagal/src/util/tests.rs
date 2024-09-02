@@ -1,13 +1,12 @@
 use std::ffi::{c_char, CString};
 
+use crate::util::{convert_raw_c_ptrs_to_cstring, wrap_c_str};
+use crate::wsi::DagalWindow;
 use ash;
 use ash::vk;
 use raw_window_handle::RawDisplayHandle;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-
-use crate::util::{convert_raw_c_ptrs_to_cstring, wrap_c_str};
-use crate::wsi::DagalWindow;
 
 /// Quick utility stuff for tests
 #[derive(Default, Clone)]
@@ -98,9 +97,9 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
     let logical_device = logical_device
         .build(test_vulkan.instance.get_instance())
         .unwrap();
-    let compute_queue = compute_queue.borrow().get_queues()[0].clone();
+    let mut compute_queue = logical_device.acquire_queue(vk::QueueFlags::COMPUTE, Some(true), Some(false), None).unwrap();
     TestVulkan {
-        compute_queue: Some(compute_queue),
+        compute_queue: compute_queue.pop(),
         device: Some(logical_device),
         debug_messenger: test_vulkan.debug_messenger,
         physical_device: Some(physical_device),

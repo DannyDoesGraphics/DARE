@@ -1,6 +1,4 @@
 use ash::vk;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use crate::bootstrap::QueueAllocation;
 
@@ -15,32 +13,22 @@ pub struct QueueRequest {
 
     /// Whether the queue requested must be dedicated
     pub dedicated: bool,
-
-    pub(crate) queues: Vec<crate::device::Queue>,
 }
 
 impl QueueRequest {
-    pub fn new(family_flags: vk::QueueFlags, count: u32, dedicated: bool) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
+    pub fn new(family_flags: vk::QueueFlags, count: u32, dedicated: bool) -> Self {
+        Self {
             family_flags,
             count,
             dedicated,
-            queues: Vec::new(),
-        }))
-    }
-
-    /// Retrieve queues that have been created
-    ///
-    /// Should only be used after [`bootstrap::LogicalDeviceBuilder`] has built the [`LogicalDevice`](crate::device::LogicalDevice)
-    pub fn get_queues(&self) -> &[crate::device::Queue] {
-        self.queues.as_slice()
+        }
     }
 }
 
 /// Determine the correct slotting of queues
 pub(crate) fn determine_queue_slotting(
     queue_families: Vec<vk::QueueFamilyProperties>,
-    queue_requests: Vec<Rc<RefCell<QueueRequest>>>,
+    queue_requests: Vec<QueueRequest>,
 ) -> anyhow::Result<Vec<Vec<QueueAllocation>>> {
     if queue_requests.is_empty() {
         return Ok(Vec::new());
@@ -56,14 +44,13 @@ pub(crate) fn determine_queue_slotting(
     allocations.resize(queue_requests.len(), Vec::new());
     let mut counts: Vec<u64> = queue_requests
         .iter()
-        .map(|queue| queue.borrow().count as u64)
+        .map(|queue| queue.count as u64)
         .collect();
 
     // First, allocate dedicated queues
     for (queue_index, (queue, queue_count)) in
         queue_requests.iter().zip(counts.iter_mut()).enumerate()
     {
-        let queue = queue.borrow();
         if !queue.dedicated {
             unimplemented!();
         }
@@ -107,7 +94,6 @@ pub(crate) fn determine_queue_slotting(
 
 #[cfg(test)]
 mod test {
-
     use ash::vk;
 
     fn generate_queue_families() -> Vec<vk::QueueFamilyProperties> {

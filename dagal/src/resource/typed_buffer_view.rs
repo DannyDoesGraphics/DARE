@@ -5,8 +5,8 @@ use ash::vk;
 
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::device::LogicalDevice;
-use crate::resource::Buffer;
 use crate::resource::traits::{Nameable, Resource};
+use crate::resource::Buffer;
 use crate::traits::AsRaw;
 
 /// Create a typed buffer view into a [`Buffer`]
@@ -25,8 +25,8 @@ impl<'a, T: Sized, A: Allocator + 'a> Resource<'a> for TypedBufferView<'a, T, A>
 
     /// All size info is assumed to by scaled by the size of the type in the buffer
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             TypedBufferCreateInfo::FromDagalBuffer { buffer: handle } => Ok(Self {
@@ -66,6 +66,7 @@ impl<'a, T: Sized, A: Allocator> Nameable for TypedBufferView<'a, T, A> {
 
 impl<'a, T: Sized, A: Allocator> TypedBufferView<'a, T, A> {
     /// Upload into the typed buffer using the type exclusively
+    #[cfg(not(feature = "tokio"))]
     pub fn upload(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
@@ -73,6 +74,16 @@ impl<'a, T: Sized, A: Allocator> TypedBufferView<'a, T, A> {
         content: &[T],
     ) -> Result<()> {
         self.buffer.upload(immediate, allocator, content)?;
+        Ok(())
+    }
+    #[cfg(feature = "tokio")]
+    pub async fn upload(
+        &mut self,
+        immediate: &mut crate::util::ImmediateSubmit,
+        allocator: &mut ArcAllocator<A>,
+        content: &[T],
+    ) -> Result<()> {
+        self.buffer.upload(immediate, allocator, content).await?;
         Ok(())
     }
 

@@ -47,13 +47,18 @@ pub trait PipelineBuilder: Default + Debug {
         self,
         device: crate::device::LogicalDevice,
         path: std::path::PathBuf,
-        stage: vk::ShaderStageFlags
+        stage: vk::ShaderStageFlags,
     ) -> Result<Self, (Self, anyhow::Error)> {
         let mut file = fs::File::open(path).context("Failed to open file").unwrap();
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).context("Failed to read file").unwrap();
+        file.read_to_end(&mut buffer)
+            .context("Failed to read file")
+            .unwrap();
         if buffer.len() % 4 != 0 {
-            return Err((self, anyhow::anyhow!("SPIR-V file size is not a multiple of 4")));
+            return Err((
+                self,
+                anyhow::anyhow!("SPIR-V file size is not a multiple of 4"),
+            ));
         }
         let u32_content: Vec<u32> = buffer
             .chunks_exact(4)

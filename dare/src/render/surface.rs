@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use bitflags::bitflags;
 
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
@@ -13,7 +14,7 @@ use crate::render;
 use crate::traits::ReprC;
 
 /// Describes a surface which can be rendered to
-#[derive(Debug)]
+#[derive(Debug, Component)]
 pub struct Surface<A: Allocator = GPUAllocatorImpl> {
     material: Arc<render::Material<A>>,
     vertex_buffer: Handle<resource::Buffer<A>>,
@@ -25,9 +26,12 @@ pub struct Surface<A: Allocator = GPUAllocatorImpl> {
     index_count: u32,
     first_index: u32,
     name: Option<String>,
-
-    acceleration_structure: Option<resource::AccelerationStructure>,
 }
+
+pub struct Surface2<A: Allocator> {
+    material: Arc<render::Material<A>>,
+}
+
 pub struct SurfaceHandleBuilder<'a, A: Allocator> {
     pub gpu_rt: GPUResourceTable<A>,
     pub allocator: &'a mut ArcAllocator<A>,
@@ -90,7 +94,6 @@ impl<A: Allocator> Surface<A> {
             index_count: builder.total_indices,
             first_index: builder.first_index,
             name: Some(builder.name.to_string()),
-            acceleration_structure: None,
         })
     }
 
@@ -146,9 +149,17 @@ impl<A: Allocator> ReprC for Surface<A> {
             buffer_flags: buffer_flags.bits(),
             vertices: self.gpu_rt.get_bda(&self.vertex_buffer).unwrap(),
             indices: self.gpu_rt.get_bda(&self.index_buffer).unwrap(),
-            normals: self.normal_buffer.as_ref().and_then(|buffer| { self.gpu_rt.get_bda(buffer).ok() }).unwrap_or_default(),
+            normals: self
+                .normal_buffer
+                .as_ref()
+                .and_then(|buffer| self.gpu_rt.get_bda(buffer).ok())
+                .unwrap_or_default(),
             tangents: 0,
-            uvs: self.uv_buffer.as_ref().and_then(|buffer| { self.gpu_rt.get_bda(buffer).ok() }).unwrap_or_default(),
+            uvs: self
+                .uv_buffer
+                .as_ref()
+                .and_then(|buffer| self.gpu_rt.get_bda(buffer).ok())
+                .unwrap_or_default(),
         }
     }
 }

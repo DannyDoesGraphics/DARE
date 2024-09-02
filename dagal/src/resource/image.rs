@@ -81,6 +81,24 @@ impl<A: Allocator> Image<A> {
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
+        unsafe {
+            Self::raw_transition(
+                self.as_raw().clone(),
+                cmd,
+                queue,
+                current_layout,
+                new_layout,
+            )
+        }
+    }
+
+    pub unsafe fn raw_transition(
+        image: vk::Image,
+        cmd: &crate::command::CommandBufferRecording,
+        queue: &crate::device::Queue,
+        current_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
         let image_barrier = vk::ImageMemoryBarrier2 {
             s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
             p_next: ptr::null(),
@@ -92,7 +110,7 @@ impl<A: Allocator> Image<A> {
             new_layout,
             src_queue_family_index: queue.get_family_index(),
             dst_queue_family_index: queue.get_family_index(),
-            image: self.handle,
+            image,
             subresource_range: vk::ImageSubresourceRange {
                 aspect_mask: if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
                     vk::ImageAspectFlags::DEPTH
@@ -119,7 +137,7 @@ impl<A: Allocator> Image<A> {
             _marker: Default::default(),
         };
         unsafe {
-            self.device
+            cmd.get_device()
                 .get_handle()
                 .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
         }
@@ -329,8 +347,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// drop(image);
     /// ```
     fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
@@ -437,11 +455,7 @@ impl<A: Allocator> AsRaw for Image<A> {
 
 impl<A: Allocator> Nameable for Image<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::IMAGE;
-    fn set_name(
-        &mut self,
-        debug_utils: &ash::ext::debug_utils::Device,
-        name: &str,
-    ) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

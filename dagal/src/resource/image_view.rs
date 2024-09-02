@@ -108,8 +108,8 @@ pub enum ImageViewCreateInfo<'a> {
 impl<'a> Resource<'a> for ImageView {
     type CreateInfo = ImageViewCreateInfo<'a>;
     fn new(create_info: ImageViewCreateInfo) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             ImageViewCreateInfo::FromCreateInfo {

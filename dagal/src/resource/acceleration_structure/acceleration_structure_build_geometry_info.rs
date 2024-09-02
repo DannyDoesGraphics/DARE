@@ -16,7 +16,7 @@ impl<'a> Default for AccelerationStructureBuildGeometryInfo<'a> {
                 s_type: vk::StructureType::ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
                 p_next: ptr::null(),
                 ..Default::default()
-            }
+            },
         }
     }
 }
@@ -37,13 +37,21 @@ impl<'a> AccelerationStructureBuildGeometryInfo<'a> {
         self
     }
 
-    pub fn src_acceleration_structure(mut self, accel: Option<vk::AccelerationStructureKHR>) -> Self {
-        self.handle.src_acceleration_structure = accel.unwrap_or(vk::AccelerationStructureKHR::null());
+    pub fn src_acceleration_structure(
+        mut self,
+        accel: Option<vk::AccelerationStructureKHR>,
+    ) -> Self {
+        self.handle.src_acceleration_structure =
+            accel.unwrap_or(vk::AccelerationStructureKHR::null());
         self
     }
 
-    pub fn dst_acceleration_structure(mut self, accel: Option<vk::AccelerationStructureKHR>) -> Self {
-        self.handle.dst_acceleration_structure = accel.unwrap_or(vk::AccelerationStructureKHR::null());
+    pub fn dst_acceleration_structure(
+        mut self,
+        accel: Option<vk::AccelerationStructureKHR>,
+    ) -> Self {
+        self.handle.dst_acceleration_structure =
+            accel.unwrap_or(vk::AccelerationStructureKHR::null());
         self
     }
 

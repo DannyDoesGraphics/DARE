@@ -1,9 +1,7 @@
-use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
 use std::ffi::{c_char, CString};
 use std::ops::Deref;
 use std::ptr;
-use std::rc::Rc;
 
 use anyhow::Result;
 use ash::vk;
@@ -25,7 +23,7 @@ pub struct PhysicalDevice {
     pub extensions_enabled: HashSet<CString>,
 
     /// Contains the original queue requests made
-    pub queue_requests: Vec<Rc<RefCell<crate::bootstrap::QueueRequest>>>,
+    pub queue_requests: Vec<crate::bootstrap::QueueRequest>,
 }
 
 impl PhysicalDevice {
@@ -92,10 +90,10 @@ pub struct PhysicalDeviceSelector {
     min_vulkan_version: (u16, u16, u16),
 
     /// Requested queues
-    required_queues: Vec<Rc<RefCell<crate::bootstrap::QueueRequest>>>,
+    required_queues: Vec<crate::bootstrap::QueueRequest>,
 
     /// Preferred queues
-    preferred_queues: Vec<Rc<RefCell<crate::bootstrap::QueueRequest>>>,
+    preferred_queues: Vec<crate::bootstrap::QueueRequest>,
 
     /// Required extensions
     required_extension: HashSet<CString>,
@@ -270,7 +268,7 @@ impl PhysicalDeviceSelector {
     ///
     pub fn add_required_queue(
         mut self,
-        queue: Rc<RefCell<crate::bootstrap::QueueRequest>>,
+        queue: crate::bootstrap::QueueRequest,
     ) -> Self {
         self.required_queues.push(queue);
         self
@@ -299,7 +297,7 @@ impl PhysicalDeviceSelector {
     /// ```
     pub fn add_preferred_queue(
         mut self,
-        queue: Rc<RefCell<crate::bootstrap::QueueRequest>>,
+        queue: crate::bootstrap::QueueRequest,
     ) -> Self {
         self.preferred_queues.push(queue);
         self
@@ -342,7 +340,7 @@ impl PhysicalDeviceSelector {
 
             if self.dedicated.is_some()
                 && (properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU)
-                    != self.dedicated.unwrap()
+                != self.dedicated.unwrap()
             {
                 continue;
             }

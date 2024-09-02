@@ -1,9 +1,14 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
+#[cfg(not(feature = "tokio"))]
+use std::sync::{Mutex, MutexGuard};
+#[cfg(feature = "tokio")]
+use tokio::sync::{Mutex, MutexGuard};
 
+#[allow(unused_imports)]
+use crate::DagalError;
+#[allow(unused_imports)]
 use anyhow::Result;
 use ash::vk;
-
-use crate::DagalError;
 
 /// Quick easy abstraction over queues
 
@@ -55,9 +60,16 @@ impl Queue {
     pub fn get_handle(&self) -> &Arc<Mutex<vk::Queue>> {
         &self.handle
     }
-
-    pub fn acquire_queue_lock(&self) -> Result<MutexGuard<vk::Queue>> {
-        Ok(self.handle.lock().map_err(|_| DagalError::PoisonError)?)
+    #[cfg(feature = "tokio")]
+    pub async fn acquire_queue_lock(&self) -> MutexGuard<vk::Queue> {
+        #[cfg(not(feature = "tokio"))]
+        {
+            Ok(self.handle.lock().map_err(|_| DagalError::PoisonError)?)
+        }
+        #[cfg(feature = "tokio")]
+        {
+            self.handle.lock().await
+        }
     }
 
     pub fn get_index(&self) -> u32 {

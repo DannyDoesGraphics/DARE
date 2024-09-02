@@ -12,8 +12,8 @@ pub trait Resource<'a>: Sized + AsRaw {
     type CreateInfo: 'a;
     /// Attempt to create a new resource given the [`Self::CreateInfo`] struct
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-           where
-               Self: Sized;
+    where
+        Self: Sized;
     /// Get underlying reference to the device the object belongs to
     fn get_device(&self) -> &crate::device::LogicalDevice;
 }

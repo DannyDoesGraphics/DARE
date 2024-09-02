@@ -20,6 +20,17 @@ pub enum AlphaMode {
 }
 
 #[derive(Debug)]
+pub struct Material2<A: Allocator> {
+    color_factor: glam::Vec4,
+    albedo: Option<render::Texture2<A>>,
+    normal: Option<render::Texture2<A>>,
+    buffer: resource::Buffer<A>,
+    name: String,
+    pipeline: Arc<render::pipeline::Pipeline<GraphicsPipeline>>,
+    alpha_mode: AlphaMode,
+}
+
+#[derive(Debug)]
 pub struct Material<A: Allocator = GPUAllocatorImpl> {
     color_factor: glam::Vec4,
     albedo: Option<render::Texture<A>>,
@@ -61,7 +72,7 @@ impl<A: Allocator> Material<A> {
         })
     }
 
-    pub fn upload_material(
+    pub async fn upload_material(
         &mut self,
         immediate: &mut ImmediateSubmit,
         allocator: &mut ArcAllocator<A>,
@@ -83,34 +94,36 @@ impl<A: Allocator> Material<A> {
                 format!("{}_material_buffer", self.name).as_str(),
             )?;
         }
-        self.buffer.upload(
-            immediate,
-            allocator,
-            &[CMaterial {
-                texture_flags: texture_flags.bits(),
-                color_factor: self.color_factor.to_array(),
-                albedo: self
-                    .albedo
-                    .as_ref()
-                    .map(|tex| tex.get_image().id() as u32)
-                    .unwrap_or(0),
-                albedo_sampler: self
-                    .albedo
-                    .as_ref()
-                    .map(|tex| tex.get_sampler().id() as u32)
-                    .unwrap_or(0),
-                normal: self
-                    .normal
-                    .as_ref()
-                    .map(|tex| tex.get_image().id() as u32)
-                    .unwrap_or(0),
-                normal_sampler: self
-                    .normal
-                    .as_ref()
-                    .map(|tex| tex.get_sampler().id() as u32)
-                    .unwrap_or(0),
-            }],
-        )?;
+        self.buffer
+            .upload(
+                immediate,
+                allocator,
+                &[CMaterial {
+                    texture_flags: texture_flags.bits(),
+                    color_factor: self.color_factor.to_array(),
+                    albedo: self
+                        .albedo
+                        .as_ref()
+                        .map(|tex| tex.get_image().id() as u32)
+                        .unwrap_or(0),
+                    albedo_sampler: self
+                        .albedo
+                        .as_ref()
+                        .map(|tex| tex.get_sampler().id() as u32)
+                        .unwrap_or(0),
+                    normal: self
+                        .normal
+                        .as_ref()
+                        .map(|tex| tex.get_image().id() as u32)
+                        .unwrap_or(0),
+                    normal_sampler: self
+                        .normal
+                        .as_ref()
+                        .map(|tex| tex.get_sampler().id() as u32)
+                        .unwrap_or(0),
+                }],
+            )
+            .await?;
         Ok(())
     }
 

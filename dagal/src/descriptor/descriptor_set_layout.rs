@@ -23,8 +23,8 @@ impl<'a> Resource<'a> for DescriptorSetLayout {
     type CreateInfo = DescriptorSetLayoutCreateInfo<'a>;
 
     fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             DescriptorSetLayoutCreateInfo::FromVk {

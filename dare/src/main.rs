@@ -1,13 +1,13 @@
-use std::{mem, ptr, slice};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::sync::Arc;
+use std::{mem, ptr};
 
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-use dagal::{resource, winit};
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
@@ -16,25 +16,22 @@ use dagal::descriptor::GPUResourceTable;
 use dagal::pipelines::{Pipeline, PipelineBuilder};
 use dagal::raw_window_handle::HasDisplayHandle;
 use dagal::resource::traits::Resource;
-use dagal::shader::{ShaderCCompiler, ShaderCompiler};
+use dagal::shader::ShaderCompiler;
 use dagal::traits::{AsRaw, Destructible};
-use dagal::util::{ImmediateSubmit, Slot};
 use dagal::util::free_list_allocator::Handle;
 use dagal::util::immediate_submit::ImmediateSubmitContext;
+use dagal::util::ImmediateSubmit;
 use dagal::winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use dagal::wsi::WindowDimensions;
+use dagal::{resource, winit};
 
-use crate::assets::scene::Scene;
-use crate::render::AlphaMode;
-use crate::render::CMesh;
-use crate::render::deferred_deletion::DeletionEntry;
 use crate::render::scene_data::SceneData;
 
-mod assets;
+mod asset;
+mod physics;
 mod ray_tracing;
 mod render;
 mod traits;
-mod physics;
 mod util;
 
 const FRAME_OVERLAP: usize = 2;
@@ -58,7 +55,6 @@ struct RenderContext {
     camera: render::camera::Camera,
     meshes: Vec<render::Mesh<GPUAllocatorImpl>>,
     materials: Vec<Arc<render::Material<GPUAllocatorImpl>>>,
-    scene: Scene,
     draw_context: render::draw_context::DrawContext<GPUAllocatorImpl>,
 
     draw_image_descriptor_set_layout: dagal::descriptor::DescriptorSetLayout,
@@ -140,7 +136,7 @@ impl<A: Allocator> Drop for AllocatedImage<A> {
 const VALIDATION: bool = false;
 
 impl RenderContext {
-    fn new(rdh: dagal::raw_window_handle::RawDisplayHandle) -> Self {
+    async fn new(rdh: dagal::raw_window_handle::RawDisplayHandle) -> Self {
         let mut instance = dagal::bootstrap::InstanceBuilder::new()
             .set_vulkan_version((1, 3, 0))
             .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())
@@ -160,11 +156,13 @@ impl RenderContext {
             );
         }
 
-        let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true);
+        let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::GRAPHICS, 1, true);
+        let transfer_queues = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::TRANSFER, 2, true);
         let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
             .add_required_extension(dagal::ash::khr::swapchain::NAME.as_ptr())
             .set_minimum_vulkan_version((1, 3, 0))
             .add_required_queue(graphics_queue.clone())
+            .add_required_queue(transfer_queues.clone())
             .select(&instance)
             .unwrap();
         let device = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
@@ -201,26 +199,28 @@ impl RenderContext {
             .build(&instance)
             .unwrap();
 
-        let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-            instance: instance.get_instance().clone(),
-            device: device.get_handle().clone(),
-            physical_device: physical_device.handle(),
-            debug_settings: gpu_allocator::AllocatorDebugSettings {
-                log_memory_information: false,
-                log_leaks_on_shutdown: true,
-                store_stack_traces: false,
-                log_allocations: false,
-                log_frees: false,
-                log_stack_traces: false,
+        let allocator = GPUAllocatorImpl::new(
+            gpu_allocator::vulkan::AllocatorCreateDesc {
+                instance: instance.get_instance().clone(),
+                device: device.get_handle().clone(),
+                physical_device: physical_device.handle(),
+                debug_settings: gpu_allocator::AllocatorDebugSettings {
+                    log_memory_information: false,
+                    log_leaks_on_shutdown: true,
+                    store_stack_traces: false,
+                    log_allocations: false,
+                    log_frees: false,
+                    log_stack_traces: false,
+                },
+                buffer_device_address: true,
+                allocation_sizes: Default::default(),
             },
-            buffer_device_address: true,
-            allocation_sizes: Default::default(),
-        })
-            .unwrap();
+            device.clone(),
+        ).unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
-        assert!(!graphics_queue.borrow().get_queues().is_empty());
-        let graphics_queue = graphics_queue.borrow().get_queues()[0].clone();
+        let graphics_queue = device.acquire_queue(vk::QueueFlags::GRAPHICS, None, None, Some(1)).unwrap().pop().unwrap();
+        let transfer_queues = device.acquire_queue(vk::QueueFlags::TRANSFER, None, None, Some(2)).unwrap();
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         let immediate_submit =
             ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
@@ -296,7 +296,6 @@ impl RenderContext {
             )
             .unwrap();
 
-        let scene = Scene::new(device.clone(), &mut allocator).unwrap();
         let mut app = Self {
             instance,
             physical_device,
@@ -336,7 +335,6 @@ impl RenderContext {
             error_checkerboard_image: None,
 
             draw_context: Default::default(),
-            scene,
         };
         // create default images
         // create default texture data
@@ -355,44 +353,53 @@ impl RenderContext {
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
-        app.white_image = Some(app.create_image_with_data(
-            white.as_slice(),
-            vk::Extent3D {
-                width: 1,
-                height: 1,
-                depth: 1,
-            },
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::SAMPLED,
-            Some("White"),
-            false,
-        ));
+        app.white_image = Some(
+            app.create_image_with_data(
+                white.as_slice(),
+                vk::Extent3D {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                vk::Format::R8G8B8A8_UNORM,
+                vk::ImageUsageFlags::SAMPLED,
+                Some("White"),
+                false,
+            )
+               .await,
+        );
         let grey = [168u8, 168u8, 168u8, 255u8];
-        app.grey_image = Some(app.create_image_with_data(
-            grey.as_slice(),
-            vk::Extent3D {
-                width: 1,
-                height: 1,
-                depth: 1,
-            },
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::SAMPLED,
-            Some("Gray"),
-            false,
-        ));
+        app.grey_image = Some(
+            app.create_image_with_data(
+                grey.as_slice(),
+                vk::Extent3D {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                vk::Format::R8G8B8A8_UNORM,
+                vk::ImageUsageFlags::SAMPLED,
+                Some("Gray"),
+                false,
+            )
+               .await,
+        );
         let black = [0u8, 0u8, 0u8, 255u8];
-        app.black_image = Some(app.create_image_with_data(
-            black.as_slice(),
-            vk::Extent3D {
-                width: 1,
-                height: 1,
-                depth: 1,
-            },
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::SAMPLED,
-            Some("Black"),
-            false,
-        ));
+        app.black_image = Some(
+            app.create_image_with_data(
+                black.as_slice(),
+                vk::Extent3D {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                vk::Format::R8G8B8A8_UNORM,
+                vk::ImageUsageFlags::SAMPLED,
+                Some("Black"),
+                false,
+            )
+               .await,
+        );
         let mut pixels = [64u8; 16 * 16 * 4];
         let magenta = [255u8, 0u8, 255u8, 255u8];
         for x in 0..16 {
@@ -405,18 +412,21 @@ impl RenderContext {
                 }
             }
         }
-        app.error_checkerboard_image = Some(app.create_image_with_data(
-            pixels.as_slice(),
-            vk::Extent3D {
-                width: 16,
-                height: 16,
-                depth: 1,
-            },
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::SAMPLED,
-            Some("Magenta"),
-            false,
-        ));
+        app.error_checkerboard_image = Some(
+            app.create_image_with_data(
+                pixels.as_slice(),
+                vk::Extent3D {
+                    width: 16,
+                    height: 16,
+                    depth: 1,
+                },
+                vk::Format::R8G8B8A8_UNORM,
+                vk::ImageUsageFlags::SAMPLED,
+                Some("Magenta"),
+                false,
+            )
+               .await,
+        );
         app
     }
 
@@ -597,78 +607,6 @@ impl RenderContext {
                 .ty(dagal::descriptor::DescriptorType::StorageImage)
                 .push_descriptor(dagal::descriptor::DescriptorInfo::Image(img_info)),
         ]);
-        if self.scene.meshes.deferred_elements.get_data_len() == 0 {
-            // create pipelines
-            let layout = dagal::pipelines::PipelineLayoutBuilder::default()
-                .push_descriptor_sets(vec![self.gpu_resource_table.get_descriptor_layout()?])
-                .push_push_constant_struct::<render::push_constants::RasterizationPushConstant>(
-                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                )
-                .build(self.device.clone(), vk::PipelineLayoutCreateFlags::empty())?;
-            let compiler = ShaderCCompiler::new();
-            let pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
-                .replace_layout(unsafe { *layout.as_raw() })
-                .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-                .set_polygon_mode(vk::PolygonMode::FILL)
-                .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
-                .set_multisampling_none()
-                .enable_blending_alpha_blend()
-                .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
-                .set_depth_format(self.depth_image.as_ref().unwrap().format())
-                .set_color_attachment(self.draw_image.as_ref().unwrap().format())
-                /*.replace_shader_from_source_file(
-                    self.device.clone(),
-                    &compiler,
-                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.vertex.spv"),
-                    vk::ShaderStageFlags::VERTEX,
-                )*/
-                .replace_shader_from_spirv_file(
-                    self.device.clone(),
-                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.vert.spv"),
-                    vk::ShaderStageFlags::VERTEX,
-                )
-                .unwrap()
-                /*.replace_shader_from_source_file(
-                    self.device.clone(),
-                    &compiler,
-                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.frag.spv"),
-                    vk::ShaderStageFlags::FRAGMENT,
-                )*/
-                .replace_shader_from_spirv_file(
-                    self.device.clone(),
-                    std::path::PathBuf::from("./dare/shaders/compiled/mesh.frag.spv"),
-                    vk::ShaderStageFlags::FRAGMENT,
-                )
-                .unwrap()
-                .build(self.device.clone())?;
-            let pipeline = Arc::new(render::pipeline::Pipeline::new(pipeline, Arc::new(layout)));
-
-            let (materials, meshes) = tokio::task::block_in_place(|| {
-                let handle = tokio::runtime::Handle::current();
-                handle
-                    .block_on(
-                        assets::gltf_loader::GltfLoader::new(&mut self.immediate_submit)
-                            .load_assets(
-                                &mut self.allocator,
-                                self.gpu_resource_table.clone(),
-                                std::path::PathBuf::from(
-                                    //"./dare/assets/BoxTextured.glb",
-                                    //"./dare/assets/Triangle/Triangle.gltf",
-                                    "./dare/assets/Sponza/glTF/Sponza.gltf",
-                                    //"C:/Users/danny/Downloads/Bistro_5_2_GLTF/Bistro_5_2.gltf",
-                                    //"./dare/assets/deccer-cubes-main/SM_Deccer_Cubes_Textured_Complex.g",
-                                ),
-                                pipeline,
-                                &mut self.scene,
-                            ),
-                    )
-                    .unwrap()
-            });
-            // keep lifetimes
-            self.materials = materials;
-            self.meshes = meshes;
-        }
-
         Ok(())
     }
 
@@ -702,110 +640,6 @@ impl RenderContext {
         self.build_swapchain(window);
         self.create_draw_image().unwrap();
         self.resize_requested = false;
-    }
-
-    fn update_scene(&mut self) {
-        // compare hashes before changing
-        let mut to_append = self
-            .scene
-            .meshes
-            .deferred_elements
-            .data()
-            .iter()
-            .map(|slot| slot.slot.clone())
-            .collect::<Vec<Slot<DeletionEntry<render::WeakMesh<GPUAllocatorImpl>>>>>();
-        let to_append_hash: u64 = {
-            let mut hasher = DefaultHasher::new();
-            to_append.hash(&mut hasher);
-            hasher.finish()
-        };
-        for mesh in self.draw_context.surfaces.iter_mut() {
-            self.scene.meshes.update(mesh).unwrap();
-        }
-        if self.draw_context.last_draw_hash == to_append_hash {
-            self.draw_context.difference = false;
-            return;
-        }
-        self.draw_context.surfaces.clear();
-        self.draw_context.surfaces.append(&mut to_append);
-        let hash_surface = self.draw_context.hash_surfaces();
-        self.scene
-            .upload_mesh_info(&mut self.allocator, &mut self.immediate_submit)
-            .unwrap();
-        self.draw_context.last_draw_hash = hash_surface;
-        self.draw_context.difference = true;
-    }
-
-    fn update_scene_data(&mut self) {
-        let mut scene_data = self
-            .frames
-            .get(self.frame_number % self.frames.len())
-            .unwrap()
-            .scene_data_buffer
-            .mapped_ptr()
-            .unwrap()
-            .cast::<SceneData>();
-        let extent = self.draw_image.as_ref().unwrap().extent();
-        unsafe {
-            let mut proj = glam::Mat4::perspective_rh(
-                70.0_f32.to_radians(),
-                extent.width as f32 / extent.height as f32,
-                10000.0,
-                0.1,
-            );
-            let view = self.camera.get_view_matrix();
-            proj.y_axis.y *= -1.0;
-            scene_data.as_mut().proj = proj.transpose().to_cols_array();
-            scene_data.as_mut().view = view.transpose().to_cols_array();
-            scene_data.as_mut().view_proj = (proj * view).transpose().to_cols_array();
-        }
-        self.scene.meshes.clear_elements();
-        self.scene.meshes.update_frame(1);
-    }
-
-    fn sort_draw_context(&mut self) {
-        let meshes = self.scene.get_scene_meshes();
-
-        self.draw_context.surfaces.sort_by(|a, b| {
-            let a = meshes.get(a.id() as usize).unwrap();
-            let b = meshes.get(b.id() as usize).unwrap();
-
-            match (a, b) {
-                (Some(a), Some(b)) => {
-                    match (
-                        a.element.surface.material().alpha_mode(),
-                        b.element.surface.material().alpha_mode(),
-                    ) {
-                        (AlphaMode::Opaque, AlphaMode::Opaque) => (),
-                        (AlphaMode::Opaque, _) => return std::cmp::Ordering::Less,
-                        (_, AlphaMode::Opaque) => return std::cmp::Ordering::Greater,
-                        _ => (),
-                    }
-
-                    a.element
-                     .surface
-                     .material()
-                     .get_pipeline()
-                     .get_pipeline()
-                     .handle()
-                     .cmp(&b.element.surface.material().get_pipeline().get_pipeline().handle())
-                     .then_with(|| unsafe {
-                         (*a.element.surface.material().get_pipeline().get_layout().as_raw())
-                             .cmp(b.element.surface.material().get_pipeline().get_layout().as_raw())
-                     })
-                     .then_with(|| {
-                         a.element
-                          .surface
-                          .get_index_buffer()
-                          .id()
-                          .cmp(&b.element.surface.get_index_buffer().id())
-                     })
-                },
-                (None, Some(_)) => std::cmp::Ordering::Less,
-                (Some(_), None) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
-        });
     }
 
     /// Draws a mesh
@@ -859,103 +693,6 @@ impl RenderContext {
         let mut last_pipeline: vk::Pipeline = vk::Pipeline::null();
         let mut last_layout: vk::PipelineLayout = vk::PipelineLayout::null();
         let mut last_index_buffer: vk::Buffer = vk::Buffer::null();
-        for draw_entry in self.draw_context.surfaces.iter() {
-            let draw = self
-                .scene
-                .meshes
-                .deferred_elements
-                .with_slot(draw_entry, |draw| {
-                    draw.element.as_mesh().as_ref().unwrap().clone()
-                });
-            if draw.is_err() {
-                continue;
-            }
-            let draw = draw.unwrap();
-            unsafe {
-                if last_pipeline
-                    != draw
-                    .surface
-                    .material()
-                    .get_pipeline()
-                    .get_pipeline()
-                    .handle()
-                {
-                    self.device.get_handle().cmd_bind_pipeline(
-                        cmd.handle(),
-                        vk::PipelineBindPoint::GRAPHICS,
-                        draw.surface
-                            .material()
-                            .get_pipeline()
-                            .get_pipeline()
-                            .handle(),
-                    );
-                    last_pipeline = draw
-                        .surface
-                        .material()
-                        .get_pipeline()
-                        .get_pipeline()
-                        .handle();
-                }
-                if last_layout != *draw.surface.material().get_pipeline().get_layout().as_raw() {
-                    self.device.get_handle().cmd_bind_descriptor_sets(
-                        cmd.handle(),
-                        vk::PipelineBindPoint::GRAPHICS,
-                        *draw.surface.material().get_pipeline().get_layout().as_raw(),
-                        0,
-                        &[self.gpu_resource_table.get_descriptor_set().unwrap()],
-                        &[],
-                    );
-                    last_layout = *draw.surface.material().get_pipeline().get_layout().as_raw();
-                }
-                let index_buffer = self
-                    .gpu_resource_table
-                    .with_buffer(draw.surface.get_index_buffer(), |buf| *buf.as_raw())?;
-                if last_index_buffer != index_buffer {
-                    self.device.get_handle().cmd_bind_index_buffer(
-                        cmd.handle(),
-                        self.gpu_resource_table
-                            .with_buffer(draw.surface.get_index_buffer(), |buf| *buf.as_raw())
-                            .unwrap(),
-                        0,
-                        vk::IndexType::UINT32,
-                    );
-                    last_index_buffer = index_buffer;
-                }
-            };
-            let push_constants = render::push_constants::RasterizationPushConstant {
-                scene_data: frame.scene_data_buffer.address(),
-                surface_data: self.scene.mesh_info_buffer.get_handle().address()
-                    + (draw_entry.id() as usize * mem::size_of::<CMesh>()) as vk::DeviceSize,
-                model_transform: glam::Mat4::from_scale_rotation_translation(
-                    draw.scale,
-                    draw.rotation,
-                    draw.translation,
-                )
-                    .transpose()
-                    .to_cols_array(),
-            };
-            unsafe {
-                self.device.get_handle().cmd_push_constants(
-                    cmd.handle(),
-                    *draw.surface.material().get_pipeline().get_layout().as_raw(),
-                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                    0,
-                    slice::from_raw_parts(
-                        &push_constants as *const render::push_constants::RasterizationPushConstant
-                            as *const u8,
-                        mem::size_of::<render::push_constants::RasterizationPushConstant>(),
-                    ),
-                );
-                self.device.get_handle().cmd_draw_indexed(
-                    cmd.handle(),
-                    draw.surface.index_count(),
-                    1,
-                    draw.surface.first_index(),
-                    0,
-                    0,
-                );
-            }
-        }
         dynamic_rendering_context.end_rendering();
         Ok(())
     }
@@ -1034,7 +771,7 @@ impl RenderContext {
         }
     }
 
-    fn create_image_with_data<T: Sized>(
+    async fn create_image_with_data<T: Sized>(
         &mut self,
         data: &[T],
         size: vk::Extent3D,
@@ -1059,14 +796,20 @@ impl RenderContext {
         let allocated_image = self.create_image(size, format, usage, name, mipmappings);
         self.gpu_resource_table
             .with_image(&allocated_image.image, |image| {
+                let staging_buffer = unsafe { staging_buffer.as_raw().clone() };
+                let image_extent = image.extent();
+                let image = unsafe { image.as_raw().clone() };
                 self.immediate_submit
-                    .submit(|context: ImmediateSubmitContext| {
-                        image.transition(
-                            context.cmd,
-                            context.queue,
-                            vk::ImageLayout::UNDEFINED,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        );
+                    .submit(move |context: ImmediateSubmitContext| {
+                        unsafe {
+                            resource::Image::<GPUAllocatorImpl>::raw_transition(
+                                image.clone(),
+                                context.cmd,
+                                context.queue,
+                                vk::ImageLayout::UNDEFINED,
+                                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            );
+                        }
                         let copy_region = vk::BufferImageCopy {
                             buffer_offset: 0,
                             buffer_row_length: 0,
@@ -1078,37 +821,37 @@ impl RenderContext {
                                 layer_count: 1,
                             },
                             image_offset: Default::default(),
-                            image_extent: image.extent(),
+                            image_extent,
                         };
                         unsafe {
                             context.device.get_handle().cmd_copy_buffer_to_image(
                                 context.cmd.handle(),
-                                *staging_buffer.as_raw(),
-                                *image.as_raw(),
+                                staging_buffer,
+                                image,
                                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                 &[copy_region],
                             );
                         }
-                        image.transition(
-                            context.cmd,
-                            context.queue,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        )
+                        unsafe {
+                            resource::Image::<GPUAllocatorImpl>::raw_transition(
+                                image.clone(),
+                                context.cmd,
+                                context.queue,
+                                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                            )
+                        }
                     })
             })
             .unwrap()
+            .await
             .unwrap();
         drop(staging_buffer);
         allocated_image
     }
 
     // Deals with drawing
-    fn draw(&mut self) {
-        self.update_scene();
-        if self.draw_context.difference {
-            self.sort_draw_context();
-        }
+    async fn draw(&mut self) {
         // clear out last frame
         let swapchain_frame = self
             .frames
@@ -1130,7 +873,6 @@ impl RenderContext {
         {
             return;
         }
-        self.update_scene_data();
         let swapchain_frame = self
             .frames
             .get(self.frame_number % self.frames.len())
@@ -1226,7 +968,7 @@ impl RenderContext {
                 .render_semaphore
                 .submit_info(vk::PipelineStageFlags2::ALL_GRAPHICS)],
         );
-        let vk_guard = self.graphics_queue.acquire_queue_lock().unwrap();
+        let vk_guard = self.graphics_queue.acquire_queue_lock().await;
         let cmd = cmd
             .submit(
                 *vk_guard,
@@ -1286,14 +1028,18 @@ impl winit::application::ApplicationHandler for App {
                 .unwrap(),
         );
         if self.render_context.as_mut().is_none() {
-            self.render_context = Some(RenderContext::new(
-                self.window
-                    .as_ref()
-                    .unwrap()
-                    .display_handle()
-                    .unwrap()
-                    .as_raw(),
-            ))
+            let display_handle = self
+                .window
+                .as_ref()
+                .unwrap()
+                .display_handle()
+                .unwrap()
+                .as_raw();
+            let render_context = tokio::task::block_in_place(|| {
+                let runtime_handle = tokio::runtime::Handle::current();
+                runtime_handle.block_on(async { Some(RenderContext::new(display_handle).await) })
+            });
+            self.render_context = render_context;
         }
         if self.render_context.as_ref().unwrap().surface.is_none() {
             self.render_context
@@ -1361,7 +1107,11 @@ impl winit::application::ApplicationHandler for App {
                         && window.height() != 0
                         && !render_context.resize_requested
                     {
-                        render_context.draw();
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async {
+                                render_context.draw().await;
+                            });
+                        });
                         self.frame_number += 1;
                     }
                 }
@@ -1441,4 +1191,6 @@ async fn main() {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = App::default();
     event_loop.run_app(&mut app).unwrap();
+
+    let bevy_loop = World::new();
 }

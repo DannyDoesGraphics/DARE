@@ -45,17 +45,16 @@ impl ImmediateSubmit {
             queue,
         })
     }
-
-    /// Immediately submit a function which fills out a command buffer
-    pub fn submit<T: FnOnce(ImmediateSubmitContext) -> R, R>(&self, function: T) -> Result<R> {
+    pub async fn submit<T: FnOnce(ImmediateSubmitContext) -> R, R>(
+        &self,
+        function: T,
+    ) -> Result<R> {
         unsafe {
             self.device
                 .get_handle()
-                .reset_fences(&[self.fence.handle()])
-                .unwrap();
+                .reset_fences(&[self.fence.handle()])?;
             self.command_buffer
-                .reset(vk::CommandBufferResetFlags::empty())
-                .unwrap();
+                .reset(vk::CommandBufferResetFlags::empty())?;
         }
         let cmd = self
             .command_buffer
@@ -68,9 +67,9 @@ impl ImmediateSubmit {
             queue: &self.queue,
         };
         let r = function(context);
-        let cmd = cmd.end().unwrap();
+        let cmd = cmd.end()?;
         let raw_cmd = cmd.submit_info();
-        let queue = self.queue.acquire_queue_lock()?;
+        let queue = self.queue.acquire_queue_lock().await;
         cmd.submit(
             *queue,
             &[crate::command::CommandBufferExecutable::submit_info_sync(
@@ -80,7 +79,7 @@ impl ImmediateSubmit {
             )],
             self.fence.handle(),
         )
-           .unwrap();
+        .unwrap();
         unsafe {
             self.fence.wait(9999999999).unwrap_unchecked();
         }

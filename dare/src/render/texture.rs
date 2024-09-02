@@ -2,8 +2,16 @@ use dagal::allocators::Allocator;
 use dagal::descriptor::GPUResourceTable;
 use dagal::resource;
 use dagal::util::free_list_allocator::Handle;
+use std::sync::Arc;
 
 use crate::util::handle;
+
+#[derive(Debug, Clone)]
+pub struct Texture2<A: Allocator> {
+    image: Arc<resource::Image<A>>,
+    image_view: Arc<resource::ImageView>,
+    sampler: Arc<resource::Sampler>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Texture<A: Allocator> {

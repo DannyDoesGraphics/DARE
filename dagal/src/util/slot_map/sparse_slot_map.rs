@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::DagalError;
 use crate::util::slot_map::Slot;
 use crate::util::traits::SlotMap;
+use crate::DagalError;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SlotEntry<T> {
@@ -128,10 +128,8 @@ impl<T> SparseSlotMap<T> {
         self.data.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&SlotEntry<T>> {
-        self.data.iter().enumerate().map(|(index, entry)| {
-            entry
-        })
+    pub fn iter(&self) -> impl Iterator<Item = &SlotEntry<T>> {
+        self.data.iter().enumerate().map(|(index, entry)| entry)
     }
 
     pub fn data_mut(&mut self) -> &mut Vec<SlotEntry<T>> {
@@ -142,40 +140,6 @@ impl<T> SparseSlotMap<T> {
         self.data.as_slice()
     }
 }
-
-/**
-impl<T> SlotMap<T> for SparseSlotMap<T> {
-    type Slot = SlotEntry<T>;
-
-    fn get_data(&self) -> &[Self::Slot] {
-        self.data.as_slice()
-    }
-
-    fn all_slot_len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn is_valid_slot(&self, slot: &Slot<T>) -> bool {
-        self
-            .data
-            .get(slot.id as usize)
-            .map(|slot_union| *slot == slot_union.slot && slot_union.data.is_some())
-            .unwrap_or(false)
-    }
-
-    fn insert(&mut self, element: T) -> Slot<T> {
-        todo!()
-    }
-
-    fn with_slot<R, F: FnOnce(&T) -> R>(&self, slot: &Slot<T>, func: F) -> Result<R> {
-        todo!()
-    }
-
-    fn with_slot_mut<R, F: FnOnce(&mut T) -> R>(&mut self, slot: &Slot<T>, func: F) -> Result<R> {
-        todo!()
-    }
-}
- **/
 #[cfg(test)]
 mod tests {
     use crate::util::slot_map::Slot;

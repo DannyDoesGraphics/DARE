@@ -7,9 +7,9 @@ pub use typed_buffer_view::{TypedBufferCreateInfo, TypedBufferView};
 
 pub mod image;
 
+pub mod acceleration_structure;
 pub mod buffer;
 pub mod image_view;
 pub mod sampler;
 pub mod traits;
 pub mod typed_buffer_view;
-pub mod acceleration_structure;

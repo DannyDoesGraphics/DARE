@@ -1,7 +1,7 @@
 /// Describes the state of a gpu resource
 #[derive(Debug)]
-pub enum GPUResource<T> {
-    NotLoaded,
+pub enum GPUResource<U, T> {
+    NotLoaded(U),
     Loading,
     Loaded(T),
     Unloading,

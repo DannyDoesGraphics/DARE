@@ -46,6 +46,9 @@ pub enum DagalError {
 
     #[error("Extension is not supported or enabled")]
     NoExtensionSupported,
+
+    #[error("GPU Resource Table does has no strong references to the slot")]
+    NoStrongReferences,
 }
 
 impl<T> From<PoisonError<T>> for DagalError {

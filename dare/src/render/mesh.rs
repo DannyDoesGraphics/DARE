@@ -66,7 +66,13 @@ impl<A: Allocator> Mesh<A> {
             normals: c_surface.normals,
             tangents: c_surface.tangents,
             uvs: c_surface.uvs,
-            transform: glam::Mat4::from_scale_rotation_translation(self.translation, self.rotation, self.scale).transpose().to_cols_array(),
+            transform: glam::Mat4::from_scale_rotation_translation(
+                self.translation,
+                self.rotation,
+                self.scale,
+            )
+            .transpose()
+            .to_cols_array(),
         }
     }
 }

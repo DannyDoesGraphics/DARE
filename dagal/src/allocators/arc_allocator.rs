@@ -41,6 +41,14 @@ impl<A: Allocator> ArcAllocator<A> {
             allocation: Arc::new(RwLock::new(Some(allocation))),
         })
     }
+
+    pub fn get_device(&self) -> &crate::device::LogicalDevice {
+        self.allocator.get_device()
+    }
+
+    pub fn device(&self) -> crate::device::LogicalDevice {
+        self.allocator.device()
+    }
 }
 
 impl<A: Allocator> ArcAllocation<A> {

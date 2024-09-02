@@ -1,8 +1,6 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_void, CString};
 use std::ptr;
-use std::rc::Rc;
 
 use anyhow::Result;
 use ash::vk;
@@ -18,7 +16,7 @@ pub struct LogicalDeviceBuilder<'a> {
     features_1_2: vk::PhysicalDeviceVulkan12Features<'a>,
     features_1_3: vk::PhysicalDeviceVulkan13Features<'a>,
     extensions: HashSet<CString>,
-    request_queues: Vec<Rc<RefCell<crate::bootstrap::QueueRequest>>>,
+    request_queues: Vec<crate::bootstrap::QueueRequest>,
     debug_utils: bool,
 }
 
@@ -110,7 +108,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
     /// physical device
     pub fn add_queue_allocation(
         mut self,
-        allocation: Rc<RefCell<crate::bootstrap::QueueRequest>>,
+        allocation: crate::bootstrap::QueueRequest,
     ) -> Self {
         self.request_queues.push(allocation);
         self
@@ -195,6 +193,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
             p_enabled_features: ptr::null(),
             _marker: Default::default(),
         };
+
         let device = crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
             instance,
             physical_device: self.physical_device,
@@ -206,15 +205,17 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 .map(|data| data.to_string_lossy().to_string())
                 .collect::<HashSet<String>>(),
             debug_utils: self.debug_utils,
+            queues: Vec::new(),
         })?;
+        let mut queues = Vec::new();
         // reallocate back the queues
         for (queue_request, queue_allocations) in
             self.request_queues.into_iter().zip(queue_slotting.iter())
         {
             for allocation in queue_allocations.iter() {
-                let queue_flags: vk::QueueFlags = queue_request.borrow().family_flags;
-                let dedicated: bool = queue_request.borrow().dedicated;
-                queue_request.borrow_mut().queues.push(unsafe {
+                let queue_flags: vk::QueueFlags = queue_request.family_flags;
+                let dedicated: bool = queue_request.dedicated;
+                queues.push(unsafe {
                     device.get_queue(
                         &vk::DeviceQueueInfo2 {
                             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
@@ -229,6 +230,9 @@ impl<'a> LogicalDeviceBuilder<'a> {
                     )
                 });
             }
+        }
+        unsafe {
+            device.insert_queues(queues)?;
         }
         Ok(device)
     }

@@ -4,12 +4,12 @@ use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
 
-pub use acceleration_structure_build_geometry_info::*;
 pub use acceleration_structure_build_geometry_info::AccelerationStructureBuildGeometryInfo as BuildGeometryInfo;
+pub use acceleration_structure_build_geometry_info::*;
 
-use crate::DagalError;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
+use crate::DagalError;
 
 pub mod acceleration_structure_build_geometry_info;
 #[derive(Debug)]
@@ -24,19 +24,20 @@ pub enum AccelerationStructureInfo<'a> {
         ci: &'a vk::AccelerationStructureCreateInfoKHR<'a>,
         device: crate::device::LogicalDevice,
         name: Option<&'a str>,
-    }
+    },
 }
-
 
 impl<'a> Resource<'a> for AccelerationStructure {
     type CreateInfo = AccelerationStructureInfo<'a>;
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-           where
-               Self: Sized
+    where
+        Self: Sized,
     {
         match create_info {
             AccelerationStructureInfo::FromCI { ci, device, name } => {
-                if let Some(acceleration_structure_func) = device.get_acceleration_structure().as_ref() {
+                if let Some(acceleration_structure_func) =
+                    device.get_acceleration_structure().as_ref()
+                {
                     let handle = unsafe {
                         acceleration_structure_func.create_acceleration_structure(ci, None)
                     }?;
@@ -97,7 +98,10 @@ impl Destructible for AccelerationStructure {
         unsafe {
             #[cfg(feature = "log-lifetimes")]
             tracing::trace!("Destroying VkAccelerationStructure {:p}", self.handle);
-            self.device.get_acceleration_structure().unwrap().destroy_acceleration_structure(self.handle, None);
+            self.device
+                .get_acceleration_structure()
+                .unwrap()
+                .destroy_acceleration_structure(self.handle, None);
         }
     }
 }

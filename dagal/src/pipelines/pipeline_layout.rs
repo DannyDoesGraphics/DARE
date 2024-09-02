@@ -36,8 +36,8 @@ impl<'a> Resource<'a> for PipelineLayout {
     type CreateInfo = PipelineLayoutCreateInfo<'a>;
 
     fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         let handle = match create_info {
             PipelineLayoutCreateInfo::CreateInfo {
@@ -50,7 +50,7 @@ impl<'a> Resource<'a> for PipelineLayout {
                         .get_handle()
                         .create_pipeline_layout(&create_info, None)
                 }
-                    .unwrap();
+                .unwrap();
                 let mut handle = Self { handle, device };
                 if let Some(name) = name {
                     if let Some(debug_utils) = handle.device.clone().get_debug_utils() {

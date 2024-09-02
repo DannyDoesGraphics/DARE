@@ -7,11 +7,13 @@ use ash::vk;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};
 
 use crate::allocators::Allocator;
+use crate::device::LogicalDevice;
 use crate::traits::Destructible;
 
 #[derive(Clone)]
 pub struct GPUAllocatorImpl {
     handle: Arc<RwLock<Option<gpu_allocator::vulkan::Allocator>>>,
+    device: crate::device::LogicalDevice,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
     buffer_device_address: bool,
 }
@@ -26,12 +28,16 @@ impl Destructible for GPUAllocatorImpl {
 }
 
 impl GPUAllocatorImpl {
-    pub fn new(allocator_ci: gpu_allocator::vulkan::AllocatorCreateDesc) -> Result<Self> {
+    pub fn new(
+        allocator_ci: gpu_allocator::vulkan::AllocatorCreateDesc,
+        device: crate::device::LogicalDevice,
+    ) -> Result<Self> {
         let handle = gpu_allocator::vulkan::Allocator::new(&allocator_ci)?;
 
         Ok(Self {
             handle: Arc::new(RwLock::new(Some(handle))),
             memory_properties: Default::default(),
+            device,
             buffer_device_address: allocator_ci.buffer_device_address,
         })
     }
@@ -87,6 +93,14 @@ impl Allocator for GPUAllocatorImpl {
 
     fn free(&mut self, allocation: Self::Allocation) -> Result<()> {
         self.free_impl(allocation)
+    }
+
+    fn get_device(&self) -> &LogicalDevice {
+        &self.device
+    }
+
+    fn device(&self) -> LogicalDevice {
+        self.device.clone()
     }
 }
 

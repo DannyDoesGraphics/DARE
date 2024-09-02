@@ -62,9 +62,9 @@ impl CommandPool {
                     _marker: Default::default(),
                 })
         }?
-            .into_iter()
-            .map(|buffer| crate::command::CommandBuffer::new(buffer, self.device.clone()))
-            .collect::<Vec<crate::command::CommandBuffer>>())
+        .into_iter()
+        .map(|buffer| crate::command::CommandBuffer::new(buffer, self.device.clone()))
+        .collect::<Vec<crate::command::CommandBuffer>>())
     }
 }
 

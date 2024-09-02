@@ -12,17 +12,13 @@ pub use arc_allocator::{ArcAllocation, ArcAllocator};
 #[cfg(feature = "gpu-allocator")]
 pub use gpu_allocator_impl::*;
 pub use memory_type::*;
-#[cfg(feature = "vk-mem-rs")]
-pub use vk_mem_impl::*;
 
 #[cfg(feature = "gpu-allocator")]
 pub mod gpu_allocator_impl;
 
-#[cfg(feature = "vk-mem-rs")]
-pub mod vk_mem_impl;
-
 pub mod arc_allocator;
 pub mod memory_type;
+pub mod test_allocator;
 
 /// An interface to universally interact with all allocators with
 pub trait Allocator: Clone + Send + Sync {
@@ -38,6 +34,12 @@ pub trait Allocator: Clone + Send + Sync {
 
     /// Free an allocation
     fn free(&mut self, allocation: Self::Allocation) -> Result<()>;
+
+    /// Get device reference
+    fn get_device(&self) -> &crate::device::LogicalDevice;
+
+    /// Get device
+    fn device(&self) -> crate::device::LogicalDevice;
 }
 
 pub trait Allocation: Default + Send + Sync + Debug {
