@@ -72,27 +72,25 @@ impl TransferPool {
         command_pool: Arc<dagal::command::CommandPool>,
         queues: Arc<Vec<dagal::device::Queue>>,
     ) -> Result<Self> {
-        let (sender, reciever) = tokio::sync::mpsc::channel::<TransferRequestInner>(32);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<TransferRequestInner>(32);
         let sf = Self {
             device: device.clone(),
             semaphore: Arc::new(tokio::sync::Semaphore::new(size as usize)),
             sender: Arc::new(sender),
         };
         let semaphore = sf.semaphore.clone();
-        let _ = unsafe {
-            tokio::task::spawn(async move {
-                Self::process_upload_requests(
-                    semaphore,
-                    reciever,
-                    device,
-                    allocator,
-                    command_pool,
-                    queues,
-                )
+        tokio::task::spawn(async move {
+            Self::process_upload_requests(
+                semaphore,
+                receiver,
+                device,
+                allocator,
+                command_pool,
+                queues,
+            )
                 .await?;
-                Ok::<(), anyhow::Error>(())
-            });
-        };
+            Ok::<(), anyhow::Error>(())
+        });
         Ok(sf)
     }
 
