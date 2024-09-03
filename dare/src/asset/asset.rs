@@ -1,7 +1,8 @@
 use anyhow::Result;
 use futures::stream::BoxStream;
 use std::hash::Hash;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Weak};
+use tokio::sync::RwLock;
 
 /// Holds an asset and tracks its loaded state and metadata
 pub struct AssetHolder<A: AssetDescriptor> {
@@ -39,9 +40,18 @@ pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone {
 #[derive(Debug)]
 pub enum AssetState<A: AssetDescriptor> {
     Unloaded,
-    Loading(Arc<tokio::sync::Notify>),
-    Loaded(Weak<A::Loaded>),
-    Unloading,
+    Loading(tokio::sync::watch::Receiver<Option<Arc<A::Loaded>>>),
+    Loaded(Arc<A::Loaded>),
+    Unloading(Weak<A::Loaded>),
+}
+
+impl<A: AssetDescriptor> AssetState<A> {
+    pub fn unload(self) -> Self {
+        match self {
+            AssetState::Loaded(loading) => AssetState::Unloading(Arc::downgrade(&loading)),
+            _ => unimplemented!()
+        }
+    }
 }
 
 /// Describes the possible location of the files

@@ -53,10 +53,10 @@ pub struct BufferMetaData<A: Allocator> {
 }
 
 fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
-where
-    T: Pod,
-    U: Pod,
-    T: Into<U>,
+                          where
+                              T: Pod,
+                              U: Pod,
+                              T: Into<U>,
 {
     let from_slice: Vec<T> = bytemuck::cast_slice(&slice).to_vec();
     let to_slice: Vec<U> = from_slice.into_iter().map(|x| x.into()).collect();
@@ -67,7 +67,7 @@ impl<A: Allocator> Eq for BufferMetaData<A> {}
 impl<A: Allocator> AssetUnloaded for BufferMetaData<A> {
     type AssetLoaded = resource::Buffer<A>;
     type Chunk = Vec<u8>;
-    type StreamInfo = BufferLoadInfo;
+    type StreamInfo = BufferStreamInfo;
 
     async fn stream(
         self,
@@ -252,7 +252,7 @@ impl<A: Allocator> BufferMetaData<A> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct BufferLoadInfo {
+pub struct BufferStreamInfo {
     /// Size of a chunk in bytes
     pub chunk_size: usize,
 }
@@ -279,7 +279,7 @@ mod tests {
             element_count: "Hello, Rust!".len() + 1,
             _allocator: PhantomData,
         };
-        let stream_info = BufferLoadInfo { chunk_size: 4 };
+        let stream_info = BufferStreamInfo { chunk_size: 4 };
         let mut stream = metadata.stream(stream_info).await.unwrap();
         let expected_chunks = vec![
             "Hell".as_bytes().to_vec(),
@@ -324,7 +324,7 @@ mod tests {
             _allocator: PhantomData,
         };
 
-        let stream_info = BufferLoadInfo { chunk_size: 2 };
+        let stream_info = BufferStreamInfo { chunk_size: 2 };
 
         let format = metadata.element_format;
         let stream = metadata.stream(stream_info).await;
@@ -333,8 +333,8 @@ mod tests {
             format,
             Format::new(ElementFormat::F64, 3),
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
         let expected_chunks: Vec<Vec<f64>> = vec![
             vec![12345.0, 0.0, 0.0],

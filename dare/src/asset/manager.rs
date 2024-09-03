@@ -1,11 +1,11 @@
 use super::prelude as asset;
-use crate::asset::asset::{AssetDescriptor, AssetHolder, AssetState, AssetUnloaded};
-use crate::asset::buffer::BufferMetaData;
+use crate::asset::asset::{AssetDescriptor, AssetHolder, AssetState};
+use crate::asset::prelude::AssetUnloaded;
 use crate::render;
 use crate::render::transfer::{BufferTransferRequest, TransferRequest};
 use anyhow::Result;
 use containers::dashmap::DashMap;
-use dagal::allocators::{Allocator, ArcAllocator};
+use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource;
 use dagal::resource::traits::Resource;
@@ -13,8 +13,9 @@ use dagal::traits::AsRaw;
 use dare_containers::prelude as containers;
 use futures::StreamExt;
 use rayon::prelude::*;
+use std::any::TypeId;
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub struct AssetContainerSlot<T: 'static + AssetDescriptor> {
     ttl: usize,
@@ -52,7 +53,7 @@ pub enum AssetError {
 #[derive(Debug)]
 pub struct BufferRequest {
     buffer_usage: vk::BufferUsageFlags,
-    target_format: String,
+    name: String,
     chunk_size: usize,
 }
 
@@ -134,118 +135,146 @@ impl<A: Allocator + 'static> AssetManager<A> {
         });
         Ok(())
     }
+
+    pub async fn remove_expired_slots(&mut self) -> Result<()> {
+        let _ = self.cache.iter().map(|map| async move {
+            if let Some(map) = map.downcast_ref::<AssetContainer<asset::Buffer<A>>>() {
+                for container in map.iter_mut() {
+                    if container.t == 0 {
+                        let mut write_guard = container.holder.state.write().await;
+                        let asset = match &*write_guard {
+                            AssetState::Loaded(asset) => Arc::downgrade(asset),
+                            _ => unimplemented!()
+                        };
+                        *write_guard = AssetState::Unloading(asset);
+                    }
+                }
+            } else if let Some(map) = map.downcast_ref::<AssetContainer<asset::Image<A>>>() {
+                for mut container in map.iter_mut() {
+                    if container.t == 0 {
+                        let mut write_guard = container.holder.state.write().await;
+                        let asset = match &*write_guard {
+                            AssetState::Loaded(asset) => Arc::downgrade(asset),
+                            _ => unimplemented!()
+                        };
+                        *write_guard = AssetState::Unloading(asset);
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
 }
 
 impl<A: Allocator + 'static> AssetManager<A> {
     /// Retrieve a buffer and load it automatically or wait until the buffer is available
     /// Only target format is used if we're loading an entirely new file
-    pub async fn retrieve_buffers(
-        &mut self,
-        load_requests: Vec<BufferRequest>,
-    ) -> Result<Arc<RwLock<resource::Buffer<A>>>> {
-        let _ = load_requests.into_iter().filter_map(|request| {
-            let notify = Arc::new(tokio::sync::Notify::new());
-            let metadata = self.cache.with_mut::<AssetContainer<asset::Buffer<A>>, _, _>(|entry| {
-                entry.get_mut(&request.target_format).map(|data| {
-                    let data = &data.holder;
-                    let mut state_guard = data.state.write().map_err(|_| dagal::DagalError::PoisonError)?;
-                    match *state_guard {
-                        AssetState::Unloaded => {
-                            *state_guard = AssetState::Loading(notify);
-                            Ok(data.metadata.clone())
-                        }
-                        _ => {
-                            Err(anyhow::anyhow!("Failed to load asset request due to it already being loaded"))
+    pub async fn retrieve_buffer(
+        &self,
+        load_request: BufferRequest,
+    ) -> Result<Arc<resource::Buffer<A>>> {
+        let notify = Arc::new(tokio::sync::Notify::new());
+        let container_ref = self.cache.handle().entry(TypeId::of::<AssetContainer<asset::Buffer<A>>>())
+                                .or_insert(Box::<AssetContainer<asset::Buffer<A>>>::new(AssetContainer::new()));
+        let container = container_ref.value()
+                                     .downcast_ref::<AssetContainer<asset::Buffer<A>>>()
+                                     .unwrap();
+        let mut allocator = self.allocator.clone();
+
+        let res: Result<Arc<resource::Buffer<A>>> = match container.get_mut(&load_request.name) {
+            None => unimplemented!(),
+            Some(slot) => {
+                let metadata = slot.holder.metadata.clone();
+                let slot = slot.holder.state.clone();
+                let state = slot.read().await;
+                if let AssetState::Unloaded = &*state {
+                    drop(state);
+                    let (sender, reciever) = tokio::sync::watch::channel::<Option<Arc<resource::Buffer<A>>>>(None);
+                    {
+                        let mut slot_write_guard = slot.write().await;
+                        *slot_write_guard = AssetState::Loading(reciever.clone())
+                    }
+
+                    let mut chunk_buffer = resource::Buffer::new(
+                        resource::BufferCreateInfo::NewEmptyBuffer {
+                            device: self.allocator.device(),
+                            allocator: &mut allocator,
+                            size: load_request.chunk_size as vk::DeviceSize,
+                            memory_type: MemoryLocation::CpuToGpu,
+                            usage_flags: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
                         },
-                    }
-                })
-            })??.unwrap();
-            {
-                resource::Buffer::new(
-                    resource::BufferCreateInfo::NewEmptyBuffer {
-                        device: self.allocator.device(),
-                        allocator: &mut self.allocator,
-                        size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
-                        memory_type: dagal::allocators::MemoryLocation::GpuOnly,
-                        usage_flags: request.buffer_usage,
-                    }
-                ).map(|buffer| (buffer, request, metadata)).ok()
-            }
-        }).collect::<Vec<(resource::Buffer<A>, BufferRequest, BufferMetaData<A>)>>()
-                             .into_par_iter()
-                             .map(|(mut buffer, request, metadata)| {
-                                 let transfer_pool = self.transfer.clone();
-                                 let transfer_buffer = resource::Buffer::new(
-                                     resource::BufferCreateInfo::NewEmptyBuffer {
-                                         device: self.allocator.device(),
-                                         allocator: &mut self.allocator.clone(),
-                                         size: request.chunk_size as vk::DeviceSize,
-                                         memory_type: dagal::allocators::MemoryLocation::GpuOnly,
-                                         usage_flags: request.buffer_usage,
-                                     }).unwrap();
-                                 async move {
-                                     let mut stream = metadata.clone().stream(super::buffer::BufferLoadInfo {
-                                         chunk_size: request.chunk_size
-                                     }).await?;
-                                     let mut dst_offset: vk::DeviceSize = 0;
-                                     while let Some(chunk) = stream.next().await {
-                                         let chunk = chunk?;
-                                         buffer.write(0, &chunk)?;
-                                         unsafe {
-                                             // TODO: the transfer pool is still highly limiting due to how it is not capable of batching submissions
-                                             transfer_pool.transfer_gpu(TransferRequest::Buffer(BufferTransferRequest {
-                                                 src_buffer: *transfer_buffer.as_raw(),
-                                                 dst_buffer: *buffer.as_raw(),
-                                                 src_offset: 0,
-                                                 dst_offset,
-                                                 length: buffer.get_size(),
-                                             })).await?;
-                                         }
-                                         dst_offset += chunk.len() as vk::DeviceSize;
-                                     }
-                                     // update the buffer state
-                                     Ok::<(), anyhow::Error>(())
-                                 }
-                             });
-        /*
-        let metadata = self.cache.with::<DashMap<String, AssetHolder<asset::buffer::Buffer<A>>>, _, _>(|dashmap| {
-            Some(dashmap.get(&asset_name)?.metadata.clone())
-        }).flatten();
-        let stream = self.stream::<asset::buffer::Buffer<A>>(asset_name.clone(), asset_stream_info).await;
-        match stream {
-            Ok(stream) => {
-                if let Some(metadata) = metadata {
-                    match asset::buffer::BufferMetaData::<A>::cast_stream(Ok(stream), metadata.element_format, target_format).await {
-                        Ok(mut stream) => {
-                            // Make a new buffer
-                            let buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                                device: self.allocator.device(),
-                                allocator: &mut self.allocator,
-                                size: (metadata.element_count * metadata.element_format.size()) as vk::DeviceSize,
-                                memory_type: dagal::allocators::MemoryLocation::GpuOnly,
-                                usage_flags: Default::default(),
-                            })?;
-                            while let Some(chunk) = stream.next().await {
-                                let chunk = chunk?;
-                            }
-                            Ok(todo!())
+                    )?;
+                    let buffer = resource::Buffer::new(
+                        resource::BufferCreateInfo::NewEmptyBuffer {
+                            device: self.allocator.device(),
+                            allocator: &mut allocator,
+                            size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
+                            memory_type: MemoryLocation::GpuOnly,
+                            usage_flags: load_request.buffer_usage | vk::BufferUsageFlags::TRANSFER_DST,
+                        },
+                    )?;
+
+                    let mut dst_offset: vk::DeviceSize = 0;
+                    while let Some(chunk) = metadata
+                        .clone()
+                        .stream(super::buffer::BufferStreamInfo {
+                            chunk_size: load_request.chunk_size,
+                        })
+                        .await?
+                        .next()
+                        .await
+                    {
+                        let chunk = chunk?;
+                        let chunk_size = chunk.len();
+                        chunk_buffer.write(0, &chunk)?;
+                        unsafe {
+                            self.transfer
+                                .transfer_gpu(TransferRequest::Buffer(BufferTransferRequest {
+                                    src_buffer: *chunk_buffer.as_raw(),
+                                    dst_buffer: *buffer.as_raw(),
+                                    src_offset: 0,
+                                    dst_offset,
+                                    length: chunk_size as vk::DeviceSize,
+                                }))
+                                .await?;
                         }
-                        Err(err) => {
-                            Err(err)
+                        dst_offset += chunk_size as vk::DeviceSize;
+                    }
+
+                    let buffer = Arc::new(buffer);
+                    {
+                        let mut slot_write_guard = slot.write().await;
+                        if let AssetState::Loading(_) = &*slot_write_guard {
+                            sender.send(Some(buffer.clone()))?;
                         }
+                        *slot_write_guard = AssetState::Loaded(buffer.clone());
+                    }
+                    Ok(buffer)
+                } else if let AssetState::Loading(notify) = &*state {
+                    let mut notify = notify.clone();
+                    drop(state);
+                    notify.changed().await?;
+                    let x = Ok(notify.borrow().clone().unwrap().clone());
+                    x
+                } else if let AssetState::Loaded(buffer) = &*state {
+                    Ok(buffer.clone())
+                } else if let AssetState::Unloading(buffer) = &*state {
+                    let buffer = buffer.clone();
+                    drop(state);
+                    let mut slot_write_guard = slot.write().await;
+                    if let Some(buffer) = buffer.upgrade() {
+                        *slot_write_guard = AssetState::Loaded(buffer.clone());
+                        Ok(buffer.clone())
+                    } else {
+                        *slot_write_guard = AssetState::Unloaded;
+                        Ok(self.retrieve_buffer(load_request).await?)
                     }
                 } else {
-                    Err(anyhow::anyhow!("Did not find {} in asset storage", asset_name))
+                    unimplemented!()
                 }
             }
-            Err(err) => match err {
-                AssetError::AssetLoading(loading) => unimplemented!(),
-                AssetError::Other(err) => {
-                    Err(err)
-                }
-            }
-        }
-         */
-        todo!()
+        };
+        drop(container_ref);
+        res
     }
 }
