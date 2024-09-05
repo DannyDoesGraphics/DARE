@@ -8,16 +8,18 @@ use ash::vk;
 use ash::vk::Handle;
 use derivative::Derivative;
 
-use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
+use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 use crate::util::immediate_submit::ImmediateSubmitContext;
 
-#[derive(Derivative, Debug)]
-pub struct Buffer<A: Allocator = GPUAllocatorImpl> {
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct Buffer<A: Allocator> {
     handle: vk::Buffer,
     device: crate::device::LogicalDevice,
+    #[derivative(Debug = "ignore")]
     allocation: Option<ArcAllocation<A>>,
     address: vk::DeviceAddress,
     size: vk::DeviceSize,
@@ -29,8 +31,9 @@ impl<A: Allocator> PartialEq for Buffer<A> {
         self.handle == other.handle
     }
 }
+impl<A: Allocator> Eq for Buffer<A> {}
 
-pub enum BufferCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
+pub enum BufferCreateInfo<'a, A: Allocator> {
     /// Create a buffer with a new empty buffer with the requested size
     NewEmptyBuffer {
         device: crate::device::LogicalDevice,
