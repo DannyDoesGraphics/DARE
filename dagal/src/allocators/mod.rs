@@ -5,6 +5,7 @@ use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::NonNull;
 
+
 use anyhow::Result;
 use ash::vk;
 
@@ -21,7 +22,7 @@ pub mod memory_type;
 pub mod test_allocator;
 
 /// An interface to universally interact with all allocators with
-pub trait Allocator: Clone + Send + Sync {
+pub trait Allocator: Debug + Clone + Send + Sync {
     type Allocation: Allocation;
 
     /// Create a new allocation
