@@ -1,10 +1,16 @@
 use crate::asset::prelude as asset;
+use async_stream::stream;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::resource;
+use dagal::resource::traits::Resource;
 use futures::stream::BoxStream;
+use futures::StreamExt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ptr;
+use std::sync::Arc;
+use tokio::sync::watch::Sender;
 
 #[derive(Debug, Clone)]
 pub struct ImageView<A: Allocator + 'static> {
@@ -48,14 +54,52 @@ impl<A: Allocator + 'static> PartialEq for ImageViewMetadata<A> {
 }
 impl<A: Allocator + 'static> Eq for ImageViewMetadata<A> {}
 
+#[derive(Debug)]
+pub struct ImageViewLoadInfo {
+    pub device: dagal::device::LogicalDevice,
+    pub vk_image: vk::Image,
+
+    pub flags: vk::ImageViewCreateFlags,
+    pub view_type: vk::ImageViewType,
+    pub format: vk::Format,
+    pub components: vk::ComponentMapping,
+    pub subresource_range: vk::ImageSubresourceRange,
+}
+
 impl<A: Allocator + 'static> asset::AssetUnloaded for ImageViewMetadata<A> {
     type AssetLoaded = ImageViewLoaded;
-    type Chunk = vk::ImageView;
-    type StreamInfo = asset::AssetManager<A>;
+    type Chunk = resource::ImageView;
+    type StreamInfo = ImageViewLoadInfo;
+    type LoadInfo = ImageViewLoadInfo;
 
     async fn stream(self, stream_info: Self::StreamInfo) -> anyhow::Result<BoxStream<'static, anyhow::Result<Self::Chunk>>> {
-        let image = stream_info.get_slot_loaded::<asset::Image<A>>(&self.image, Some()).await?;
+        let image_view = resource::ImageView::new(
+            resource::ImageViewCreateInfo::FromCreateInfo {
+                device: stream_info.device.clone(),
+                create_info: vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: stream_info.flags,
+                    image: stream_info.vk_image,
+                    view_type: stream_info.view_type,
+                    format: stream_info.format,
+                    components: stream_info.components,
+                    subresource_range: stream_info.subresource_range,
+                    _marker: Default::default(),
+                },
+            }
+        )?;
+        Ok(Box::pin(stream! {
+            yield Ok(image_view)
+        }))
+    }
 
-        todo!()
+    async fn load(&self, load_info: Self::LoadInfo, sender: Sender<Option<Arc<Self::AssetLoaded>>>) -> anyhow::Result<Arc<Self::AssetLoaded>> {
+        let image_view = self.clone().stream(load_info).await?.next().await.unwrap()?;
+        Ok(Arc::new(
+            ImageViewLoaded {
+                handle: image_view,
+            }
+        ))
     }
 }
