@@ -1,17 +1,17 @@
 use std::ffi::c_void;
+use std::fmt::Debug;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
+use crate::allocators::{Allocation, Allocator};
+use crate::traits::Destructible;
 use anyhow::Result;
 use ash::vk;
-
-use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl};
-use crate::traits::Destructible;
 
 /// An ArcAllocator wraps all memory allocations in a `Arc<RwLock<Option<A::Allocation>>>` to allow
 /// for A::Allocation to delete themselves
 #[derive(Debug)]
-pub struct ArcAllocator<A: Allocator = GPUAllocatorImpl> {
+pub struct ArcAllocator<A: Allocator> {
     allocator: A,
 }
 
@@ -19,7 +19,7 @@ pub struct ArcAllocator<A: Allocator = GPUAllocatorImpl> {
 ///
 /// This main purpose of this is to allow the allocations to delete themselves.
 #[derive(Debug)]
-pub struct ArcAllocation<A: Allocator = GPUAllocatorImpl> {
+pub struct ArcAllocation<A: Allocator> {
     allocator: A,
     allocation: Arc<RwLock<Option<A::Allocation>>>,
 }

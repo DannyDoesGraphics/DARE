@@ -10,10 +10,10 @@ use crate::allocators::Allocator;
 use crate::device::LogicalDevice;
 use crate::traits::Destructible;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GPUAllocatorImpl {
     handle: Arc<RwLock<Option<gpu_allocator::vulkan::Allocator>>>,
-    device: crate::device::LogicalDevice,
+    device: LogicalDevice,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
     buffer_device_address: bool,
 }

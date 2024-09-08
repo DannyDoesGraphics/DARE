@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 /// An allocator with zero functionality for testing purposes only
 /// You should only use this allocator if you know you don't need to rely on the allocator's
 /// functionality
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TestAllocator {}
 
 impl Allocator for TestAllocator {
