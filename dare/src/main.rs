@@ -550,7 +550,7 @@ impl RenderContext {
                 view_type: vk::ImageViewType::TYPE_2D,
                 format: image.format(),
                 components: Default::default(),
-                subresource_range: resource::Image::image_subresource_range(
+                subresource_range: resource::Image::<GPUAllocatorImpl>::image_subresource_range(
                     vk::ImageAspectFlags::COLOR,
                 ),
                 _marker: Default::default(),
@@ -568,7 +568,7 @@ impl RenderContext {
                     view_type: vk::ImageViewType::TYPE_2D,
                     format: depth_image.format(),
                     components: Default::default(),
-                    subresource_range: resource::Image::image_subresource_range(
+                    subresource_range: resource::Image::<GPUAllocatorImpl>::image_subresource_range(
                         vk::ImageAspectFlags::DEPTH,
                     ),
                     _marker: Default::default(),
@@ -739,7 +739,7 @@ impl RenderContext {
         } else {
             vk::ImageAspectFlags::COLOR
         };
-        let mut subresource_range = resource::Image::image_subresource_range(aspect_flag);
+        let mut subresource_range = resource::Image::<GPUAllocatorImpl>::image_subresource_range(aspect_flag);
         subresource_range.level_count = mip_levels;
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             device: self.device.clone(),
@@ -918,7 +918,7 @@ impl RenderContext {
                 &vk::ClearColorValue {
                     float32: [0.0, 0.0, 0.0, 0.0],
                 },
-                &[resource::Image::image_subresource_range(
+                &[resource::Image::<GPUAllocatorImpl>::image_subresource_range(
                     vk::ImageAspectFlags::COLOR,
                 )],
             );

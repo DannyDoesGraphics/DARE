@@ -1,17 +1,19 @@
+use std::hash::Hasher;
 use std::ptr;
-
-use anyhow::Result;
-use ash::prelude::VkResult;
-use ash::vk;
-use ash::vk::Handle;
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
+use anyhow::Result;
+use ash::prelude::VkResult;
+use ash::vk;
+use ash::vk::Handle;
+use derivative::Derivative;
 
-#[derive(Debug)]
-pub struct Image<A: Allocator = GPUAllocatorImpl> {
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct Image<A: Allocator> {
     handle: vk::Image,
     format: vk::Format,
     extent: vk::Extent3D,
@@ -19,8 +21,23 @@ pub struct Image<A: Allocator = GPUAllocatorImpl> {
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
+    #[derivative(Debug = "ignore")]
     allocation: Option<ArcAllocation<A>>,
     image_managed: bool,
+}
+
+impl<A: Allocator> PartialEq for Image<A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
+    }
+}
+
+impl<A: Allocator> Eq for Image<A> {}
+
+impl<A: Allocator> std::hash::Hash for Image<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
 }
 
 pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
@@ -138,13 +155,13 @@ impl<A: Allocator> Image<A> {
         };
         unsafe {
             cmd.get_device()
-                .get_handle()
-                .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
+               .get_handle()
+               .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
         }
     }
 
     /// Copies the passed image into the current image
-    pub fn copy_from(&self, cmd: &crate::command::CommandBufferRecording, image: &Image) {
+    pub fn copy_from(&self, cmd: &crate::command::CommandBufferRecording, image: &Image<A>) {
         let from_extent: vk::Extent3D = image.extent;
         let blit_region = vk::ImageBlit2 {
             s_type: vk::StructureType::IMAGE_BLIT_2,
@@ -230,7 +247,7 @@ impl<A: Allocator> Image<A> {
                     },
                     format: self.format,
                     components: Default::default(),
-                    subresource_range: Image::image_subresource_range(aspect_flag),
+                    subresource_range: Image::<A>::image_subresource_range(aspect_flag),
                     _marker: Default::default(),
                 },
                 None,
@@ -239,7 +256,7 @@ impl<A: Allocator> Image<A> {
     }
 }
 
-impl Image {
+impl<A: Allocator> Image<A> {
     pub fn image_subresource_range(aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
         vk::ImageSubresourceRange {
             aspect_mask: aspect,
@@ -347,8 +364,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// drop(image);
     /// ```
     fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
