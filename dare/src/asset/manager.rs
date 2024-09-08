@@ -130,9 +130,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
             None
         } else {
             self.cache
-                .with_mut::<AssetContainer<T>, _, _>(|map| map.get(metadata))
+                .with_mut::<AssetContainer<T>, _, _>(|map| map.get(metadata).map(|resource| resource.holder.clone()))
                 .flatten()
-                .map(|resource| resource.holder.clone())
         }
     }
 
