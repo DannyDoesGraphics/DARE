@@ -1,12 +1,12 @@
 use std::ptr;
 
+use crate::allocators::GPUAllocatorImpl;
+use crate::resource::traits::Resource;
+use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-
-use crate::resource::traits::Resource;
-use crate::traits::Destructible;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -61,7 +61,7 @@ impl Swapchain {
         &self.ext
     }
 
-    pub fn get_images(&self) -> Result<Vec<crate::resource::Image>> {
+    pub fn get_images(&self) -> Result<Vec<crate::resource::Image<GPUAllocatorImpl>>> {
         Ok(unsafe { self.ext.get_swapchain_images(self.handle)? }
             .into_iter()
             .enumerate()
@@ -80,9 +80,9 @@ impl Swapchain {
                     image_type: vk::ImageType::TYPE_3D,
                     name: Some(format!("Swapchain image {index}").as_str()),
                 })
-                .unwrap()
+                    .unwrap()
             })
-            .collect::<Vec<crate::resource::Image>>())
+            .collect::<Vec<crate::resource::Image<GPUAllocatorImpl>>>())
     }
 
     pub fn get_image_views(&self, images: &[vk::Image]) -> Result<Vec<crate::resource::ImageView>> {
