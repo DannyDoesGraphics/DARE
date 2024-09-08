@@ -6,10 +6,19 @@ use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 
 /// Holds an asset and tracks its loaded state and metadata
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AssetHolder<A: AssetDescriptor> {
     pub metadata: A::Metadata,
     pub state: Arc<RwLock<AssetState<A>>>,
+}
+
+impl<A: AssetDescriptor> Clone for AssetHolder<A> {
+    fn clone(&self) -> Self {
+        Self {
+            metadata: self.metadata.clone(),
+            state: self.state.clone(),
+        }
+    }
 }
 
 impl<A: AssetDescriptor> PartialEq for AssetHolder<A> {
