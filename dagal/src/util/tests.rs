@@ -97,7 +97,9 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
     let logical_device = logical_device
         .build(test_vulkan.instance.get_instance())
         .unwrap();
-    let mut compute_queue = logical_device.acquire_queue(vk::QueueFlags::COMPUTE, Some(true), Some(false), None).unwrap();
+    let mut compute_queue = logical_device
+        .acquire_queue(vk::QueueFlags::COMPUTE, Some(true), Some(false), None)
+        .unwrap();
     TestVulkan {
         compute_queue: compute_queue.pop(),
         device: Some(logical_device),

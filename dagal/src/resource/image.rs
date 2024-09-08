@@ -100,7 +100,7 @@ impl<A: Allocator> Image<A> {
     ) {
         unsafe {
             Self::raw_transition(
-                self.as_raw().clone(),
+                *self.as_raw(),
                 cmd,
                 queue,
                 current_layout,
@@ -155,8 +155,8 @@ impl<A: Allocator> Image<A> {
         };
         unsafe {
             cmd.get_device()
-               .get_handle()
-               .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
+                .get_handle()
+                .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
         }
     }
 
@@ -364,8 +364,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// drop(image);
     /// ```
     fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {

@@ -3,7 +3,6 @@ use std::sync::PoisonError;
 /// Possible errors
 use thiserror::Error;
 
-
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum DagalError {
     #[error("No window was provided")]

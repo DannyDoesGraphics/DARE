@@ -64,10 +64,10 @@ pub struct BufferMetaData<A: Allocator + 'static> {
 }
 
 fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
-                          where
-                              T: Pod,
-                              U: Pod,
-                              T: Into<U>,
+where
+    T: Pod,
+    U: Pod,
+    T: Into<U>,
 {
     let from_slice: Vec<T> = bytemuck::cast_slice(&slice).to_vec();
     let to_slice: Vec<U> = from_slice.into_iter().map(|x| x.into()).collect();
@@ -164,42 +164,45 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
     }
 
     /// Loads a buffer in to dedicated MemoryLocation
-    async fn load(&self, mut load_info: Self::LoadInfo, sender: tokio::sync::watch::Sender<Option<Arc<Self::AssetLoaded>>>) -> Result<Arc<Self::AssetLoaded>> {
+    async fn load(
+        &self,
+        mut load_info: Self::LoadInfo,
+        sender: tokio::sync::watch::Sender<Option<Arc<Self::AssetLoaded>>>,
+    ) -> Result<Arc<Self::AssetLoaded>> {
         let metadata = self.clone();
 
         let stream = metadata.clone().stream(load_info.stream_info).await?;
         let mut stream = match load_info.target_format {
             None => stream,
-            Some(target_format) => Self::cast_stream(Ok(stream), metadata.element_format, target_format).await?,
-        };
-        let mut write_buffer = resource::Buffer::new(
-            resource::BufferCreateInfo::NewEmptyBuffer {
-                device: load_info.allocator.device(),
-                allocator: &mut load_info.allocator,
-                size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
-                memory_type: load_info.buffer_location,
-                usage_flags: load_info.usage_flags,
+            Some(target_format) => {
+                Self::cast_stream(Ok(stream), metadata.element_format, target_format).await?
             }
-        )?;
+        };
+        let mut write_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+            device: load_info.allocator.device(),
+            allocator: &mut load_info.allocator,
+            size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
+            memory_type: load_info.buffer_location,
+            usage_flags: load_info.usage_flags,
+        })?;
         let mut output_buffer: Option<resource::Buffer<A>> = None;
         match load_info.buffer_location {
             MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
             MemoryLocation::GpuOnly => {
                 // Swap write buffer to not be written to and make a dedicated transfer buffer
-                let mut transfer_buffer = resource::Buffer::new(
-                    resource::BufferCreateInfo::NewEmptyBuffer {
+                let mut transfer_buffer =
+                    resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
                         device: load_info.allocator.device(),
                         allocator: &mut load_info.allocator,
                         size: load_info.stream_info.chunk_size as vk::DeviceSize,
                         memory_type: load_info.buffer_location,
                         usage_flags: load_info.usage_flags,
-                    }
-                )?;
+                    })?;
                 // swap write with transfer
                 std::mem::swap(&mut transfer_buffer, &mut write_buffer);
                 output_buffer = Some(transfer_buffer);
-            },
-            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => {},
+            }
+            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => {}
         }
         let mut write_offset: vk::DeviceSize = 0;
         while let Some(chunk) = stream.next().await {
@@ -208,28 +211,23 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
             write_offset += chunk.len() as vk::DeviceSize;
             if load_info.buffer_location == MemoryLocation::GpuOnly {
                 unsafe {
-                    load_info.transfer.transfer_gpu(
-                        TransferRequest::Buffer(
-                            BufferTransferRequest {
-                                src_buffer: *write_buffer.as_raw(),
-                                dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
-                                src_offset: 0,
-                                dst_offset: write_offset,
-                                length: load_info.stream_info.chunk_size as vk::DeviceSize,
-                            }
-                        )
-                    ).await?;
+                    load_info
+                        .transfer
+                        .transfer_gpu(TransferRequest::Buffer(BufferTransferRequest {
+                            src_buffer: *write_buffer.as_raw(),
+                            dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
+                            src_offset: 0,
+                            dst_offset: write_offset,
+                            length: load_info.stream_info.chunk_size as vk::DeviceSize,
+                        }))
+                        .await?;
                 }
             }
         }
         let output_buffer: Arc<resource::Buffer<A>> = Arc::new(match load_info.buffer_location {
             MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
-            MemoryLocation::GpuOnly => {
-                output_buffer.unwrap()
-            },
-            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => {
-                write_buffer
-            },
+            MemoryLocation::GpuOnly => output_buffer.unwrap(),
+            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => write_buffer,
         });
         sender.send(Some(output_buffer.clone()))?;
         Ok(output_buffer)
@@ -417,8 +415,8 @@ mod tests {
             format,
             Format::new(ElementFormat::F64, 3),
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
 
         let expected_chunks: Vec<Vec<f64>> = vec![
             vec![12345.0, 0.0, 0.0],
@@ -461,7 +459,10 @@ mod tests {
             _allocator: PhantomData,
         };
 
-        let buffer = metadata.load_data().await.expect("Failed to load from metadata");
+        let buffer = metadata
+            .load_data()
+            .await
+            .expect("Failed to load from metadata");
         assert_eq!(
             "Hello, Rust!\n".as_bytes().to_vec(),
             Pin::into_inner(buffer)

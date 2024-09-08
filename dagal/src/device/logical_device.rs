@@ -1,17 +1,15 @@
 use std::collections::HashSet;
 use std::ffi::c_char;
-use std::ptr;
 use std::sync::{Arc, RwLock, Weak};
 
 use crate::device::physical_device::PhysicalDevice;
-use crate::resource::traits::{Nameable, Resource};
+use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use crate::DagalError;
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-use winit::window::ResizeDirection::SouthEast;
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
@@ -189,20 +187,28 @@ impl LogicalDevice {
         queue_flags: vk::QueueFlags,
         dedicated: Option<bool>,
         get_first_available: Option<bool>,
-        count: Option<usize>
+        count: Option<usize>,
     ) -> Result<Vec<super::Queue>> {
         let mut i: usize = 0;
-        Ok(self.inner
-               .queues
-               .read().map_err(|_| DagalError::PoisonError)?
+        Ok(self
+            .inner
+            .queues
+            .read()
+            .map_err(|_| DagalError::PoisonError)?
             .iter()
             .filter_map(|queue| {
-                if dedicated.map(|dedicated| queue.get_dedicated() == dedicated).unwrap_or(true)
+                if dedicated
+                    .map(|dedicated| queue.get_dedicated() == dedicated)
+                    .unwrap_or(true)
                     && (queue.get_queue_flags() & queue_flags == queue_flags)
-                    && get_first_available.map(|gfa| {
-                    let available = queue.get_handle().try_lock().is_ok();
-                    available == gfa
-                }).unwrap_or(true) && count.map(|count| i < count).unwrap_or(true) {
+                    && get_first_available
+                        .map(|gfa| {
+                            let available = queue.get_handle().try_lock().is_ok();
+                            available == gfa
+                        })
+                        .unwrap_or(true)
+                    && count.map(|count| i < count).unwrap_or(true)
+                {
                     i += 1;
                     Some(queue.clone())
                 } else {
@@ -217,18 +223,16 @@ impl LogicalDevice {
         &self,
         queue_flags: vk::QueueFlags,
         dedicated: Option<bool>,
-        count: Option<usize>
+        count: Option<usize>,
     ) -> Result<Vec<super::Queue>> {
         loop {
             match self.acquire_queue(queue_flags, dedicated, Some(true), count) {
                 Ok(queue) => {
                     if !queue.is_empty() {
-                        return Ok(queue)
+                        return Ok(queue);
                     }
                 }
-                Err(err) => {
-                    return Err(err)
-                }
+                Err(err) => return Err(err),
             }
         }
     }
@@ -238,7 +242,12 @@ impl LogicalDevice {
     /// # Safety
     /// Should only be done at device initialization and no other time
     pub unsafe fn insert_queues(&self, mut queues_in: Vec<super::Queue>) -> Result<()> {
-        self.inner.queues.clone().write().map(|mut queues| queues.append(&mut queues_in)).map_err(|_| DagalError::PoisonError)?;
+        self.inner
+            .queues
+            .clone()
+            .write()
+            .map(|mut queues| queues.append(&mut queues_in))
+            .map_err(|_| DagalError::PoisonError)?;
         Ok(())
     }
 

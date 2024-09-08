@@ -88,7 +88,7 @@ impl TransferPool {
                 command_pool,
                 queues,
             )
-                .await?;
+            .await?;
             Ok::<(), anyhow::Error>(())
         });
         Ok(sf)

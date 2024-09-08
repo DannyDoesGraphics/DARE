@@ -78,11 +78,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
             allocator,
             transfer,
             gpu_rt,
-            inner: Arc::new(AssetManagerInner {
-                ttl,
-            }),
+            inner: Arc::new(AssetManagerInner { ttl }),
             _marker: PhantomData,
-
         })
     }
 
@@ -98,11 +95,14 @@ impl<A: Allocator + 'static> AssetManager<A> {
 
         self.cache
             .with_mut::<AssetContainer<T>, _, _>(|map| {
-                map.insert(metadata.clone(), AssetContainerSlot {
-                    ttl: self.inner.ttl,
-                    t: self.inner.ttl,
-                    holder: AssetHolder::new(metadata)
-                });
+                map.insert(
+                    metadata.clone(),
+                    AssetContainerSlot {
+                        ttl: self.inner.ttl,
+                        t: self.inner.ttl,
+                        holder: AssetHolder::new(metadata),
+                    },
+                );
                 Ok(())
             })
             .unwrap()
@@ -125,12 +125,17 @@ impl<A: Allocator + 'static> AssetManager<A> {
     }
 
     /// Get
-    pub fn get<T: 'static + AssetDescriptor>(&self, metadata: &T::Metadata) -> Option<AssetHolder<T>> {
+    pub fn get<T: 'static + AssetDescriptor>(
+        &self,
+        metadata: &T::Metadata,
+    ) -> Option<AssetHolder<T>> {
         if !self.cache.contains_key::<AssetContainer<T>>() {
             None
         } else {
             self.cache
-                .with_mut::<AssetContainer<T>, _, _>(|map| map.get(metadata).map(|resource| resource.holder.clone()))
+                .with_mut::<AssetContainer<T>, _, _>(|map| {
+                    map.get(metadata).map(|resource| resource.holder.clone())
+                })
                 .flatten()
         }
     }
@@ -159,7 +164,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                         let mut write_guard = container.holder.state.write().await;
                         let asset = match &*write_guard {
                             AssetState::Loaded(asset) => Arc::downgrade(asset),
-                            _ => unimplemented!()
+                            _ => unimplemented!(),
                         };
                         *write_guard = AssetState::Unloading(asset);
                     }
@@ -170,7 +175,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                         let mut write_guard = container.holder.state.write().await;
                         let asset = match &*write_guard {
                             AssetState::Loaded(asset) => Arc::downgrade(asset),
-                            _ => unimplemented!()
+                            _ => unimplemented!(),
                         };
                         *write_guard = AssetState::Unloading(asset);
                     }
@@ -183,35 +188,51 @@ impl<A: Allocator + 'static> AssetManager<A> {
     /// Attempts to get a slot loaded
     ///
     /// `autoload` determines if a slot should be loaded
-    pub async fn get_slot_loaded<T: AssetDescriptor + 'static>(&self, metadata: &T::Metadata, load_info: Option<<T::Metadata as AssetUnloaded>::LoadInfo>) -> Result<Arc<T::Loaded>> {
-        let container = self.cache.get::<AssetContainer<T>>().map_or(Err(anyhow::Error::new(asset::error::AssetMetadataNone)), |a| Ok(a))?;
-        let state = container.value().downcast_ref::<AssetContainer<T>>().unwrap()
-                             .get(metadata)
-                             .map_or(Err(anyhow::Error::new(asset::error::AssetMetadataNone)), |slot| {
-                                 Ok(slot.holder.state.clone())
-                             })?;
+    pub async fn get_slot_loaded<T: AssetDescriptor + 'static>(
+        &self,
+        metadata: &T::Metadata,
+        load_info: Option<<T::Metadata as AssetUnloaded>::LoadInfo>,
+    ) -> Result<Arc<T::Loaded>> {
+        let container = self.cache.get::<AssetContainer<T>>().map_or(
+            Err(anyhow::Error::new(asset::error::AssetMetadataNone)),
+            |a| Ok(a),
+        )?;
+        let state = container
+            .value()
+            .downcast_ref::<AssetContainer<T>>()
+            .unwrap()
+            .get(metadata)
+            .map_or(
+                Err(anyhow::Error::new(asset::error::AssetMetadataNone)),
+                |slot| Ok(slot.holder.state.clone()),
+            )?;
         let state_guard = state.read().await;
-        let resource: Option<Arc<<T::Metadata as AssetUnloaded>::AssetLoaded>> = match &*state_guard {
+        let resource: Option<Arc<<T::Metadata as AssetUnloaded>::AssetLoaded>> = match &*state_guard
+        {
             AssetState::Unloaded(metadata) => match &load_info {
                 Some(_) => None,
-                None => return Err::<Arc<T::Loaded>, anyhow::Error>(anyhow::Error::new(asset::error::AssetNotLoaded)),
-            }
+                None => {
+                    return Err::<Arc<T::Loaded>, anyhow::Error>(anyhow::Error::new(
+                        asset::error::AssetNotLoaded,
+                    ))
+                }
+            },
             AssetState::Loading(loading) => {
                 let mut loading = loading.clone();
                 loading.changed().await?;
                 let image_option = loading.borrow_and_update();
                 return match image_option.as_ref() {
-                    None => Err::<Arc<T::Loaded>, anyhow::Error>(anyhow::Error::new(asset::error::AssetNotLoaded)),
+                    None => Err::<Arc<T::Loaded>, anyhow::Error>(anyhow::Error::new(
+                        asset::error::AssetNotLoaded,
+                    )),
                     Some(loaded) => return Ok::<Arc<T::Loaded>, anyhow::Error>(loaded.clone()),
-                }
+                };
             }
             AssetState::Loaded(loaded) => return Ok(loaded.clone()),
             AssetState::Unloading(unloading) => match unloading.upgrade() {
                 None => None,
-                Some(loaded) => {
-                    Some(loaded.clone())
-                },
-            }
+                Some(loaded) => Some(loaded.clone()),
+            },
         };
         if resource.is_none() && load_info.is_none() {
             return Err(anyhow::Error::new(asset::error::AssetNotLoaded));
@@ -244,14 +265,21 @@ impl<A: Allocator + 'static> AssetManager<A> {
         load_request: BufferRequest<A>,
     ) -> Result<Arc<resource::Buffer<A>>> {
         let notify = Arc::new(tokio::sync::Notify::new());
-        let container_ref = self.cache.handle().entry(TypeId::of::<AssetContainer<asset::Buffer<A>>>())
-                                .or_insert(Box::<AssetContainer<asset::Buffer<A>>>::new(AssetContainer::new()));
-        let container = container_ref.value()
-                                     .downcast_ref::<AssetContainer<asset::Buffer<A>>>()
-                                     .unwrap();
+        let container_ref = self
+            .cache
+            .handle()
+            .entry(TypeId::of::<AssetContainer<asset::Buffer<A>>>())
+            .or_insert(Box::<AssetContainer<asset::Buffer<A>>>::new(
+                AssetContainer::new(),
+            ));
+        let container = container_ref
+            .value()
+            .downcast_ref::<AssetContainer<asset::Buffer<A>>>()
+            .unwrap();
         let mut allocator = self.allocator.clone();
 
-        let res: Result<Arc<resource::Buffer<A>>> = match container.get_mut(&load_request.metadata) {
+        let res: Result<Arc<resource::Buffer<A>>> = match container.get_mut(&load_request.metadata)
+        {
             None => unimplemented!(),
             Some(slot) => {
                 let metadata = slot.holder.metadata.clone();
@@ -259,30 +287,32 @@ impl<A: Allocator + 'static> AssetManager<A> {
                 let state = slot.read().await;
                 if let AssetState::Unloaded(_) = &*state {
                     drop(state);
-                    let (sender, reciever) = tokio::sync::watch::channel::<Option<Arc<resource::Buffer<A>>>>(None);
+                    let (sender, reciever) =
+                        tokio::sync::watch::channel::<Option<Arc<resource::Buffer<A>>>>(None);
                     {
                         let mut slot_write_guard = slot.write().await;
                         *slot_write_guard = AssetState::Loading(reciever.clone())
                     }
 
-                    let mut chunk_buffer = resource::Buffer::new(
-                        resource::BufferCreateInfo::NewEmptyBuffer {
+                    let mut chunk_buffer =
+                        resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
                             device: self.allocator.device(),
                             allocator: &mut allocator,
                             size: load_request.chunk_size as vk::DeviceSize,
                             memory_type: MemoryLocation::CpuToGpu,
-                            usage_flags: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
-                        },
-                    )?;
-                    let buffer = resource::Buffer::new(
-                        resource::BufferCreateInfo::NewEmptyBuffer {
+                            usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                                | vk::BufferUsageFlags::TRANSFER_SRC,
+                        })?;
+                    let buffer =
+                        resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
                             device: self.allocator.device(),
                             allocator: &mut allocator,
-                            size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
+                            size: (metadata.element_format.size() * metadata.element_count)
+                                as vk::DeviceSize,
                             memory_type: MemoryLocation::GpuOnly,
-                            usage_flags: load_request.buffer_usage | vk::BufferUsageFlags::TRANSFER_DST,
-                        },
-                    )?;
+                            usage_flags: load_request.buffer_usage
+                                | vk::BufferUsageFlags::TRANSFER_DST,
+                        })?;
 
                     let mut dst_offset: vk::DeviceSize = 0;
                     while let Some(chunk) = metadata

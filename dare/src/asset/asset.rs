@@ -40,7 +40,7 @@ impl<A: AssetDescriptor + PartialEq> AssetHolder<A> {
 pub trait AssetDescriptor {
     type Loaded: PartialEq + Eq + Debug;
     /// Any data as to how the asset should be loaded in
-    type Metadata: AssetUnloaded<AssetLoaded=Self::Loaded>;
+    type Metadata: AssetUnloaded<AssetLoaded = Self::Loaded>;
 }
 
 pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone {
@@ -56,7 +56,11 @@ pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone {
     ) -> Result<BoxStream<'static, Result<Self::Chunk>>>;
 
     /// Simply loads an asset directly to the gpu
-    async fn load(&self, load_info: Self::LoadInfo, sender: tokio::sync::watch::Sender<Option<Arc<Self::AssetLoaded>>>) -> Result<Arc<Self::AssetLoaded>>;
+    async fn load(
+        &self,
+        load_info: Self::LoadInfo,
+        sender: tokio::sync::watch::Sender<Option<Arc<Self::AssetLoaded>>>,
+    ) -> Result<Arc<Self::AssetLoaded>>;
 }
 
 #[derive(Debug)]
@@ -71,11 +75,14 @@ impl<A: AssetDescriptor> AssetState<A> {
     pub fn unload(self) -> Self {
         match self {
             AssetState::Loaded(loading) => AssetState::Unloading(Arc::downgrade(&loading)),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
-    pub async fn load(&mut self, load_info: <<A as AssetDescriptor>::Metadata as AssetUnloaded>::LoadInfo) -> Result<Self> {
+    pub async fn load(
+        &mut self,
+        load_info: <<A as AssetDescriptor>::Metadata as AssetUnloaded>::LoadInfo,
+    ) -> Result<Self> {
         match self {
             AssetState::Unloaded(metadata) => {
                 let metadata = metadata.clone();
@@ -83,7 +90,7 @@ impl<A: AssetDescriptor> AssetState<A> {
                 *self = Self::Loading(recv);
                 let loaded = metadata.load(load_info, send).await?;
                 Ok(Self::Loaded(loaded))
-            },
+            }
             _ => unimplemented!(),
         }
     }

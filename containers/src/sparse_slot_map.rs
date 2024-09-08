@@ -7,7 +7,6 @@ struct SlotUnion<T> {
     pub data: Option<T>,
 }
 
-
 pub struct SparseSlotMap<T: 'static> {
     data: Vec<SlotUnion<T>>,
     free_list: Vec<Slot<T>>,
@@ -80,7 +79,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
             .unwrap_or(Err(anyhow::Error::from(ContainerErrors::NonexistentSlot)))
     }
 
-    fn iter(&self) -> impl Iterator<Item=crate::prelude::SlotUnion<T>> {
+    fn iter(&self) -> impl Iterator<Item = crate::prelude::SlotUnion<T>> {
         self.data
             .iter()
             .map(move |slot_union| crate::prelude::SlotUnion {
@@ -89,7 +88,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
             })
     }
 
-    fn iter_mut(&mut self) -> impl Iterator<Item=crate::prelude::SlotUnionMut<T>> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = crate::prelude::SlotUnionMut<T>> {
         self.data
             .iter_mut()
             .map(move |slot_union| crate::prelude::SlotUnionMut {

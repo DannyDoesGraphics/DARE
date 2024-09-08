@@ -106,10 +106,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
 
     /// This really should not be done. Only should be used if you're manually choosing your
     /// physical device
-    pub fn add_queue_allocation(
-        mut self,
-        allocation: crate::bootstrap::QueueRequest,
-    ) -> Self {
+    pub fn add_queue_allocation(mut self, allocation: crate::bootstrap::QueueRequest) -> Self {
         self.request_queues.push(allocation);
         self
     }

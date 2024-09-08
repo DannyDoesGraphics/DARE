@@ -1,4 +1,3 @@
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;

@@ -33,11 +33,11 @@ pub trait Container<T: 'static> {
 
     /// Pass the slot and access a mutable reference of the underlying data
     fn with_slot_mut<R, F: FnOnce(&mut T) -> R>(&mut self, slot: &Self::Slot, func: F)
-                                                -> Result<R>;
+        -> Result<R>;
 
-    fn iter<'b>(&'b self) -> impl Iterator<Item=SlotUnion<'b, T>>;
+    fn iter<'b>(&'b self) -> impl Iterator<Item = SlotUnion<'b, T>>;
 
-    fn iter_mut<'b>(&'b mut self) -> impl Iterator<Item=SlotUnionMut<'b, T>>;
+    fn iter_mut<'b>(&'b mut self) -> impl Iterator<Item = SlotUnionMut<'b, T>>;
 
     /// Filters with a predicate function
     fn filter_with<F: Fn(&T) -> bool>(&mut self, predicate: F);

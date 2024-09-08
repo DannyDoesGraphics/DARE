@@ -448,8 +448,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         image_view: vk::ImageView,
         image_layout: vk::ImageLayout,
     ) -> Result<GPUSlot<resource::Image<A>>>
-        where
-            A: 'a,
+    where
+        A: 'a,
     {
         let res: Result<(
             GPUSlot<resource::Image<A>>,
@@ -575,8 +575,8 @@ impl<A: Allocator> GPUResourceTable<A> {
         &mut self,
         buffer_input: ResourceInput<'a, resource::Buffer<A>>,
     ) -> Result<GPUSlot<resource::Buffer<A>>>
-        where
-            A: 'a,
+    where
+        A: 'a,
     {
         match buffer_input {
             ResourceInput::ResourceHandle(buffer) => {

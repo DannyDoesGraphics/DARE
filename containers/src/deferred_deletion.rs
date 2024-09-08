@@ -37,12 +37,19 @@ pub struct DeferredDeletionSlotInner<T> {
 /// kept alive manually and their time goes to zero.
 ///
 /// Uses a [`super::prelude::SpraseSlotMap`] in the background
-pub struct DeferredDeletion<T: 'static, C: Container<DeferredDeletionSlotInner<T>, Slot=Slot<DeferredDeletionSlotInner<T>>>> {
+pub struct DeferredDeletion<
+    T: 'static,
+    C: Container<DeferredDeletionSlotInner<T>, Slot = Slot<DeferredDeletionSlotInner<T>>>,
+> {
     container: C,
     _marker: PhantomData<T>,
 }
 
-impl<T: 'static, C: Container<DeferredDeletionSlotInner<T>, Slot=Slot<DeferredDeletionSlotInner<T>>>> DeferredDeletion<T, C> {
+impl<
+        T: 'static,
+        C: Container<DeferredDeletionSlotInner<T>, Slot = Slot<DeferredDeletionSlotInner<T>>>,
+    > DeferredDeletion<T, C>
+{
     pub fn new() -> Self {
         Self {
             container: C::new(),

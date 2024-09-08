@@ -7,11 +7,7 @@ use std::marker::PhantomData;
 pub struct Slot<T> {
     id: usize,
     generation: usize,
-    #[derivative(
-        Debug = "ignore",
-        PartialEq = "ignore",
-        Hash = "ignore",
-    )]
+    #[derivative(Debug = "ignore", PartialEq = "ignore", Hash = "ignore")]
     _marker: PhantomData<T>,
 }
 

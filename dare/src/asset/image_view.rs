@@ -17,7 +17,6 @@ pub struct ImageView<A: Allocator + 'static> {
     _phantom: PhantomData<A>,
 }
 
-
 impl<A: Allocator + 'static> asset::AssetDescriptor for ImageView<A> {
     type Loaded = ImageViewLoaded;
     type Metadata = ImageViewMetadata<A>;
@@ -48,7 +47,9 @@ impl<A: Allocator + 'static> Hash for ImageViewMetadata<A> {
 }
 impl<A: Allocator + 'static> PartialEq for ImageViewMetadata<A> {
     fn eq(&self, other: &Self) -> bool {
-        self.flags == other.flags && self.image == other.image && self.view_type == other.view_type
+        self.flags == other.flags
+            && self.image == other.image
+            && self.view_type == other.view_type
             && self.format == other.format
     }
 }
@@ -72,34 +73,41 @@ impl<A: Allocator + 'static> asset::AssetUnloaded for ImageViewMetadata<A> {
     type StreamInfo = ImageViewLoadInfo;
     type LoadInfo = ImageViewLoadInfo;
 
-    async fn stream(self, stream_info: Self::StreamInfo) -> anyhow::Result<BoxStream<'static, anyhow::Result<Self::Chunk>>> {
-        let image_view = resource::ImageView::new(
-            resource::ImageViewCreateInfo::FromCreateInfo {
-                device: stream_info.device.clone(),
-                create_info: vk::ImageViewCreateInfo {
-                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags: stream_info.flags,
-                    image: stream_info.vk_image,
-                    view_type: stream_info.view_type,
-                    format: stream_info.format,
-                    components: stream_info.components,
-                    subresource_range: stream_info.subresource_range,
-                    _marker: Default::default(),
-                },
-            }
-        )?;
+    async fn stream(
+        self,
+        stream_info: Self::StreamInfo,
+    ) -> anyhow::Result<BoxStream<'static, anyhow::Result<Self::Chunk>>> {
+        let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
+            device: stream_info.device.clone(),
+            create_info: vk::ImageViewCreateInfo {
+                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: stream_info.flags,
+                image: stream_info.vk_image,
+                view_type: stream_info.view_type,
+                format: stream_info.format,
+                components: stream_info.components,
+                subresource_range: stream_info.subresource_range,
+                _marker: Default::default(),
+            },
+        })?;
         Ok(Box::pin(stream! {
             yield Ok(image_view)
         }))
     }
 
-    async fn load(&self, load_info: Self::LoadInfo, sender: Sender<Option<Arc<Self::AssetLoaded>>>) -> anyhow::Result<Arc<Self::AssetLoaded>> {
-        let image_view = self.clone().stream(load_info).await?.next().await.unwrap()?;
-        Ok(Arc::new(
-            ImageViewLoaded {
-                handle: image_view,
-            }
-        ))
+    async fn load(
+        &self,
+        load_info: Self::LoadInfo,
+        sender: Sender<Option<Arc<Self::AssetLoaded>>>,
+    ) -> anyhow::Result<Arc<Self::AssetLoaded>> {
+        let image_view = self
+            .clone()
+            .stream(load_info)
+            .await?
+            .next()
+            .await
+            .unwrap()?;
+        Ok(Arc::new(ImageViewLoaded { handle: image_view }))
     }
 }

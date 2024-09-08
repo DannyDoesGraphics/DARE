@@ -42,9 +42,10 @@ impl ErasedStorageDashMap {
             .and_then(|mut data| data.downcast_mut::<T>().map(f))
     }
 
-    pub fn iter<'a>(&'a self) -> IterMut<'a, TypeId, Box<dyn Any>, RandomState, DashMap<TypeId, Box<dyn Any>>> {
-        self.dash_map
-            .iter_mut()
+    pub fn iter<'a>(
+        &'a self,
+    ) -> IterMut<'a, TypeId, Box<dyn Any>, RandomState, DashMap<TypeId, Box<dyn Any>>> {
+        self.dash_map.iter_mut()
     }
 
     pub fn get<'a, T: 'static>(&'a self) -> Option<Ref<'a, TypeId, Box<dyn Any>>> {

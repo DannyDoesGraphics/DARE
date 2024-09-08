@@ -80,7 +80,7 @@ impl Swapchain {
                     image_type: vk::ImageType::TYPE_3D,
                     name: Some(format!("Swapchain image {index}").as_str()),
                 })
-                    .unwrap()
+                .unwrap()
             })
             .collect::<Vec<crate::resource::Image<GPUAllocatorImpl>>>())
     }

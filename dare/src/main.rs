@@ -157,7 +157,8 @@ impl RenderContext {
         }
 
         let graphics_queue = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::GRAPHICS, 1, true);
-        let transfer_queues = dagal::bootstrap::QueueRequest::new(vk::QueueFlags::TRANSFER, 2, true);
+        let transfer_queues =
+            dagal::bootstrap::QueueRequest::new(vk::QueueFlags::TRANSFER, 2, true);
         let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
             .add_required_extension(dagal::ash::khr::swapchain::NAME.as_ptr())
             .set_minimum_vulkan_version((1, 3, 0))
@@ -216,11 +217,18 @@ impl RenderContext {
                 allocation_sizes: Default::default(),
             },
             device.clone(),
-        ).unwrap();
+        )
+        .unwrap();
         let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
 
-        let graphics_queue = device.acquire_queue(vk::QueueFlags::GRAPHICS, None, None, Some(1)).unwrap().pop().unwrap();
-        let transfer_queues = device.acquire_queue(vk::QueueFlags::TRANSFER, None, None, Some(2)).unwrap();
+        let graphics_queue = device
+            .acquire_queue(vk::QueueFlags::GRAPHICS, None, None, Some(1))
+            .unwrap()
+            .pop()
+            .unwrap();
+        let transfer_queues = device
+            .acquire_queue(vk::QueueFlags::TRANSFER, None, None, Some(2))
+            .unwrap();
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         let immediate_submit =
             ImmediateSubmit::new(device.clone(), graphics_queue.clone()).unwrap();
@@ -232,19 +240,19 @@ impl RenderContext {
                     &graphics_queue,
                     vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 )
-                    .unwrap();
+                .unwrap();
 
                 let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
                 let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_semaphore = dagal::sync::BinarySemaphore::new(
                     device.clone(),
                     vk::SemaphoreCreateFlags::empty(),
                 )
-                    .unwrap();
+                .unwrap();
                 let render_fence =
                     dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
                         .unwrap();
@@ -257,7 +265,7 @@ impl RenderContext {
                         usage_flags: vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                             | vk::BufferUsageFlags::STORAGE_BUFFER,
                     })
-                        .unwrap();
+                    .unwrap();
 
                 Frame {
                     command_pool,
@@ -284,7 +292,7 @@ impl RenderContext {
                 name: None,
             },
         )
-            .unwrap();
+        .unwrap();
 
         let draw_image_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
@@ -340,16 +348,16 @@ impl RenderContext {
         // create default texture data
         app.sampler = Some(
             app.gpu_resource_table
-               .new_sampler(ResourceInput::ResourceCI(
-                   resource::SamplerCreateInfo::FromCreateInfo {
-                       device: app.device.clone(),
-                       create_info: vk::SamplerCreateInfo::default()
-                           .mag_filter(vk::Filter::NEAREST)
-                           .min_filter(vk::Filter::NEAREST),
-                       name: None,
-                   },
-               ))
-               .unwrap(),
+                .new_sampler(ResourceInput::ResourceCI(
+                    resource::SamplerCreateInfo::FromCreateInfo {
+                        device: app.device.clone(),
+                        create_info: vk::SamplerCreateInfo::default()
+                            .mag_filter(vk::Filter::NEAREST)
+                            .min_filter(vk::Filter::NEAREST),
+                        name: None,
+                    },
+                ))
+                .unwrap(),
         );
 
         let white = [255u8, 255u8, 255u8, 255u8];
@@ -366,7 +374,7 @@ impl RenderContext {
                 Some("White"),
                 false,
             )
-               .await,
+            .await,
         );
         let grey = [168u8, 168u8, 168u8, 255u8];
         app.grey_image = Some(
@@ -382,7 +390,7 @@ impl RenderContext {
                 Some("Gray"),
                 false,
             )
-               .await,
+            .await,
         );
         let black = [0u8, 0u8, 0u8, 255u8];
         app.black_image = Some(
@@ -398,7 +406,7 @@ impl RenderContext {
                 Some("Black"),
                 false,
             )
-               .await,
+            .await,
         );
         let mut pixels = [64u8; 16 * 16 * 4];
         let magenta = [255u8, 0u8, 255u8, 255u8];
@@ -425,7 +433,7 @@ impl RenderContext {
                 Some("Magenta"),
                 false,
             )
-               .await,
+            .await,
         );
         app
     }
@@ -437,7 +445,7 @@ impl RenderContext {
             self.instance.get_instance(),
             window,
         )
-            .unwrap();
+        .unwrap();
         surface
             .query_details(self.physical_device.handle())
             .unwrap();
@@ -509,7 +517,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("Draw image"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&image);
         let depth_image = resource::Image::new(resource::ImageCreateInfo::NewAllocated {
             device: self.device.clone(),
@@ -539,7 +547,7 @@ impl RenderContext {
             location: MemoryLocation::GpuOnly,
             name: Some("GBuffer Depth"),
         })
-            .unwrap();
+        .unwrap();
         //self.wsi_deletion_stack.push_resource(&depth_image);
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             create_info: vk::ImageViewCreateInfo {
@@ -557,7 +565,7 @@ impl RenderContext {
             },
             device: self.device.clone(),
         })
-            .unwrap();
+        .unwrap();
         let depth_image_view =
             resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
                 create_info: vk::ImageViewCreateInfo {
@@ -575,7 +583,7 @@ impl RenderContext {
                 },
                 device: self.device.clone(),
             })
-                .unwrap();
+            .unwrap();
         self.draw_image = Some(image);
         self.depth_image = Some(depth_image);
         self.draw_image_view = Some(image_view);
@@ -593,7 +601,7 @@ impl RenderContext {
                     name: None,
                 },
             )
-                .unwrap(),
+            .unwrap(),
         );
         let img_info = vk::DescriptorImageInfo {
             sampler: Default::default(),
@@ -733,13 +741,14 @@ impl RenderContext {
             },
             name,
         })
-            .unwrap();
+        .unwrap();
         let aspect_flag = if format == vk::Format::D32_SFLOAT {
             vk::ImageAspectFlags::DEPTH
         } else {
             vk::ImageAspectFlags::COLOR
         };
-        let mut subresource_range = resource::Image::<GPUAllocatorImpl>::image_subresource_range(aspect_flag);
+        let mut subresource_range =
+            resource::Image::<GPUAllocatorImpl>::image_subresource_range(aspect_flag);
         subresource_range.level_count = mip_levels;
         let image_view = resource::ImageView::new(resource::ImageViewCreateInfo::FromCreateInfo {
             device: self.device.clone(),
@@ -755,7 +764,7 @@ impl RenderContext {
                 _marker: Default::default(),
             },
         })
-            .unwrap();
+        .unwrap();
         let (image, image_view) = self
             .gpu_resource_table
             .new_image(
@@ -789,7 +798,7 @@ impl RenderContext {
                 memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
             })
-                .unwrap();
+            .unwrap();
         staging_buffer.write(0, data).unwrap();
         // min expected flags
         let usage = usage | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC;
@@ -918,9 +927,11 @@ impl RenderContext {
                 &vk::ClearColorValue {
                     float32: [0.0, 0.0, 0.0, 0.0],
                 },
-                &[resource::Image::<GPUAllocatorImpl>::image_subresource_range(
-                    vk::ImageAspectFlags::COLOR,
-                )],
+                &[
+                    resource::Image::<GPUAllocatorImpl>::image_subresource_range(
+                        vk::ImageAspectFlags::COLOR,
+                    ),
+                ],
             );
         }
         // add a sync point

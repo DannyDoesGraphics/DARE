@@ -266,10 +266,7 @@ impl PhysicalDeviceSelector {
     /// assert!(devices.unwrap().is_empty());
     /// ```
     ///
-    pub fn add_required_queue(
-        mut self,
-        queue: crate::bootstrap::QueueRequest,
-    ) -> Self {
+    pub fn add_required_queue(mut self, queue: crate::bootstrap::QueueRequest) -> Self {
         self.required_queues.push(queue);
         self
     }
@@ -295,10 +292,7 @@ impl PhysicalDeviceSelector {
     /// assert!(devices[0].queue_requests.clone().iter().any(|queue| queue.borrow().count == 2) );
     /// drop(devices)
     /// ```
-    pub fn add_preferred_queue(
-        mut self,
-        queue: crate::bootstrap::QueueRequest,
-    ) -> Self {
+    pub fn add_preferred_queue(mut self, queue: crate::bootstrap::QueueRequest) -> Self {
         self.preferred_queues.push(queue);
         self
     }
@@ -340,7 +334,7 @@ impl PhysicalDeviceSelector {
 
             if self.dedicated.is_some()
                 && (properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU)
-                != self.dedicated.unwrap()
+                    != self.dedicated.unwrap()
             {
                 continue;
             }

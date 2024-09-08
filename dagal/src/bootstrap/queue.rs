@@ -63,7 +63,6 @@ pub(crate) fn determine_queue_slotting(
         {
             let taken_slots: u64 = *dedicated_claim as u64 + *non_dedicated_claim as u64;
             let free_slots: u64 = (queue_family.queue_count as u64 - taken_slots)
-                .max(0)
                 .min(*queue_count); // # of slots that are free for a queue
             if free_slots > 0 {
                 *dedicated_claim += free_slots as u32; // claim

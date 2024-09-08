@@ -5,7 +5,6 @@ use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::NonNull;
 
-
 use anyhow::Result;
 use ash::vk;
 
