@@ -1,12 +1,12 @@
-use std::ffi::c_void;
-use std::fmt::Debug;
-use std::ptr::NonNull;
-use std::{mem, ptr};
-
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
 use derivative::Derivative;
+use std::ffi::c_void;
+use std::fmt::Debug;
+use std::hash::Hasher;
+use std::ptr::NonNull;
+use std::{mem, ptr};
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
 use crate::command::command_buffer::CmdBuffer;
@@ -32,6 +32,12 @@ impl<A: Allocator> PartialEq for Buffer<A> {
     }
 }
 impl<A: Allocator> Eq for Buffer<A> {}
+
+impl<A: Allocator> std::hash::Hash for Buffer<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
+}
 
 pub enum BufferCreateInfo<'a, A: Allocator> {
     /// Create a buffer with a new empty buffer with the requested size
@@ -83,19 +89,6 @@ impl<A: Allocator> Buffer<A> {
     /// Upload data to a buffer with basic safety ensured.
     ///
     /// We currently only check if the buffer is smaller
-    #[cfg(not(feature = "tokio"))]
-    pub fn upload<T: Sized>(
-        &mut self,
-        immediate: &mut crate::util::ImmediateSubmit,
-        allocator: &mut ArcAllocator<A>,
-        content: &[T],
-    ) -> Result<()> {
-        if (mem::size_of_val(content) as vk::DeviceSize) > self.size {
-            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
-        }
-        unsafe { self.upload_arbitrary::<T>(immediate, allocator, content) }
-    }
-    #[cfg(feature = "tokio")]
     pub async fn upload<T: Sized>(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
@@ -115,53 +108,6 @@ impl<A: Allocator> Buffer<A> {
     ///
     /// # Safety
     /// We do not make guarantees the type you're uploading fits inside the buffer
-    #[cfg(not(feature = "tokio"))]
-    pub unsafe fn upload_arbitrary<T: Sized>(
-        &mut self,
-        immediate: &mut crate::util::ImmediateSubmit,
-        allocator: &mut ArcAllocator<A>,
-        content: &[T],
-    ) -> Result<()> {
-        let buffer_size: vk::DeviceSize = mem::size_of_val(content) as vk::DeviceSize;
-        let staging_buffer = Self::new(BufferCreateInfo::NewEmptyBuffer {
-            device: self.device.clone(),
-            allocator,
-            size: buffer_size,
-            memory_type: crate::allocators::MemoryLocation::CpuToGpu,
-            usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-        })?;
-        unsafe {
-            ptr::copy_nonoverlapping::<u8>(
-                content.as_ptr() as *const u8,
-                staging_buffer.mapped_ptr().unwrap().as_ptr() as *mut u8,
-                buffer_size as usize,
-            );
-        }
-        {
-            immediate.submit(Box::new({
-                let src_buffer = unsafe { *staging_buffer.as_raw() };
-                let dst_buffer = unsafe { *self.as_raw() };
-                move |context: ImmediateSubmitContext| {
-                    let copy = vk::BufferCopy {
-                        src_offset: 0,
-                        dst_offset: 0,
-                        size: buffer_size,
-                    };
-                    unsafe {
-                        context.device.get_handle().cmd_copy_buffer(
-                            context.cmd.handle(),
-                            src_buffer,
-                            dst_buffer,
-                            &[copy],
-                        );
-                    }
-                }
-            }))?;
-        }
-        drop(staging_buffer);
-        Ok(())
-    }
-    #[cfg(feature = "tokio")]
     pub async unsafe fn upload_arbitrary<T: Sized>(
         &mut self,
         immediate: &mut crate::util::ImmediateSubmit,
