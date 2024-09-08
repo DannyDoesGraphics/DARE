@@ -5,6 +5,13 @@ pub struct Format {
 }
 
 impl Format {
+    pub fn new(element_format: ElementFormat, dimension: usize) -> Self {
+        Self {
+            element_format,
+            dimension,
+        }
+    }
+
     pub fn element_size(&self) -> usize {
         self.element_format.size()
     }
@@ -19,13 +26,6 @@ impl Format {
 
     pub fn element_format(&self) -> ElementFormat {
         self.element_format
-    }
-
-    pub fn new(element_format: ElementFormat, dimension: usize) -> Self {
-        Self {
-            element_format,
-            dimension,
-        }
     }
 }
 
@@ -59,6 +59,4 @@ impl ElementFormat {
             ElementFormat::F64 => 8,
         }
     }
-
-    pub fn cast_slice(&self) {}
 }
