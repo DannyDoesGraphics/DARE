@@ -108,6 +108,8 @@ impl<A: Allocator + 'static> asset::AssetUnloaded for ImageViewMetadata<A> {
             .next()
             .await
             .unwrap()?;
-        Ok(Arc::new(ImageViewLoaded { handle: image_view }))
+        let loaded = Arc::new(ImageViewLoaded { handle: image_view });
+        sender.send(Some(loaded.clone())).await?;
+        Ok(loaded)
     }
 }
