@@ -74,7 +74,7 @@ struct RenderContext {
     swapchain_image_views: Vec<resource::ImageView>,
     swapchain_images: Vec<resource::Image<GPUAllocatorImpl>>,
     swapchain: Option<dagal::wsi::Swapchain>,
-    surface: Option<dagal::wsi::Surface>,
+    surface: Option<dagal::wsi::SurfaceQueried>,
 
     immediate_submit: ImmediateSubmit,
     allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
@@ -446,7 +446,7 @@ impl RenderContext {
             window,
         )
         .unwrap();
-        surface
+        let surface = surface
             .query_details(self.physical_device.handle())
             .unwrap();
         self.surface = Some(surface);
@@ -454,16 +454,18 @@ impl RenderContext {
 
     /// Builds a swapchain
     fn build_swapchain(&mut self, window: &winit::window::Window) {
-        let swapchain = dagal::bootstrap::SwapchainBuilder::new(self.surface.as_ref().unwrap())
+        let swapchain = dagal::bootstrap::SwapchainBuilder::new(self.surface.as_ref().unwrap());
+        let extent = swapchain.clamp_extent(&vk::Extent2D {
+            width: window.width(),
+            height: window.height(),
+        });
+        let swapchain = swapchain
             .push_queue(&self.graphics_queue)
             .request_present_mode(vk::PresentModeKHR::MAILBOX)
             .request_present_mode(vk::PresentModeKHR::FIFO)
             .request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .request_image_format(vk::Format::B8G8R8A8_UNORM)
-            .set_extent(vk::Extent2D {
-                width: window.width(),
-                height: window.height(),
-            })
+            .set_extent(extent)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .build(self.instance.get_instance(), self.device.clone())
             .unwrap();
@@ -979,7 +981,7 @@ impl RenderContext {
                 .render_semaphore
                 .submit_info(vk::PipelineStageFlags2::ALL_GRAPHICS)],
         );
-        let vk_guard = self.graphics_queue.acquire_queue_lock().await;
+        let vk_guard = self.graphics_queue.acquire_queue_lock().await.unwrap();
         let cmd = cmd
             .submit(
                 *vk_guard,
