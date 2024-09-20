@@ -8,11 +8,49 @@ use crate::traits::Destructible;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
+pub struct SurfaceQueried {
+    inner: Surface,
+    capabilities: vk::SurfaceCapabilitiesKHR,
+    formats: Vec<vk::SurfaceFormatKHR>,
+    present_modes: Vec<vk::PresentModeKHR>,
+}
+
+impl SurfaceQueried {
+    /// Get a reference to the underlying [SurfaceKHR](vk::SurfaceKHR)
+    pub fn get_handle(&self) -> &vk::SurfaceKHR {
+        &self.inner.handle
+    }
+
+    /// Get a copy over the underlying [SurfaceKHR}(vk::SurfaceKHR)
+    pub fn handle(&self) -> vk::SurfaceKHR {
+        self.inner.handle
+    }
+
+    /// Gets all extensions available
+    pub fn get_extension(&self) -> &ash::khr::surface::Instance {
+        &self.inner.ext
+    }
+
+    /// Get the [`vk::SurfaceCapabilitiesKHR`] of the [`Surface`]
+    pub fn get_capabilities(&self) -> vk::SurfaceCapabilitiesKHR {
+        self.capabilities
+    }
+
+    /// Get the [`vk::SurfaceFormatKHR`] of a [`Surface`]
+    pub fn get_formats(&self) -> &[vk::SurfaceFormatKHR] {
+        self.formats.as_ref()
+    }
+
+    /// Get the [`vk::PresentModeKHR`] of a [`Surface`]
+    pub fn get_present_modes(&self) -> &[vk::PresentModeKHR] {
+        self.present_modes.as_ref()
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct Surface {
     handle: vk::SurfaceKHR,
-    capabilities: Option<vk::SurfaceCapabilitiesKHR>,
-    formats: Option<Vec<vk::SurfaceFormatKHR>>,
-    present_modes: Option<Vec<vk::PresentModeKHR>>,
     #[derivative(Debug = "ignore")]
     ext: ash::khr::surface::Instance,
 }
@@ -37,9 +75,9 @@ impl Surface {
     /// 	);
     ///     // Construct a surface
     ///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
-    ///     surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
-    ///     assert!(surface.get_capabilities().as_ref().unwrap().min_image_count > 0);
-    ///     assert!(surface.get_formats().as_ref().unwrap().len() > 0);
+    ///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
+    ///     assert!(surface.get_capabilities().min_image_count > 0);
+    ///     assert!(surface.get_formats().len() > 0);
     ///     assert!(surface.get_present_modes().as_ref().unwrap().len() > 0);
     ///     drop(surface);
     /// }).run();
@@ -60,47 +98,34 @@ impl Surface {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkSurface {:p}", handle);
+        tracing::trace!("Creating VkSurface {:p}", handle);
 
         Ok(Self {
             handle,
-            capabilities: None,
-            formats: None,
-            present_modes: None,
             ext,
         })
     }
 
     /// Determine the [`vk::SurfaceCapabilitiesKHR`] and [`vk::SurfaceFormatKHR`] and [`vk::PresentModeKHR`]
-    pub fn query_details(&mut self, physical_device: vk::PhysicalDevice) -> Result<()> {
-        self.capabilities = Some(unsafe {
+    pub fn query_details(self, physical_device: vk::PhysicalDevice) -> Result<SurfaceQueried> {
+        let capabilities = unsafe {
             self.ext
                 .get_physical_device_surface_capabilities(physical_device, self.handle)?
-        });
-        self.present_modes = Some(unsafe {
+        };
+        let present_modes = unsafe {
             self.ext
                 .get_physical_device_surface_present_modes(physical_device, self.handle)?
-        });
-        self.formats = Some(unsafe {
+        };
+        let formats = unsafe {
             self.ext
                 .get_physical_device_surface_formats(physical_device, self.handle)?
-        });
-        Ok(())
-    }
-
-    /// Get the [`vk::SurfaceCapabilitiesKHR`] of the [`Surface`]
-    pub fn get_capabilities(&self) -> Option<vk::SurfaceCapabilitiesKHR> {
-        self.capabilities
-    }
-
-    /// Get the [`vk::SurfaceFormatKHR`] of a [`Surface`]
-    pub fn get_formats(&self) -> &Option<Vec<vk::SurfaceFormatKHR>> {
-        &self.formats
-    }
-
-    /// Get the [`vk::PresentModeKHR`] of a [`Surface`]
-    pub fn get_present_modes(&self) -> &Option<Vec<vk::PresentModeKHR>> {
-        &self.present_modes
+        };
+        Ok(SurfaceQueried {
+            inner: self,
+            capabilities,
+            formats,
+            present_modes,
+        })
     }
 
     /// Get a reference to the underlying [SurfaceKHR](vk::SurfaceKHR)
@@ -122,7 +147,7 @@ impl Surface {
 impl Destructible for Surface {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkSurface {:p}", self.handle);
+        tracing::trace!("Destroying VkSurface {:p}", self.handle);
 
         unsafe {
             self.ext.destroy_surface(self.handle, None);

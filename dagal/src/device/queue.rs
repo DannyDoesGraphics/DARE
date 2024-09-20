@@ -60,15 +60,15 @@ impl Queue {
     pub fn get_handle(&self) -> &Arc<Mutex<vk::Queue>> {
         &self.handle
     }
-    #[cfg(feature = "tokio")]
-    pub async fn acquire_queue_lock(&self) -> MutexGuard<vk::Queue> {
+
+    pub async fn acquire_queue_lock(&self) -> Result<MutexGuard<vk::Queue>> {
         #[cfg(not(feature = "tokio"))]
         {
-            Ok(self.handle.lock().map_err(|_| DagalError::PoisonError)?)
+            Ok(self.handle.lock().map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
         }
         #[cfg(feature = "tokio")]
         {
-            self.handle.lock().await
+            Ok(self.handle.lock().await)
         }
     }
 

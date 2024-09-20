@@ -69,26 +69,22 @@ pub struct SwapchainBuilder {
 }
 
 impl SwapchainBuilder {
-    pub fn new(surface: &crate::wsi::Surface) -> Self {
+    pub fn new(surface: &crate::wsi::SurfaceQueried) -> Self {
         Self {
             surface: surface.handle(),
-            surface_capabilities: surface.get_capabilities().unwrap(),
+            surface_capabilities: surface.get_capabilities(),
             image_formats: surface
                 .get_formats()
-                .as_ref()
-                .unwrap()
                 .iter()
                 .map(|format| format.format)
                 .collect(),
             preferred_image_formats: Vec::new(),
-            present_modes: surface.get_present_modes().as_ref().unwrap().to_vec(),
+            present_modes: surface.get_present_modes().to_vec(),
             family_indices: HashSet::new(),
             image_usage: vk::ImageUsageFlags::empty(),
             image_extent: vk::Extent2D::default(),
             color_spaces: surface
                 .get_formats()
-                .as_ref()
-                .unwrap()
                 .iter()
                 .map(|format| format.color_space)
                 .collect(),
@@ -130,16 +126,20 @@ impl SwapchainBuilder {
         self
     }
 
+    /// Clamps extent to the surface capabilities
+    pub fn clamp_extent(&self, extent: &vk::Extent2D) -> vk::Extent2D {
+        vk::Extent2D {
+            width: extent.width.clamp(self.surface_capabilities.min_image_extent.width, self.surface_capabilities.max_image_extent.width),
+            height: extent.height.clamp(self.surface_capabilities.min_image_extent.height, self.surface_capabilities.max_image_extent.height),
+        }
+    }
+
     /// Set swapchain image extents
     pub fn set_extent(mut self, extent: vk::Extent2D) -> Self {
-        assert!(
-            self.surface_capabilities.min_image_extent.width <= extent.width
-                && extent.width <= self.surface_capabilities.max_image_extent.width
-        );
-        assert!(
-            self.surface_capabilities.min_image_extent.height <= extent.height
-                && extent.height <= self.surface_capabilities.max_image_extent.height
-        );
+        assert!(self.surface_capabilities.min_image_extent.width <= extent.width, "{} <= {}", self.surface_capabilities.min_image_extent.width, extent.width);
+        assert!(self.surface_capabilities.max_image_extent.width >= extent.width, "{} >= {}", self.surface_capabilities.max_image_extent.width, extent.width);
+        assert!(self.surface_capabilities.min_image_extent.height <= extent.height, "{} <= {}", self.surface_capabilities.min_image_extent.height, extent.height);
+        assert!(self.surface_capabilities.max_image_extent.height >= extent.height, "{} >= {}", self.surface_capabilities.max_image_extent.height, extent.height);
         self.image_extent = extent;
         self
     }
