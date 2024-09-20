@@ -6,4 +6,5 @@ pub mod traits;
 pub use traits::*;
 
 pub use surface::Surface;
+pub use surface::SurfaceQueried;
 pub use swapchain::Swapchain;
