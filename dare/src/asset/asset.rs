@@ -99,6 +99,10 @@ impl<A: AssetDescriptor> AssetState<A> {
 /// Describes the possible location of the files
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum MetaDataLocation {
+    /// Data is behind a physical file that must be loaded
     FilePath(std::path::PathBuf),
+    /// Data is behind a link
     Link(String),
+    /// Describes the data is held in memory
+    Memory(Arc<[u8]>)
 }

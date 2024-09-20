@@ -92,6 +92,15 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
         let mut elements_processed = 0;
 
         match &self.location {
+            MetaDataLocation::Memory(memory) => {
+                let memory = memory.clone();
+                Ok(Box::pin(stream! {
+                    for chunk in memory[self.offset..self.length]
+                    .chunks_exact(element_size) {
+                        yield Ok(chunk[0..self.element_format.size()].to_owned())
+                    }
+                }))
+            },
             MetaDataLocation::FilePath(path) => {
                 let mut file = tokio::fs::File::open(path.clone()).await?;
                 file.seek(io::SeekFrom::Start(self.offset as u64)).await?;
@@ -255,6 +264,14 @@ impl<A: Allocator> BufferMetaData<A> {
                     .collect::<Vec<u8>>();
 
                 Ok(Pin::new(processed_data))
+            },
+            MetaDataLocation::Memory(memory) => {
+                Ok(Pin::new(
+                    memory[self.offset..(self.offset + self.length)]
+                        .chunks_exact(self.stride.unwrap_or(self.element_format.element_size()))
+                        .flat_map(|chunk| chunk[0..self.element_format.size()].to_vec())
+                        .collect()
+                ))
             }
             MetaDataLocation::Link(link) => {
                 unimplemented!()
