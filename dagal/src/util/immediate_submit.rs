@@ -69,7 +69,7 @@ impl ImmediateSubmit {
         let r = function(context);
         let cmd = cmd.end()?;
         let raw_cmd = cmd.submit_info();
-        let queue = self.queue.acquire_queue_lock().await;
+        let queue = self.queue.acquire_queue_lock().await?;
         cmd.submit(
             *queue,
             &[crate::command::CommandBufferExecutable::submit_info_sync(

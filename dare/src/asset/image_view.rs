@@ -109,7 +109,10 @@ impl<A: Allocator + 'static> asset::AssetUnloaded for ImageViewMetadata<A> {
             .await
             .unwrap()?;
         let loaded = Arc::new(ImageViewLoaded { handle: image_view });
+        #[cfg(feature = "tokio")]
         sender.send(Some(loaded.clone())).await?;
+        #[cfg(not(feature = "tokio"))]
+        sender.send(Some(loaded.clone()))?;
         Ok(loaded)
     }
 }

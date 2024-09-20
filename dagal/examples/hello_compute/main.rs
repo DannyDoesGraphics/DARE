@@ -36,7 +36,7 @@ struct RenderContext {
     swapchain_image_views: Vec<dagal::resource::ImageView>,
     swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>>,
     swapchain: Option<dagal::wsi::Swapchain>,
-    surface: Option<dagal::wsi::Surface>,
+    surface: Option<dagal::wsi::SurfaceQueried>,
 
     allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     graphics_queue: dagal::device::Queue,
@@ -245,16 +245,18 @@ impl RenderContext {
 
     /// Builds a swapchain
     fn build_swapchain(&mut self, window: &winit::window::Window) {
-        let swapchain = dagal::bootstrap::SwapchainBuilder::new(self.surface.as_ref().unwrap())
+        let swapchain = dagal::bootstrap::SwapchainBuilder::new(self.surface.as_ref().unwrap());
+        let extent = swapchain.clamp_extent(&vk::Extent2D {
+            width: window.width(),
+            height: window.height(),
+        });
+        let swapchain= swapchain
             .push_queue(&self.graphics_queue)
             .request_present_mode(vk::PresentModeKHR::MAILBOX)
             .request_present_mode(vk::PresentModeKHR::FIFO)
             .request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .request_image_format(vk::Format::B8G8R8A8_UNORM)
-            .set_extent(vk::Extent2D {
-                width: window.width(),
-                height: window.height(),
-            })
+            .set_extent(extent)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .build(self.instance.get_instance(), self.device.clone())
             .unwrap();

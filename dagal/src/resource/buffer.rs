@@ -94,7 +94,7 @@ impl<A: Allocator> Buffer<A> {
         allocator: &mut ArcAllocator<A>,
         content: &[T],
     ) -> Result<()> {
-        if (mem::size_of_val(content) as vk::DeviceSize) > self.size {
+        if (size_of_val(content) as vk::DeviceSize) > self.size {
             return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
         }
         unsafe {

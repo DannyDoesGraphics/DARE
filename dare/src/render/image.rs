@@ -23,7 +23,7 @@ pub async fn generate_mip_maps<A: Allocator>(
         return Ok(image);
     }
     let fence = dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty())?;
-    let vk_queue = queue.acquire_queue_lock().await;
+    let vk_queue = queue.acquire_queue_lock().await?;
     let command_pool = dagal::command::CommandPool::new(
         device.clone(),
         &queue,
