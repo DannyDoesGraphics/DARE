@@ -246,6 +246,7 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
 impl<A: Allocator> BufferMetaData<A> {
     /// Loads the entire buffer rather than streaming it in as chunks
     pub async fn load_data(&self) -> Result<Pin<Vec<u8>>> {
+        let upper_size = (self.offset + self.length).min( self.offset +  (self.stride.unwrap_or(self.element_format.size())*self.element_count));
         match &self.location {
             MetaDataLocation::FilePath(path) => {
                 let mut file = tokio::fs::File::open(path).await?;
@@ -258,7 +259,8 @@ impl<A: Allocator> BufferMetaData<A> {
                 }
                 let _ = buffer.split_off(bytes_read);
                 println!("{:?}", buffer);
-                let processed_data = buffer
+                // read only up to element count of data
+                let processed_data = buffer[..(upper_size - self.offset)]
                     .chunks_exact(self.stride.unwrap_or(self.element_format.size()))
                     .flat_map(|chunk| chunk[0..self.element_format.size()].to_vec())
                     .collect::<Vec<u8>>();
@@ -267,7 +269,7 @@ impl<A: Allocator> BufferMetaData<A> {
             },
             MetaDataLocation::Memory(memory) => {
                 Ok(Pin::new(
-                    memory[self.offset..(self.offset + self.length)]
+                    memory[self.offset..upper_size]
                         .chunks_exact(self.stride.unwrap_or(self.element_format.element_size()))
                         .flat_map(|chunk| chunk[0..self.element_format.size()].to_vec())
                         .collect()
