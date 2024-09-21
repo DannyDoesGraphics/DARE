@@ -60,3 +60,17 @@ impl ElementFormat {
         }
     }
 }
+
+impl From<gltf::json::accessor::ComponentType> for ElementFormat {
+    fn from(value: gltf::json::accessor::ComponentType) -> Self {
+        use gltf::json::accessor::ComponentType;
+        match value {
+            ComponentType::I8 => Self::I8,
+            ComponentType::U8 => Self::U8,
+            ComponentType::I16 => Self::I16,
+            ComponentType::U16 => Self::U16,
+            ComponentType::U32 => Self::U32,
+            ComponentType::F32 => Self::F32,
+        }
+    }
+}
