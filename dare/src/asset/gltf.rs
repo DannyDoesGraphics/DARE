@@ -5,6 +5,31 @@ use gltf;
 use gltf::buffer::Source;
 use dagal::allocators::Allocator;
 use super::prelude as asset;
+use bevy_ecs::prelude as becs;
+
+/// This is similar to [`gltf::Semantic`], but includes the Index
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum GltfSemantics {
+    Index,
+    Accessor(gltf::Semantic),
+    UVs,
+    Indices,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum Required<T> {
+    No(T),
+    Yes(T),
+}
+
+/// Expected semantics we want to have
+pub const EXPECTED_SEMANTICS: [Required<GltfSemantics>; 5] = [
+    Required::Yes(GltfSemantics::Index),
+    Required::No(GltfSemantics::Accessor(gltf::Semantic::Positions)),
+    Required::No(GltfSemantics::Accessor(gltf::Semantic::Normals)),
+    Required::No(GltfSemantics::Indices),
+    Required::No(GltfSemantics::UVs)
+];
 
 /// Handles gltf loading
 pub struct GLTFLoader<A: Allocator + 'static> {
@@ -21,7 +46,7 @@ impl<A: Allocator + 'static> GLTFLoader<A> {
         }
     }
 
-    pub fn load(render_world: &mut bevy_ecs::world::World, path: std::path::PathBuf) -> Result<()> {
+    pub fn load(mut commands: becs::Commands, asset_manager: becs::Res<asset::AssetManager<A>>, path: std::path::PathBuf) -> Result<()> {
         let gltf: gltf::Gltf = gltf::Gltf::open(path.clone())?;
         let blob: Option<Arc<[u8]>> = gltf.blob.clone().map(|blob| {
             Arc::from(blob.into_boxed_slice())
@@ -78,7 +103,9 @@ impl<A: Allocator + 'static> GLTFLoader<A> {
         }).collect::<Vec<Result<asset::BufferMetaData<A>>>>();
         let meshes = gltf.document.meshes().map(|mesh| {
             mesh.primitives().map(|primitive| {
-
+                // retrieve all required prims
+                //commands.spawn();
+                Ok::<(), anyhow::Error>(todo!())
             })
         });
 
