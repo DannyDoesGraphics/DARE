@@ -6,7 +6,7 @@ use std::{ptr, thread};
 use anyhow::Result;
 use ash::vk;
 
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fence {
@@ -140,5 +140,21 @@ impl Future for Fence {
             });
         }
         Poll::Pending
+    }
+}
+
+impl AsRaw for Fence {
+    type RawType = vk::Fence;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }

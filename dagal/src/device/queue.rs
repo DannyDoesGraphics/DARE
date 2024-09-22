@@ -72,6 +72,17 @@ impl Queue {
         }
     }
 
+    pub fn blocking_acquire_queue_lock(&self) -> Result<MutexGuard<vk::Queue>> {
+        #[cfg(not(feature = "tokio"))]
+        {
+            Ok(self.handle.lock().map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
+        }
+        #[cfg(feature = "tokio")]
+        {
+            Ok(self.handle.blocking_lock())
+        }
+    }
+
     pub fn get_index(&self) -> u32 {
         self.index
     }

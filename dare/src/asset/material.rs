@@ -3,7 +3,7 @@ use dagal::allocators::Allocator;
 
 #[derive(Debug, Clone)]
 pub struct Material<A: Allocator + 'static> {
-    pub albedo: asset::WeakTexture<A>,
-    pub normal: asset::WeakTexture<A>,
-    pub metallic_roughness: asset::WeakTexture<A>,
+    pub albedo: asset::Texture<A>,
+    pub normal: asset::Texture<A>,
+    pub metallic_roughness: asset::Texture<A>,
 }

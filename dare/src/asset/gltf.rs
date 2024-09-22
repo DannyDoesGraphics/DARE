@@ -13,7 +13,6 @@ pub enum GltfSemantics {
     Index,
     Accessor(gltf::Semantic),
     UVs,
-    Indices,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -23,11 +22,10 @@ pub enum Required<T> {
 }
 
 /// Expected semantics we want to have
-pub const EXPECTED_SEMANTICS: [Required<GltfSemantics>; 5] = [
+pub const EXPECTED_SEMANTICS: [Required<GltfSemantics>; 4] = [
     Required::Yes(GltfSemantics::Index),
-    Required::No(GltfSemantics::Accessor(gltf::Semantic::Positions)),
+    Required::Yes(GltfSemantics::Accessor(gltf::Semantic::Positions)),
     Required::No(GltfSemantics::Accessor(gltf::Semantic::Normals)),
-    Required::No(GltfSemantics::Indices),
     Required::No(GltfSemantics::UVs)
 ];
 
@@ -80,7 +78,7 @@ impl<A: Allocator + 'static> GLTFLoader<A> {
                 _allocator: Default::default(),
             })
         }).collect::<Vec<Result<asset::BufferMetaData<A>>>>();
-        let accessors = gltf.accessors().map(|accessor| {
+        let accessors_metadata = gltf.accessors().map(|accessor| {
             if accessor.sparse().is_some() {
                 return Err::<_, anyhow::Error>(anyhow::anyhow!("Does not support sparse data"));
             } else if let Some(view) = accessor.view() {
@@ -105,6 +103,48 @@ impl<A: Allocator + 'static> GLTFLoader<A> {
             mesh.primitives().map(|primitive| {
                 // retrieve all required prims
                 //commands.spawn();
+                let uv_indices: Vec<u32> = primitive.attributes().flat_map(|(attr, _)| match attr {
+                        gltf::Semantic::TexCoords(i) => Some(i),
+                        _ => None
+                    }
+                ).collect();
+                for semantic in EXPECTED_SEMANTICS.iter() {
+                    let is_required = match semantic {
+                        Required::No(_) => false,
+                        Required::Yes(_) => true,
+                    };
+                    let semantic = match semantic {
+                        Required::No(semantic) => semantic,
+                        Required::Yes(semantic) => semantic
+                    };
+                    let accessors: Vec<gltf::Accessor> = match semantic {
+                        GltfSemantics::Index => match primitive.indices() {
+                                None => if is_required {
+                                    return Err(anyhow::anyhow!("Missing indices in primitive, got None"));
+                                } else {
+                                    vec![]
+                                },
+                                Some(accessor) => vec![accessor],
+                            },
+                        GltfSemantics::Accessor(semantic) => match primitive.get(semantic) {
+                            None => if is_required {
+                                return Err(anyhow::anyhow!("Missing accessor {:?}, got NULL", semantic));
+                            } else {
+                                vec![]
+                            },
+                            Some(accessor) => vec![accessor],
+                        }
+                        GltfSemantics::UVs => uv_indices.iter().map(|indices| {
+                                primitive.get(&gltf::Semantic::TexCoords(*indices)).unwrap()
+                            }).collect::<Vec<_>>()
+                    };
+                    match semantic {
+                        GltfSemantics::Index => {
+                        }
+                        GltfSemantics::Accessor(_) => {}
+                        GltfSemantics::UVs => {}
+                    }
+                }
                 Ok::<(), anyhow::Error>(todo!())
             })
         });

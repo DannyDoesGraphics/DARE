@@ -101,6 +101,14 @@ impl CommandBufferRecording {
     pub fn dynamic_rendering(&self) -> crate::command::DynamicRenderContext {
         crate::command::DynamicRenderContext::from_vk(self)
     }
+
+    /// SAFETY: You should never be cloning command buffers around, but this is done to help with utility internally
+    pub unsafe fn clone(&self) -> Self {
+        Self {
+            handle: self.handle.clone(),
+            device: self.device.clone(),
+        }
+    }
 }
 
 /// Command buffer is in its executable state and can now be executed via queue submission
@@ -111,6 +119,13 @@ pub struct CommandBufferExecutable {
 }
 
 impl CommandBufferExecutable {
+    unsafe fn clone(&self) -> Self {
+        Self {
+            handle: self.handle,
+            device: self.device.clone(),
+        }
+    }
+
     /// Quickly acquire a [`VkCommandBufferSubmitInfo`](vk::CommandBufferSubmitInfo) for
     /// a single [`VkCommandBuffer`](vk::CommandBuffer).
     pub fn submit_info(&self) -> vk::CommandBufferSubmitInfo<'static> {
@@ -240,5 +255,98 @@ impl Deref for CommandBuffer {
 
     fn deref(&self) -> &Self::Target {
         &self.handle
+    }
+}
+
+#[derive(Debug)]
+pub enum CommandBufferState {
+    Ready(CommandBuffer),
+    Recording(CommandBufferRecording),
+    Executable(CommandBufferExecutable),
+}
+
+impl From<CommandBuffer> for CommandBufferState {
+    fn from(value: CommandBuffer) -> Self {
+        Self::Ready(value)
+    }
+}
+
+impl From<CommandBufferRecording> for CommandBufferState {
+    fn from(value: CommandBufferRecording) -> Self {
+        Self::Recording(value)
+    }
+}
+
+impl From<CommandBufferExecutable> for CommandBufferState {
+    fn from(value: CommandBufferExecutable) -> Self {
+        Self::Executable(value)
+    }
+}
+
+impl Deref for CommandBufferState {
+    type Target = vk::CommandBuffer;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            CommandBufferState::Ready(r) => &r,
+            CommandBufferState::Recording(r) => &r,
+            CommandBufferState::Executable(r) => &r,
+        }
+    }
+}
+
+impl CmdBuffer for CommandBufferState {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        match self {
+            CommandBufferState::Ready(r) => r.get_device(),
+            CommandBufferState::Recording(r) => r.get_device(),
+            CommandBufferState::Executable(r) => r.get_device(),
+        }
+    }
+
+    fn get_handle(&self) -> &vk::CommandBuffer {
+        match self {
+            CommandBufferState::Ready(r) => r.get_handle(),
+            CommandBufferState::Recording(r) => r.get_handle(),
+            CommandBufferState::Executable(r) => r.get_handle(),
+        }
+    }
+
+    fn handle(&self) -> vk::CommandBuffer {
+        match self {
+            CommandBufferState::Ready(r) => r.handle(),
+            CommandBufferState::Recording(r) => r.handle(),
+            CommandBufferState::Executable(r) => r.handle(),
+        }
+    }
+}
+
+impl CommandBufferState {
+
+
+    // Recording
+    pub fn end(&mut self) -> Result<()> {
+        *self = Self::from(match self {
+            CommandBufferState::Recording(r) => unsafe {
+                Ok::<CommandBufferExecutable, anyhow::Error>(r.clone().end()?)
+            },
+            _ => return Err(anyhow::anyhow!("Command buffer state failed"))
+        }?);
+        Ok(())
+    }
+
+    // Executable
+    pub fn submit(&mut self,
+                  queue: vk::Queue,
+                  submit_infos: &[vk::SubmitInfo2],
+                  fence: vk::Fence
+    ) -> Result<()> {
+        *self = Self::from(match self {
+            CommandBufferState::Executable(r) => unsafe {
+                Ok::<CommandBuffer, anyhow::Error>(r.clone().submit(queue, submit_infos, fence).unwrap())
+            },
+            _ => return Err(anyhow::anyhow!("Command buffer state failed"))
+        }?);
+        Ok(())
     }
 }

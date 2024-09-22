@@ -3,7 +3,7 @@ use std::ptr;
 use anyhow::Result;
 use ash::vk;
 
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BinarySemaphore {
@@ -29,7 +29,7 @@ impl BinarySemaphore {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating binary VkSemaphore {:p}", handle);
+        tracing::trace!("Creating binary VkSemaphore {:p}", handle);
 
         Ok(Self { handle, device })
     }
@@ -62,13 +62,29 @@ impl BinarySemaphore {
 impl Destructible for BinarySemaphore {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying binary VkSemaphore {:p}", self.handle);
+        tracing::trace!("Destroying binary VkSemaphore {:p}", self.handle);
 
         unsafe {
             self.device
                 .get_handle()
                 .destroy_semaphore(self.handle, None);
         }
+    }
+}
+
+impl AsRaw for BinarySemaphore {
+    type RawType = vk::Semaphore;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

@@ -1,6 +1,7 @@
+use std::fmt;
 use anyhow::Result;
 use futures::stream::BoxStream;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter, Pointer};
 use std::hash::Hash;
 use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
@@ -11,7 +12,6 @@ pub trait MetadataGetter<A: AssetDescriptor> {
 }
 
 /// Simply only contains an asset's metadata as well it's weak reference
-#[derive(Debug)]
 pub struct WeakAssetRef<A: AssetDescriptor> {
     pub metadata: A::Metadata,
     pub state: Weak<A::Loaded>,
@@ -23,6 +23,15 @@ impl<A: AssetDescriptor> Clone for WeakAssetRef<A> {
             metadata: self.metadata.clone(),
             state: self.state.clone(),
         }
+    }
+}
+
+impl<A: AssetDescriptor> Debug for WeakAssetRef<A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakAssetRef")
+         .field("metadata", &self.metadata)
+         .field("state", &self.state.upgrade())
+         .finish()
     }
 }
 
@@ -42,7 +51,6 @@ impl<A: AssetDescriptor> WeakAssetRef<A> {
 }
 
 /// Only contains an asset's metadata as well it's strong reference
-#[derive(Debug)]
 pub struct StrongAssetRef<A: AssetDescriptor> {
     pub metadata: A::Metadata,
     pub state: Arc<A::Loaded>,
@@ -60,6 +68,15 @@ impl<A: AssetDescriptor> Clone for StrongAssetRef<A> {
             metadata: self.metadata.clone(),
             state: self.state.clone(),
         }
+    }
+}
+
+impl<A: AssetDescriptor> Debug for StrongAssetRef<A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakAssetRef")
+         .field("metadata", &self.metadata)
+         .field("state", &self.state)
+         .finish()
     }
 }
 
@@ -86,7 +103,7 @@ impl<A: AssetDescriptor> PartialEq for AssetHolder<A> {
 }
 impl<A: AssetDescriptor> Eq for AssetHolder<A> {}
 
-impl<A: AssetDescriptor + PartialEq> AssetHolder<A> {
+impl<A: AssetDescriptor> AssetHolder<A> {
     pub fn new(metadata: A::Metadata) -> Self {
         Self {
             metadata: metadata.clone(),
@@ -150,6 +167,14 @@ impl<A: AssetDescriptor> AssetState<A> {
                 Ok(Self::Loaded(loaded))
             }
             _ => unimplemented!(),
+        }
+    }
+
+    /// Get a ref to the underlying asset being held
+    pub async fn get_asset(&self) -> Option<Arc<A::Loaded>> {
+        match self {
+            AssetState::Loaded(loaded) => Some(loaded.clone()),
+            _ => None,
         }
     }
 }

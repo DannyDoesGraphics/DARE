@@ -1,8 +1,8 @@
 use std::ptr;
 
-use crate::allocators::GPUAllocatorImpl;
+use crate::allocators::{Allocator, GPUAllocatorImpl};
 use crate::resource::traits::Resource;
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash;
 use ash::vk;
@@ -61,7 +61,7 @@ impl Swapchain {
         &self.ext
     }
 
-    pub fn get_images(&self) -> Result<Vec<crate::resource::Image<GPUAllocatorImpl>>> {
+    pub fn get_images<A: Allocator>(&self) -> Result<Vec<crate::resource::Image<A>>> {
         Ok(unsafe { self.ext.get_swapchain_images(self.handle)? }
             .into_iter()
             .enumerate()
@@ -82,7 +82,7 @@ impl Swapchain {
                 })
                 .unwrap()
             })
-            .collect::<Vec<crate::resource::Image<GPUAllocatorImpl>>>())
+            .collect::<Vec<crate::resource::Image<A>>>())
     }
 
     pub fn get_image_views(&self, images: &[vk::Image]) -> Result<Vec<crate::resource::ImageView>> {
@@ -142,11 +142,27 @@ impl Swapchain {
 impl Destructible for Swapchain {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkSwapchainKHR {:p}", self.handle);
+        tracing::trace!("Creating VkSwapchainKHR {:p}", self.handle);
 
         unsafe {
             self.ext.destroy_swapchain(self.handle, None);
         }
+    }
+}
+
+impl AsRaw for Swapchain {
+    type RawType = vk::SwapchainKHR;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

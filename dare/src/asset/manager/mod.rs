@@ -1,5 +1,7 @@
+pub mod slot;
+
 use super::prelude as asset;
-use crate::asset::asset::{AssetDescriptor, AssetHolder, AssetState};
+use crate::asset::asset::{AssetDescriptor, AssetHolder};
 use crate::asset::prelude::AssetUnloaded;
 use crate::render;
 use crate::render::transfer::{BufferTransferRequest, TransferRequest};
@@ -12,20 +14,17 @@ use dagal::resource;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
 use dare_containers::prelude as containers;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use rayon::prelude::*;
 use std::any::TypeId;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-pub struct AssetContainerSlot<T: 'static + AssetDescriptor> {
-    ttl: usize,
-    t: usize,
-    holder: AssetHolder<T>,
-}
-
 /// Quick access to the underlying asset container type
-pub type AssetContainer<T: AssetDescriptor> = DashMap<T::Metadata, AssetContainerSlot<T>>;
+pub type AssetContainer<T: AssetDescriptor> = DashMap<u64, slot::AssetContainerSlot<T>>;
 
 #[derive(Debug)]
 pub struct AssetManagerInner {
@@ -87,25 +86,30 @@ impl<A: Allocator + 'static> AssetManager<A> {
     pub fn insert<T: 'static + AssetDescriptor + PartialEq>(
         &mut self,
         metadata: T::Metadata,
-    ) -> Result<()> {
+    ) -> Result<slot::AssetContainerSlot<T>> {
         if !self.cache.contains_key::<AssetContainer<T>>() {
             self.cache
                 .insert::<AssetContainer<T>>(AssetContainer::new());
         }
-
-        self.cache
+        let asset_holder = AssetHolder::new(metadata.clone());
+        let mut hash = std::hash::DefaultHasher::new();
+        metadata.hash(&mut hash);
+        let hash = hash.finish();
+        let container_slot = self.cache
             .with_mut::<AssetContainer<T>, _, _>(|map| {
+                let container_slot: slot::AssetContainerSlot<T> = slot::AssetContainerSlot {
+                    ttl: self.inner.ttl,
+                    t: Arc::new(AtomicUsize::new(self.inner.ttl)),
+                    holder: asset_holder.clone(),
+                };
                 map.insert(
-                    metadata.clone(),
-                    AssetContainerSlot {
-                        ttl: self.inner.ttl,
-                        t: self.inner.ttl,
-                        holder: AssetHolder::new(metadata),
-                    },
+                    hash,
+                    container_slot.clone(),
                 );
-                Ok(())
+                Ok::<slot::AssetContainerSlot<T>, anyhow::Error>(container_slot)
             })
-            .unwrap()
+            .unwrap()?;
+        Ok(container_slot)
     }
 
     /// Removes an asset entirely from cache, but may still exist on GPU memory until it becomes unused
@@ -117,8 +121,11 @@ impl<A: Allocator + 'static> AssetManager<A> {
         if !self.cache.contains_key::<AssetContainer<T>>() {
             None
         } else {
+            let mut hash = std::hash::DefaultHasher::new();
+            metadata.hash(&mut hash);
+            let hash = hash.finish();
             self.cache
-                .with_mut::<AssetContainer<T>, _, _>(|map| map.remove(metadata))
+                .with_mut::<AssetContainer<T>, _, _>(|map| map.remove(&hash))
                 .flatten()
                 .map(|tuple| tuple.1.holder)
         }
@@ -134,7 +141,26 @@ impl<A: Allocator + 'static> AssetManager<A> {
         } else {
             self.cache
                 .with_mut::<AssetContainer<T>, _, _>(|map| {
-                    map.get(metadata).map(|resource| resource.holder.clone())
+                    let mut hash = std::hash::DefaultHasher::new();
+                    metadata.hash(&mut hash);
+                    let hash = hash.finish();
+                    map.get(&hash).map(|resource| resource.get_holder().clone() )
+                })
+                .flatten()
+        }
+    }
+
+    /// Gets metadata from hashable
+    pub fn get_metadata_from_ref<T: 'static + AssetDescriptor>(
+        &self,
+        slot: &slot::WeakAssetSlotRef<T>,
+    ) -> Option<T::Metadata> {
+        if !self.cache.contains_key::<AssetContainer<T>>() {
+            None
+        } else {
+            self.cache
+                .with_mut::<AssetContainer<T>, _, _>(|map| {
+                    map.get(&slot.hash).map(|resource| resource.get_holder().metadata.clone() )
                 })
                 .flatten()
         }
@@ -145,11 +171,11 @@ impl<A: Allocator + 'static> AssetManager<A> {
         let _ = self.cache.iter().map(|map| {
             if let Some(map) = map.downcast_ref::<AssetContainer<asset::Buffer<A>>>() {
                 for mut container in map.iter_mut() {
-                    container.t -= 1;
+                    container.t.fetch_sub(1, Ordering::AcqRel);
                 }
             } else if let Some(map) = map.downcast_ref::<AssetContainer<asset::Image<A>>>() {
                 for mut container in map.iter_mut() {
-                    container.t -= 1;
+                    container.t.fetch_sub(1, Ordering::AcqRel);
                 }
             }
         });
@@ -160,24 +186,26 @@ impl<A: Allocator + 'static> AssetManager<A> {
         let _ = self.cache.iter().map(|map| async move {
             if let Some(map) = map.downcast_ref::<AssetContainer<asset::Buffer<A>>>() {
                 for container in map.iter_mut() {
-                    if container.t == 0 {
+                    let t = container.t.fetch_add(0, Ordering::Acquire);
+                    if t == 0 {
                         let mut write_guard = container.holder.state.write().await;
                         let asset = match &*write_guard {
-                            AssetState::Loaded(asset) => Arc::downgrade(asset),
+                            asset::AssetState::Loaded(asset) => Arc::downgrade(asset),
                             _ => unimplemented!(),
                         };
-                        *write_guard = AssetState::Unloading(asset);
+                        *write_guard = asset::AssetState::Unloading(asset);
                     }
                 }
             } else if let Some(map) = map.downcast_ref::<AssetContainer<asset::Image<A>>>() {
                 for container in map.iter_mut() {
-                    if container.t == 0 {
+                    let t = container.t.fetch_add(0, Ordering::Acquire);
+                    if t == 0 {
                         let mut write_guard = container.holder.state.write().await;
                         let asset = match &*write_guard {
-                            AssetState::Loaded(asset) => Arc::downgrade(asset),
+                            asset::AssetState::Loaded(asset) => Arc::downgrade(asset),
                             _ => unimplemented!(),
                         };
-                        *write_guard = AssetState::Unloading(asset);
+                        *write_guard = asset::AssetState::Unloading(asset);
                     }
                 }
             }
@@ -197,11 +225,14 @@ impl<A: Allocator + 'static> AssetManager<A> {
             Err(anyhow::Error::new(asset::error::AssetMetadataNone)),
             |a| Ok(a),
         )?;
+        let mut hasher = std::hash::DefaultHasher::new();
+        metadata.hash(&mut hasher);
+        let hash = hasher.finish();
         let state = container
             .value()
             .downcast_ref::<AssetContainer<T>>()
             .unwrap()
-            .get(metadata)
+            .get(&hash)
             .map_or(
                 Err(anyhow::Error::new(asset::error::AssetMetadataNone)),
                 |slot| Ok(slot.holder.state.clone()),
@@ -209,7 +240,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
         let state_guard = state.read().await;
         let resource: Option<Arc<<T::Metadata as AssetUnloaded>::AssetLoaded>> = match &*state_guard
         {
-            AssetState::Unloaded(metadata) => match &load_info {
+            asset::AssetState::Unloaded(metadata) => match &load_info {
                 Some(_) => None,
                 None => {
                     return Err::<Arc<T::Loaded>, anyhow::Error>(anyhow::Error::new(
@@ -217,7 +248,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                     ))
                 }
             },
-            AssetState::Loading(loading) => {
+            asset::AssetState::Loading(loading) => {
                 let mut loading = loading.clone();
                 loading.changed().await?;
                 let image_option = loading.borrow_and_update();
@@ -228,8 +259,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
                     Some(loaded) => return Ok::<Arc<T::Loaded>, anyhow::Error>(loaded.clone()),
                 };
             }
-            AssetState::Loaded(loaded) => return Ok(loaded.clone()),
-            AssetState::Unloading(unloading) => match unloading.upgrade() {
+            asset::AssetState::Loaded(loaded) => return Ok(loaded.clone()),
+            asset::AssetState::Unloading(unloading) => match unloading.upgrade() {
                 None => None,
                 Some(loaded) => Some(loaded.clone()),
             },
@@ -243,7 +274,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
             None => {
                 let mut state_guard = state.write().await;
                 let (send, recv) = tokio::sync::watch::channel(None);
-                *state_guard = AssetState::Loading(recv);
+                *state_guard = asset::AssetState::Loading(recv);
                 drop(state_guard);
                 let resource = metadata.load(load_info.unwrap(), send).await?;
                 resource
@@ -251,7 +282,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
         };
         // update type
         let mut state_guard = state.write().await;
-        *state_guard = AssetState::Loaded(resource.clone());
+        *state_guard = asset::AssetState::Loaded(resource.clone());
         drop(state_guard);
         Ok(resource)
     }
@@ -278,20 +309,23 @@ impl<A: Allocator + 'static> AssetManager<A> {
             .unwrap();
         let mut allocator = self.allocator.clone();
 
-        let res: Result<Arc<resource::Buffer<A>>> = match container.get_mut(&load_request.metadata)
+        let mut hash = std::hash::DefaultHasher::new();
+        load_request.metadata.hash(&mut hash);
+        let hash = hash.finish();
+        let res: Result<Arc<resource::Buffer<A>>> = match container.get_mut(&hash)
         {
             None => unimplemented!(),
             Some(slot) => {
                 let metadata = slot.holder.metadata.clone();
                 let slot = slot.holder.state.clone();
                 let state = slot.read().await;
-                if let AssetState::Unloaded(_) = &*state {
+                if let asset::AssetState::Unloaded(_) = &*state {
                     drop(state);
                     let (sender, reciever) =
                         tokio::sync::watch::channel::<Option<Arc<resource::Buffer<A>>>>(None);
                     {
                         let mut slot_write_guard = slot.write().await;
-                        *slot_write_guard = AssetState::Loading(reciever.clone())
+                        *slot_write_guard = asset::AssetState::Loading(reciever.clone())
                     }
 
                     let mut chunk_buffer =
@@ -344,29 +378,29 @@ impl<A: Allocator + 'static> AssetManager<A> {
                     let buffer = Arc::new(buffer);
                     {
                         let mut slot_write_guard = slot.write().await;
-                        if let AssetState::Loading(_) = &*slot_write_guard {
+                        if let asset::AssetState::Loading(_) = &*slot_write_guard {
                             sender.send(Some(buffer.clone()))?;
                         }
-                        *slot_write_guard = AssetState::Loaded(buffer.clone());
+                        *slot_write_guard = asset::AssetState::Loaded(buffer.clone());
                     }
                     Ok(buffer)
-                } else if let AssetState::Loading(notify) = &*state {
+                } else if let asset::AssetState::Loading(notify) = &*state {
                     let mut notify = notify.clone();
                     drop(state);
                     notify.changed().await?;
                     let x = Ok(notify.borrow().clone().unwrap().clone());
                     x
-                } else if let AssetState::Loaded(buffer) = &*state {
+                } else if let asset::AssetState::Loaded(buffer) = &*state {
                     Ok(buffer.clone())
-                } else if let AssetState::Unloading(buffer) = &*state {
+                } else if let asset::AssetState::Unloading(buffer) = &*state {
                     let buffer = buffer.clone();
                     drop(state);
                     let mut slot_write_guard = slot.write().await;
                     if let Some(buffer) = buffer.upgrade() {
-                        *slot_write_guard = AssetState::Loaded(buffer.clone());
+                        *slot_write_guard = asset::AssetState::Loaded(buffer.clone());
                         Ok(buffer.clone())
                     } else {
-                        *slot_write_guard = AssetState::Unloaded(metadata.clone());
+                        *slot_write_guard = asset::AssetState::Unloaded(metadata.clone());
                         Ok(self.retrieve_buffer(load_request).await?)
                     }
                 } else {

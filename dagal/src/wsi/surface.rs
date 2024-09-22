@@ -4,7 +4,7 @@ use ash::vk;
 use derivative::Derivative;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -141,6 +141,22 @@ impl Surface {
     /// Gets all extensions available
     pub fn get_extension(&self) -> &ash::khr::surface::Instance {
         &self.ext
+    }
+}
+
+impl AsRaw for Surface {
+    type RawType = vk::SurfaceKHR;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

@@ -1,6 +1,7 @@
 use ash;
 use ash::vk;
 use std::ops::Deref;
+use crate::traits::AsRaw;
 
 #[derive(Clone, Debug)]
 pub struct PhysicalDevice {
@@ -48,6 +49,22 @@ impl PhysicalDevice {
             properties: properties_2.properties,
             available_queue_families: queue_families,
         }
+    }
+}
+
+impl AsRaw for PhysicalDevice {
+    type RawType = vk::PhysicalDevice;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
     }
 }
 

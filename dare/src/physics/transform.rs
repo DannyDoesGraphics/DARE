@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, Component)]
+#[derive(Clone, Debug, PartialEq, Default, Component)]
 pub struct Transform {
     pub scale: glam::Vec3,
     pub rotation: glam::Quat,

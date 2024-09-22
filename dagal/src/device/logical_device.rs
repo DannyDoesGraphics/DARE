@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock, Weak};
 
 use crate::device::physical_device::PhysicalDevice;
 use crate::resource::traits::Resource;
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 use crate::DagalError;
 use anyhow::Result;
 use ash;
