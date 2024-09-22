@@ -2,21 +2,73 @@ use crate::prelude::{Container, Slot};
 use anyhow::Result;
 use derivative::Derivative;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::sync::{Arc, Weak};
+
+pub trait DeferredDeletionSlot<T> {
+    fn get_slot(&self) -> &Slot<DeferredDeletionSlotInner<T>>;
+}
 
 #[derive(Derivative)]
 #[derivative(Debug, PartialEq, Eq, Hash)]
-pub struct DeferredDeletionSlot<T> {
+pub struct WeakDeferredDeletionSlot<T> {
     #[derivative(Hash = "ignore", Debug = "ignore", PartialEq = "ignore")]
     pub item: Weak<T>,
     pub slot: Slot<DeferredDeletionSlotInner<T>>,
 }
 
-impl<T> Clone for DeferredDeletionSlot<T> {
+impl<T> Clone for WeakDeferredDeletionSlot<T> {
     fn clone(&self) -> Self {
         Self {
             item: self.item.clone(),
             slot: self.slot.clone(),
+        }
+    }
+}
+
+impl<T> DeferredDeletionSlot<T> for WeakDeferredDeletionSlot<T> {
+    fn get_slot(&self) -> &Slot<DeferredDeletionSlotInner<T>> {
+        &self.slot
+    }
+}
+
+impl<T> WeakDeferredDeletionSlot<T> {
+    pub fn upgrade(&self) -> Option<StrongDeferredDeletionSlot<T>> {
+        Some(StrongDeferredDeletionSlot {
+            item: Weak::upgrade(&self.item.clone())?,
+            slot: self.slot.clone(),
+        })
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug, PartialEq, Eq, Hash)]
+pub struct StrongDeferredDeletionSlot<T> {
+    #[derivative(Hash = "ignore", Debug = "ignore", PartialEq = "ignore")]
+    pub item: Arc<T>,
+    pub slot: Slot<DeferredDeletionSlotInner<T>>,
+}
+
+impl<T> Clone for StrongDeferredDeletionSlot<T> {
+    fn clone(&self) -> Self {
+        Self {
+            item: self.item.clone(),
+            slot: self.slot.clone(),
+        }
+    }
+}
+
+impl<T> DeferredDeletionSlot<T> for StrongDeferredDeletionSlot<T> {
+    fn get_slot(&self) -> &Slot<DeferredDeletionSlotInner<T>> {
+        &self.slot
+    }
+}
+
+impl<T> StrongDeferredDeletionSlot<T> {
+    pub fn downgrade(&self) -> WeakDeferredDeletionSlot<T> {
+        WeakDeferredDeletionSlot {
+            slot: self.slot.clone(),
+            item: Arc::downgrade(&self.item),
         }
     }
 }
@@ -58,14 +110,14 @@ impl<
     }
 
     /// If no `t` parameter is specified, defaults to `ttl` parameter
-    pub fn insert(&mut self, element: T, ttl: usize, t: Option<usize>) -> DeferredDeletionSlot<T> {
+    pub fn insert(&mut self, element: T, ttl: usize, t: Option<usize>) -> WeakDeferredDeletionSlot<T> {
         let element = Arc::new(element);
         let slot = self.container.insert(DeferredDeletionSlotInner {
             entry: element.clone(),
             ttl,
             t: t.unwrap_or(ttl),
         });
-        DeferredDeletionSlot {
+        WeakDeferredDeletionSlot {
             item: Arc::downgrade(&element),
             slot,
         }
