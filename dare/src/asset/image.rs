@@ -20,6 +20,7 @@ use std::ptr;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 
+#[derive(Debug, Clone)]
 pub struct Image<A: Allocator> {
     _marker: PhantomData<A>,
 }

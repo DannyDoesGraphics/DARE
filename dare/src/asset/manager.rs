@@ -33,7 +33,7 @@ pub struct AssetManagerInner {
 }
 
 /// Manages loading assets in and out of the gpu
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bevy_ecs::prelude::Resource)]
 pub struct AssetManager<A: Allocator> {
     cache: Arc<containers::ErasedStorageDashMap>,
     /// Allocator
@@ -234,7 +234,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                 Some(loaded) => Some(loaded.clone()),
             },
         };
-        if resource.is_none() && load_info.is_none() {
+        if load_info.is_none() {
             return Err(anyhow::Error::new(asset::error::AssetNotLoaded));
         }
         drop(state_guard);

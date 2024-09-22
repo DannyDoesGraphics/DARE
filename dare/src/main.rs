@@ -33,6 +33,7 @@ mod ray_tracing;
 mod render;
 mod traits;
 mod util;
+mod engine;
 
 const FRAME_OVERLAP: usize = 2;
 

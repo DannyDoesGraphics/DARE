@@ -1,5 +1,5 @@
 pub use super::deferred_deletion::{
-    DeferredDeletion, DeferredDeletionSlot, DeferredDeletionSlotInner,
+    DeferredDeletion, DeferredDeletionSlot, WeakDeferredDeletionSlot, StrongDeferredDeletionSlot, DeferredDeletionSlotInner,
 };
 pub use super::erased_storage::*;
 pub use super::error;
