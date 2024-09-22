@@ -5,6 +5,64 @@ use std::hash::Hash;
 use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 
+pub trait MetadataGetter<A: AssetDescriptor> {
+    /// Get reference to the asset's metadata
+    fn get_metadata(&self) -> &A::Metadata;
+}
+
+/// Simply only contains an asset's metadata as well it's weak reference
+#[derive(Debug)]
+pub struct WeakAssetRef<A: AssetDescriptor> {
+    pub metadata: A::Metadata,
+    pub state: Weak<A::Loaded>,
+}
+
+impl<A: AssetDescriptor> Clone for WeakAssetRef<A> {
+    fn clone(&self) -> Self {
+        Self {
+            metadata: self.metadata.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
+impl<A: AssetDescriptor> MetadataGetter<A> for WeakAssetRef<A> {
+    fn get_metadata(&self) -> &A::Metadata {
+        &self.metadata
+    }
+}
+
+impl<A: AssetDescriptor> WeakAssetRef<A> {
+    pub fn upgrade(&self) -> Option<StrongAssetRef<A>> {
+        Some(StrongAssetRef {
+            metadata: self.metadata.clone(),
+            state: Weak::upgrade(&self.state)?,
+        })
+    }
+}
+
+/// Only contains an asset's metadata as well it's strong reference
+#[derive(Debug)]
+pub struct StrongAssetRef<A: AssetDescriptor> {
+    pub metadata: A::Metadata,
+    pub state: Arc<A::Loaded>,
+}
+
+impl<A: AssetDescriptor> MetadataGetter<A> for StrongAssetRef<A> {
+    fn get_metadata(&self) -> &A::Metadata {
+        &self.metadata
+    }
+}
+
+impl<A: AssetDescriptor> Clone for StrongAssetRef<A> {
+    fn clone(&self) -> Self {
+        Self {
+            metadata: self.metadata.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
 /// Holds an asset and tracks its loaded state and metadata
 #[derive(Debug)]
 pub struct AssetHolder<A: AssetDescriptor> {
@@ -43,7 +101,7 @@ pub trait AssetDescriptor {
     type Metadata: AssetUnloaded<AssetLoaded = Self::Loaded>;
 }
 
-pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone {
+pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone + Debug {
     type AssetLoaded;
     type Chunk;
     type StreamInfo;
