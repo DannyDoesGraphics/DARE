@@ -39,7 +39,7 @@ impl Swapchain {
         let handle = unsafe { ext.create_swapchain(swapchain_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkSwapchainKHR {:p}", handle);
+        tracing::trace!("Creating VkSwapchainKHR {:p}", handle);
 
         Ok(Self {
             handle,
@@ -142,7 +142,7 @@ impl Swapchain {
 impl Destructible for Swapchain {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkSwapchainKHR {:p}", self.handle);
+        tracing::trace!("Destroying VkSwapchainKHR {:p}", self.handle);
 
         unsafe {
             self.ext.destroy_swapchain(self.handle, None);

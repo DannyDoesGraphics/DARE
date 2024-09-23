@@ -1,3 +1,5 @@
+mod concurrency;
+
 #[cfg(feature = "gpu-allocator")]
 pub use gpu_allocator;
 #[cfg(feature = "winit")]

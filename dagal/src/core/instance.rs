@@ -22,7 +22,7 @@ impl Instance {
         let instance = unsafe { entry.create_instance(&instance_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkInstance {:p}", instance.handle());
+        tracing::trace!("Creating VkInstance {:p}", instance.handle());
 
         Ok(Self { entry, instance })
     }
@@ -41,7 +41,7 @@ impl Instance {
 impl Destructible for Instance {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkInstance {:p}", self.instance.handle());
+        tracing::trace!("Destroying VkInstance {:p}", self.instance.handle());
 
         unsafe {
             self.instance.destroy_instance(None);

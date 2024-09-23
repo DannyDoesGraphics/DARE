@@ -16,7 +16,7 @@ pub struct ComputePipeline {
 impl Destructible for ComputePipeline {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkPipeline {:p}", self.handle);
+        tracing::trace!("Destroying VkPipeline {:p}", self.handle);
 
         unsafe {
             self.device.get_handle().destroy_pipeline(self.handle, None);

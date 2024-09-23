@@ -1,4 +1,5 @@
 use ash::vk;
+use anyhow::Result;
 
 use crate::bootstrap::QueueAllocation;
 
@@ -25,70 +26,66 @@ impl QueueRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct QueueFamily {
+    /// We assume from [free_index, family.queues] are free
+    free_index: u32,
+    family: vk::QueueFamilyProperties,
+    family_index: usize,
+}
+
 /// Determine the correct slotting of queues
+///
+/// Returns a vector containing a 1:1 mapping to the [`queue_requests`] parameter
 pub(crate) fn determine_queue_slotting(
-    queue_families: Vec<vk::QueueFamilyProperties>,
+    mut queue_families: Vec<vk::QueueFamilyProperties>,
     queue_requests: Vec<QueueRequest>,
-) -> anyhow::Result<Vec<Vec<QueueAllocation>>> {
+) -> Result<Vec<Vec<QueueAllocation>>> {
     if queue_requests.is_empty() {
         return Ok(Vec::new());
     }
-    // (claimed_by_dedicated, claimed_by_non_dedicated)
-    let mut queue_families: Vec<(u32, u32, vk::QueueFamilyProperties)> = queue_families
-        .into_iter()
-        .map(|queue| (0u32, 0u32, queue))
-        .collect();
     //let (mut dedicated, mut non_dedicated): (Vec<crate::bootstrap::RequestedQueue>, Vec<crate::bootstrap::RequestedQueue>) = queue_requests.into_iter().partition(|queue| queue.dedicated);
     // A pair set to queue_families but contains lists of allocations
     let mut allocations: Vec<Vec<QueueAllocation>> = Vec::new();
     allocations.resize(queue_requests.len(), Vec::new());
-    let mut counts: Vec<u64> = queue_requests
-        .iter()
-        .map(|queue| queue.count as u64)
-        .collect();
 
-    // First, allocate dedicated queues
-    for (queue_index, (queue, queue_count)) in
-        queue_requests.iter().zip(counts.iter_mut()).enumerate()
-    {
-        if !queue.dedicated {
-            unimplemented!();
-        }
-        for (family_index, (dedicated_claim, non_dedicated_claim, queue_family)) in queue_families
-            .iter_mut()
-            .enumerate()
-            .filter(|(_, (_, _, queue_family))| {
-                queue_family.queue_flags & queue.family_flags == queue.family_flags
-            })
-        {
-            let taken_slots: u64 = *dedicated_claim as u64 + *non_dedicated_claim as u64;
-            let free_slots: u64 = (queue_family.queue_count as u64 - taken_slots)
-                .min(*queue_count); // # of slots that are free for a queue
-            if free_slots > 0 {
-                *dedicated_claim += free_slots as u32; // claim
-                *queue_count -= free_slots;
-                // allocate
-                allocations
-                    .get_mut(queue_index)
-                    .unwrap()
-                    .push(QueueAllocation {
-                        family_index: family_index as u32,
-                        index: taken_slots as u32,
-                        count: free_slots as u32,
-                    });
-            }
-            if *queue_count == 0 {
-                break;
+    let mut queue_families = queue_families.iter().enumerate().map(|(family_index, family)| QueueFamily {
+        free_index: 0,
+        family: family.clone(),
+        family_index,
+    }).collect::<Vec<QueueFamily>>();
+    queue_requests.iter().map(|request| {
+        // recursively find suitable families
+        let mut remaining_queues = request.count;
+        let mut suitable_families: Vec<QueueAllocation> = Vec::new();
+        while remaining_queues > 0 {
+            // amount taken from the family
+            let suitable_family = queue_families.iter_mut().find_map(|mut family| {
+                if family.family.queue_flags & request.family_flags == request.family_flags && family.free_index < family.family.queue_count {
+                    // do not take more queues than what exists or what we need
+                    let take_amount = request.count.min(family.family.queue_count - family.free_index).min(remaining_queues);
+                    family.free_index += take_amount;
+                    remaining_queues -= take_amount;
+                    Some(QueueAllocation {
+                            family_index: family.family_index as u32,
+                            index: family.free_index - take_amount,
+                            count: take_amount,
+                        })
+                } else {
+                    None
+                }
+            });
+            match suitable_family {
+                None => {
+                    return Err(anyhow::Error::from(crate::DagalError::ImpossibleQueue))
+                }
+                Some(family) => {
+                    suitable_families.push(family);
+                }
             }
         }
-        if *queue_count > 0 {
-            return Err(anyhow::Error::from(
-                crate::error::DagalError::ImpossibleQueue,
-            )); // Impossible queue was allocated
-        }
-    }
-
-    Ok(allocations)
+        Ok(suitable_families)
+    }).collect::<Result<Vec<Vec<QueueAllocation>>>>()
 }
 
 #[cfg(test)]

@@ -180,7 +180,8 @@ impl SwapchainBuilder {
     /// [`None`] and 0 represents using the minimum amount from [`VkSurfaceCapabilitiesKHR`](vk::SurfaceCapabilitiesKHR)
     pub fn min_image_count(mut self, preferred_count: Option<u32>) -> Self {
         if let Some(preferred_count) = preferred_count {
-            assert!(preferred_count > self.surface_capabilities.min_image_count);
+            assert!(preferred_count >= self.surface_capabilities.min_image_count);
+            assert!(preferred_count <= self.surface_capabilities.max_image_count)
         }
         self.preferred_image_counts = preferred_count.unwrap_or(0);
         self

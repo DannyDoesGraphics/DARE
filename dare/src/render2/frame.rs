@@ -6,32 +6,27 @@ use dagal::ash::vk;
 use anyhow::Result;
 use dagal::resource::traits::Resource;
 use bevy_ecs::prelude as becs;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use crate::render2::surface_context::SurfaceContext;
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
 pub struct Frame {
     // Image that is being drawn to is here
-    pub draw_image: Arc<dagal::resource::Image<GPUAllocatorImpl>>,
-    pub render_fence: Arc<dagal::sync::Fence>,
-    pub render_semaphore: Arc<dagal::sync::BinarySemaphore>,
-    pub swapchain_semaphore: Arc<dagal::sync::BinarySemaphore>,
+    pub draw_image: dagal::resource::Image<GPUAllocatorImpl>,
+    pub render_fence: dagal::sync::Fence,
+    pub render_semaphore: dagal::sync::BinarySemaphore,
+    pub swapchain_semaphore: dagal::sync::BinarySemaphore,
     pub queue: dagal::device::Queue,
     pub image_extent: vk::Extent2D,
 
     // cmd buffers
     pub command_pool: dagal::command::CommandPool,
-    pub command_buffer: RwLock<dagal::command::CommandBufferState>,
+    pub command_buffer: dagal::command::CommandBufferState,
 }
 
 impl Frame {
-    pub async fn new(window_context: &super::window_context::WindowContext, image_number: Option<usize>) -> Result<Self> {
-        let surface_guard = window_context.surface_context.read().await;
-        let surface_context = match &*surface_guard {
-            None => Err(anyhow::anyhow!("Expected a valid surface, got None")),
-            Some(sc) => Ok(sc)
-        }?;
+    pub async fn new(surface_context: &SurfaceContext, present_queue: &dagal::device::Queue, image_number: Option<usize>) -> Result<Self> {
 
         let mut allocator = surface_context.allocator.clone();
         let draw_image = dagal::resource::Image::new(
@@ -60,7 +55,7 @@ impl Frame {
                         | vk::ImageUsageFlags::STORAGE,
                     sharing_mode: vk::SharingMode::EXCLUSIVE,
                     queue_family_index_count: 1,
-                    p_queue_family_indices: &window_context.present_queue.get_family_index(),
+                    p_queue_family_indices: &present_queue.get_family_index(),
                     initial_layout: vk::ImageLayout::UNDEFINED,
                     _marker: Default::default(),
                 },
@@ -82,21 +77,21 @@ impl Frame {
         // make pools and buffers
         let command_pool = dagal::command::CommandPool::new(
             allocator.device(),
-            &window_context.present_queue,
+            present_queue,
             vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
         )?;
         let command_buffer = dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
-
+        println!("FRAME CREATED");
         Ok(Frame {
-            draw_image: Arc::new(draw_image),
-            render_fence: Arc::new(render_fence),
-            render_semaphore: Arc::new(render_semaphore),
-            swapchain_semaphore: Arc::new(swapchain_semaphore),
-            queue: window_context.present_queue.clone(),
+            draw_image,
+            render_fence,
+            render_semaphore,
+            swapchain_semaphore,
+            queue: present_queue.clone(),
             image_extent: surface_context.image_extent,
 
             command_pool,
-            command_buffer: RwLock::new(command_buffer),
+            command_buffer,
         })
     }
 

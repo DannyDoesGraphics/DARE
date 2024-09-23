@@ -31,7 +31,7 @@ impl Shader {
         let handle = unsafe { device.get_handle().create_shader_module(&shader_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
-        trace!("Creating VkShaderModule {:p}", handle);
+        tracing::trace!("Creating VkShaderModule {:p}", handle);
 
         Ok(Self { handle, device })
     }
@@ -44,7 +44,7 @@ impl Shader {
 impl Destructible for Shader {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        trace!("Destroying VkShaderModule {:p}", self.handle);
+        tracing::trace!("Destroying VkShaderModule {:p}", self.handle);
 
         unsafe {
             self.device

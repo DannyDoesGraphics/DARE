@@ -1,5 +1,6 @@
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -9,6 +10,7 @@ use dagal::traits::AsRaw;
 use dagal::winit;
 use bevy_ecs::prelude as becs;
 use tokio::sync::RwLock;
+use dagal::ash::vk::Handle;
 
 pub struct RenderContextCreateInfo {
     pub(crate) rdh: dagal::raw_window_handle::RawDisplayHandle,
@@ -23,23 +25,30 @@ pub struct RenderContextConfiguration {
     pub(crate) target_extent: vk::Extent2D,
 }
 
+#[derive(Debug)]
 pub struct RenderContextInner {
-    pub instance: dagal::core::Instance,
-    pub physical_device: dagal::device::PhysicalDevice,
-    pub device: dagal::device::LogicalDevice,
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub configuration: RenderContextConfiguration,
     pub window_context: Arc<super::window_context::WindowContext>,
 
-    pub configuration: RenderContextConfiguration,
+    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub device: dagal::device::LogicalDevice,
+    pub physical_device: dagal::device::PhysicalDevice,
+    pub instance: ManuallyDrop<dagal::core::Instance>,
 }
+
 impl Drop for RenderContextInner {
     fn drop(&mut self) {
-        panic!("FUCK");
+        while Arc::strong_count(&self.window_context) >= 2 {}
+        unsafe {
+            self.device.get_handle()
+                .device_wait_idle().unwrap()
+        }
+        tracing::trace!("Dropped RenderContextInner");
     }
 }
 
 /// Describes the render context
-#[derive(Clone, becs::Resource)]
+#[derive(Debug, Clone, becs::Resource)]
 pub struct RenderContext {
     pub inner: Arc<RenderContextInner>,
 }
@@ -61,9 +70,7 @@ impl RenderContext {
 
         // Make physical device
         let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
-            .add_required_extension(
-                dagal::ash::khr::swapchain::NAME.as_ptr()
-            )
+            .add_required_extension(dagal::ash::khr::swapchain::NAME.as_ptr())
             .set_minimum_vulkan_version((1,3,0))
             .add_required_queue(dagal::bootstrap::QueueRequest {
                 family_flags: vk::QueueFlags::GRAPHICS,
@@ -71,9 +78,8 @@ impl RenderContext {
                 dedicated: true,
             })
             .select(&instance)?;
-        let physical_device = physical_device.handle;
         // Make logical device
-        let device = dagal::bootstrap::LogicalDeviceBuilder::new(physical_device.clone())
+        let device = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
             .add_queue_allocation(dagal::bootstrap::QueueRequest {
                 family_flags: vk::QueueFlags::GRAPHICS,
                 count: 1,
@@ -109,10 +115,10 @@ impl RenderContext {
                 ..Default::default()
             })
             .build(&instance)?;
-
+        let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         // Create allocator
         let allocator = dagal::allocators::ArcAllocator::new(
-            dagal::allocators::GPUAllocatorImpl::new(
+            GPUAllocatorImpl::new(
                 gpu_allocator::vulkan::AllocatorCreateDesc {
                     instance: instance.get_instance().clone(),
                     device: device.get_handle().clone(),
@@ -141,27 +147,25 @@ impl RenderContext {
             None,
             Some(1)
         )?.pop().unwrap();
-        let window_context = Arc::new(super::window_context::WindowContext::new(
+        let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo {
                 present_queue,
-                window: None,
             }
-        ));
+        );
 
         Ok(Self {
             inner: Arc::new(RenderContextInner {
-                instance,
+                instance: ManuallyDrop::new(instance),
                 physical_device,
                 device,
                 allocator,
-                window_context,
+                window_context: Arc::new(window_context),
                 configuration: ci.configuration,
             })
         })
     }
 
-    pub async fn build_surface(&self, window: Arc<winit::window::Window>) -> Result<()> {
-        *self.inner.window_context.window.write().await = Some(window.clone());
+    pub async fn build_surface(&self, window: &winit::window::Window) -> Result<()> {
         self.inner.window_context
             .build_surface(super::surface_context::SurfaceContextCreateInfo {
                 instance: & self.inner.instance,
@@ -171,5 +175,9 @@ impl RenderContext {
                 frames_in_flight: Some(self.inner.configuration.target_frames_in_flight),
             }).await?;
         Ok(())
+    }
+
+    pub fn strong_count(&self) -> usize {
+        Arc::strong_count(&self.inner)
     }
 }

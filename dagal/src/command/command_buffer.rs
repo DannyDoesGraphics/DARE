@@ -322,6 +322,16 @@ impl CmdBuffer for CommandBufferState {
 }
 
 impl CommandBufferState {
+    pub fn begin(&mut self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
+        *self = Self::from(match self {
+            CommandBufferState::Recording(r) => return Err(anyhow::anyhow!("Expected command buffer state to be in Ready, got Recording")),
+            CommandBufferState::Executable(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Ready, got Executable")),
+            CommandBufferState::Ready(cmd) => unsafe {
+                Ok::<CommandBufferRecording, anyhow::Error>(cmd.clone().begin(flags).unwrap())
+            },
+        }?);
+        Ok(())
+    }
 
 
     // Recording
@@ -330,7 +340,8 @@ impl CommandBufferState {
             CommandBufferState::Recording(r) => unsafe {
                 Ok::<CommandBufferExecutable, anyhow::Error>(r.clone().end()?)
             },
-            _ => return Err(anyhow::anyhow!("Command buffer state failed"))
+            CommandBufferState::Executable(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Recording, got Executable")),
+            CommandBufferState::Ready(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Recording, got Ready")),
         }?);
         Ok(())
     }
@@ -345,7 +356,8 @@ impl CommandBufferState {
             CommandBufferState::Executable(r) => unsafe {
                 Ok::<CommandBuffer, anyhow::Error>(r.clone().submit(queue, submit_infos, fence).unwrap())
             },
-            _ => return Err(anyhow::anyhow!("Command buffer state failed"))
+            CommandBufferState::Recording(_) => return Err(anyhow::anyhow!("Command buffer state expected to be in Executable, got Recording")),
+            CommandBufferState::Ready(_) => return Err(anyhow::anyhow!("Command buffer state expected to be in Executable, got Ready")),
         }?);
         Ok(())
     }

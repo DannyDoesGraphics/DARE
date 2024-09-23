@@ -1200,6 +1200,8 @@ impl winit::application::ApplicationHandler for App {
 async fn main() {
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::TRACE)
+        .with_file(true)
+        .with_line_number(true)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     /*

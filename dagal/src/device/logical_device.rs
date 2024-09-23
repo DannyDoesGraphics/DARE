@@ -1,7 +1,8 @@
+use std::backtrace;
 use std::collections::HashSet;
 use std::ffi::c_char;
 use std::sync::{Arc, RwLock, Weak};
-
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use crate::device::physical_device::PhysicalDevice;
 use crate::resource::traits::Resource;
 use crate::traits::{AsRaw, Destructible};
@@ -87,7 +88,7 @@ impl Drop for LogicalDeviceInner {
 /// LogicalDevice encloses [`LogicalDeviceInner`] as it reference counts it using [`Arc`]. This
 /// makes lifetime management easier. However, those who opt into deletion stack, may still be
 /// able to manually delete the [`LogicalDevice`] using the [`Destructible`] trait.
-#[derive(Clone, Derivative, PartialEq, Eq)]
+#[derive(Derivative, PartialEq, Eq)]
 #[derivative(Debug)]
 pub struct LogicalDevice {
     #[derivative(Debug = "ignore")]
@@ -291,6 +292,11 @@ impl LogicalDevice {
             inner: Arc::downgrade(&self.inner),
         }
     }
+
+    /// Get strong ref count
+    pub fn strong_count(&self) -> usize {
+        Arc::strong_count(&self.inner)
+    }
 }
 
 impl Destructible for LogicalDevice {
@@ -304,6 +310,14 @@ impl Destructible for LogicalDevice {
         let device = self.get_handle().clone();
         unsafe {
             device.destroy_device(None);
+        }
+    }
+}
+
+impl Clone for LogicalDevice {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
         }
     }
 }

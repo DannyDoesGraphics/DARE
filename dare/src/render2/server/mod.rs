@@ -1,5 +1,7 @@
 pub mod send_types;
 
+use std::cmp::PartialEq;
+use crate::render2::prelude as render;
 use crate::render2::prelude::RenderServerRequests;
 use crate::render2::server::send_types::RenderServerPacket;
 use anyhow::Result;
@@ -8,36 +10,37 @@ use bevy_ecs::prelude::IntoSystemConfigs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tokio::sync::mpsc::error::TryRecvError;
+use dagal::winit;
 
 #[derive(Debug, Clone)]
 pub struct RenderServer {
-    /// Order a frame to be rendered
-    frame_sender: tokio::sync::mpsc::Sender<tokio::sync::Notify>,
+    /// A ref to render context
+    render_context: render::contexts::RenderContext,
     /// Order a new window be created
     new_sender: tokio::sync::mpsc::Sender<RenderServerPacket>,
 }
 
 impl RenderServer {
     pub fn new(ci: super::render_context::RenderContextCreateInfo) -> Self {
-        let (send, mut recv) = tokio::sync::mpsc::channel::<tokio::sync::Notify>(32);
         let (new_send, mut new_recv) = tokio::sync::mpsc::channel::<RenderServerPacket>(4);
-        let shutdown_signal = Arc::new(AtomicBool::new(false));
+        let render_context = super::render_context::RenderContext::new(ci).unwrap();
 
         {
+            let render_context = render_context.clone();
             // Render thread
-            tokio::task::spawn(async move {
+            tokio::task::spawn_blocking( move || {
                 let mut world = becs::World::new();
                 world
-                    .insert_resource(super::render_context::RenderContext::new(ci).unwrap());
+                    .insert_resource(render_context);
                 world
                     .insert_resource(super::frame_number::FrameCount::default());
                 let mut schedule = becs::Schedule::default();
                 schedule.add_systems(
-                    super::present_system::present_system_begin::<GPUAllocatorImpl>
+                    super::present_system::present_system_begin
                 );
-                schedule.add_systems(
-                    super::present_system::present_system_end::<GPUAllocatorImpl>.after(super::present_system::present_system_begin::<GPUAllocatorImpl>)
-                );
+                schedule.add_systems(super::present_system::present_system_end
+                    .after(super::present_system::present_system_begin));
                 let mut stop_flag = false;
                 while stop_flag == false {
                     match new_recv.try_recv() {
@@ -46,38 +49,31 @@ impl RenderServer {
                                 RenderServerRequests::Render => {
                                     println!("Processing render");
                                     schedule.run(&mut world);
-                                }
-                                RenderServerRequests::NewWindow(window) => {
-                                    println!("Processing window");
-                                    let mut rx = world.resource::<super::render_context::RenderContext>();
-                                    rx.build_surface(window).await.unwrap();
-                                }
-                                RenderServerRequests::NewSurface => {
-                                    println!("Processing surface");
-                                    let mut rx = world.resource::<super::render_context::RenderContext>();
-                                    if let Some(window) = rx.inner.window_context.window.read().await.clone() {
-                                        rx.build_surface(window).await.unwrap();
-                                    } else {
-                                        tracing::error!("NewSurface expected window, got None");
-                                    }
-                                }
+                                },
                                 RenderServerRequests::Stop => {
                                     println!("Processing stop");
-                                    println!("I have become death");
                                     stop_flag = true;
-                                    break
                                 },
                             };
                             packet.callback.0.notify_waiters();
                         },
-                        Err(e) => {}
+                        Err(e) => {
+                            match e {
+                                TryRecvError::Disconnected => {
+                                    stop_flag = true;
+                                    break;
+                                }
+                                _ => {},
+                            }
+                        },
                     }
                 }
+                tracing::trace!("RENDER SERVER STOPPED");
             });
         }
         Self {
-            frame_sender: send,
             new_sender: new_send,
+            render_context,
         }
     }
 
@@ -94,6 +90,10 @@ impl RenderServer {
     }
 
     pub fn blocking_send(&self, request: RenderServerRequests) -> Result<Arc<tokio::sync::Notify>> {
+        match &request {
+            RenderServerRequests::Stop => {}
+            _ => {}
+        }
         let notify = Arc::new(tokio::sync::Notify::new());
         self.new_sender.blocking_send(
             RenderServerPacket {
@@ -102,5 +102,24 @@ impl RenderServer {
             }
         )?;
         Ok(notify)
+    }
+
+    pub async fn create_surface(&self, window: &winit::window::Window) -> Result<()> {
+        self.render_context.inner.window_context.build_surface(
+                render::create_infos::SurfaceContextCreateInfo {
+                    instance: &self.render_context.inner.instance,
+                    physical_device: &self.render_context.inner.physical_device,
+                    allocator: self.render_context.inner.allocator.clone(),
+                    window,
+                    frames_in_flight: Some(
+                        self.render_context.inner.configuration.target_frames_in_flight
+                    ),
+                }
+            ).await?;
+        Ok(())
+    }
+
+    pub fn strong_count(&self) -> usize {
+        self.render_context.strong_count()
     }
 }

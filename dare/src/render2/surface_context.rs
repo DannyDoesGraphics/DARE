@@ -1,25 +1,27 @@
+use std::mem::{swap, ManuallyDrop};
 use std::sync::Arc;
 use anyhow::Result;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::traits::AsRaw;
+use dagal::traits::{AsRaw, Destructible};
 use dagal::winit;
 use bevy_ecs::prelude as becs;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use dagal::ash::vk::Handle;
 
 /// Relating to anything that relies on window resizing
 #[derive(Debug, becs::Resource)]
 pub struct SurfaceContext {
-    pub surface: dagal::wsi::SurfaceQueried,
-    pub swapchain: dagal::wsi::Swapchain,
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-    pub image_extent: vk::Extent2D,
-    pub frames: Arc<[super::frame::Frame]>,
-
-
-    pub swapchain_images: Arc<[dagal::resource::Image<GPUAllocatorImpl>]>,
-    pub swapchain_image_view: Arc<[dagal::resource::ImageView]>,
+    pub swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]>,
+    pub swapchain_image_view: Box<[dagal::resource::ImageView]>,
     pub swapchain_image_index: RwLock<u32>,
+
+    pub image_extent: vk::Extent2D,
+    pub frames: Box<[Mutex<super::frame::Frame>]>,
+
+    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub swapchain: dagal::wsi::Swapchain,
+    pub surface: dagal::wsi::SurfaceQueried,
     
     pub frames_in_flight: usize,
 }
@@ -28,7 +30,7 @@ pub struct SurfaceContextCreateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-    pub window: Arc<winit::window::Window>,
+    pub window: &'a winit::window::Window,
 
     pub frames_in_flight: Option<usize>
 }
@@ -81,18 +83,18 @@ impl SurfaceContext {
             .set_extent(image_extent)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .build(window_context_ci.instance.get_instance(), window_context_ci.allocator.get_device().clone())?;
-        let swapchain_images: Arc<[dagal::resource::Image<GPUAllocatorImpl>]> = Arc::from(swapchain.get_images::<GPUAllocatorImpl>()?.into_boxed_slice());
-        let swapchain_image_view: Arc<[dagal::resource::ImageView]> = Arc::from(swapchain.get_image_views(&
+        let swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]> = swapchain.get_images::<GPUAllocatorImpl>()?.into_boxed_slice();
+        let swapchain_image_view: Box<[dagal::resource::ImageView]> = swapchain.get_image_views(&
             swapchain_images.iter().map(|image| unsafe {*image.as_raw()}).collect::<Vec<vk::Image>>()
-        )?.into_boxed_slice());
+        )?.into_boxed_slice();
         let frames_in_flight = frames_in_flight.unwrap_or(surface.get_capabilities().min_image_count) as usize;
-
+        println!("Surface made");
         Ok(SurfaceContext {
             surface,
             swapchain,
             allocator: window_context_ci.allocator,
             image_extent,
-            frames: Arc::from(Vec::new().into_boxed_slice()),
+            frames: Vec::new().into_boxed_slice(),
             swapchain_images,
             swapchain_image_view,
             swapchain_image_index: RwLock::new(0),
@@ -100,6 +102,42 @@ impl SurfaceContext {
             frames_in_flight,
         })
     }
+
+    /// Create frames for the window context
+    pub async fn create_frames(&mut self, present_queue: &dagal::device::Queue) -> Result<()> {
+        let mut frames = Vec::with_capacity(self.frames_in_flight);
+        println!("Created {:?} fif", self.frames_in_flight);
+        for frame_number in 0..self.frames_in_flight {
+            frames.push(Mutex::new(super::frame::Frame::new(self, present_queue, Some(frame_number)).await?));
+        }
+        self.frames = frames.into_boxed_slice();
+        Ok(())
+    }
 }
 
-
+impl Drop for SurfaceContext {
+    fn drop(&mut self) {
+        use std::ptr;
+        let mut vk_fences: Vec<vk::Fence> = Vec::new();
+        for frame in self.frames.iter() {
+            let render_fence = tokio::task::block_in_place(|| {
+                let rt_handle = tokio::runtime::Handle::current();
+                rt_handle.block_on(async {
+                    let locked_frame = frame.lock().await;
+                    unsafe { *locked_frame.render_fence.as_raw() }
+                })
+            });
+        }
+        if !vk_fences.is_empty() {
+            unsafe {
+                self.allocator.device()
+                    .get_handle()
+                    .wait_for_fences(
+                        &vk_fences,
+                        true,
+                        u64::MAX
+                    ).unwrap()
+            }
+        }
+    }
+}
