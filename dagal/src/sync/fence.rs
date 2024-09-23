@@ -92,6 +92,15 @@ impl Fence {
         unsafe { self.device.get_handle().reset_fences(&[self.handle])? }
         Ok(())
     }
+
+    /// Get the fence status
+    pub fn get_fence_status(&self) -> Result<bool> {
+        unsafe {
+            Ok(self.device
+                .get_handle()
+                .get_fence_status(self.handle)?)
+        }
+    }
 }
 
 impl Destructible for Fence {
@@ -119,27 +128,42 @@ impl Future for Fence {
     /// - The fence has been signaled
     /// - The fence timed out (u64::MAX)
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let status = unsafe { self.device.get_handle().get_fence_status(self.handle) };
-        if status.is_err() {
-            return Poll::Ready(Err(anyhow::Error::from(status.unwrap_err())));
-        }
-        let status: bool = status.unwrap();
-        if status {
-            self.wait_thread_spawned = false;
-            return Poll::Ready(Ok(()));
-        } else if !self.wait_thread_spawned {
-            let waker = cx.waker().clone();
-            self.wait_thread_spawned = true;
-            let fence = self.handle;
-            let device = self.device.get_handle().clone();
-            thread::spawn(move || {
-                unsafe {
-                    device.wait_for_fences(&[fence], true, u64::MAX).unwrap();
+        return match self.get_fence_status() {
+            Ok(status) => match status {
+                true => Poll::Ready(Ok(())),
+                false => match self.wait_thread_spawned {
+                    true => Poll::Pending,
+                    false => {
+                        let waker = cx.waker().clone();
+                        self.wait_thread_spawned = true;
+                        let fence = self.handle.clone();
+                        let device = self.device.clone();
+                        #[cfg(feature = "tokio")]
+                        tokio::spawn(async move {
+                            unsafe {
+                                device.get_handle()
+                                      .wait_for_fences(&[fence], true, u64::MAX)
+                                      .unwrap();
+                            }
+                            waker.wake();
+                        });
+                        #[cfg(not(feature = "tokio"))]
+                        std::thread::spawn(move || {
+                            unsafe {
+                                device.get_handle()
+                                      .wait_for_fences(&[fence], true, u64::MAX)
+                                      .unwrap();
+                            }
+                            waker.wake();
+                        });
+                        Poll::Pending
+                    }
                 }
-                waker.wake();
-            });
+            }
+            Err(e) => {
+                Poll::Ready(Err(anyhow::Error::from(e)))
+            }
         }
-        Poll::Pending
     }
 }
 

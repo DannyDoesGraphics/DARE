@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::fmt::Debug;
 use std::ptr;
 use std::sync::Arc;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -99,5 +100,16 @@ impl Frame {
     pub async fn await_render(&self) -> Result<()> {
         //self.render_semaphore.clone().await;
         Ok(())
+    }
+}
+
+impl Drop for Frame {
+    fn drop(&mut self) {
+        // Wait for render to finish
+        if let Ok(status) = self.render_fence.get_fence_status() {
+            if status {
+                self.render_fence.wait(u64::MAX).unwrap()
+            }
+        }
     }
 }
