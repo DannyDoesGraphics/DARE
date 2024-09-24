@@ -123,7 +123,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
         containers.with::<AssetContainer<T>, _, _>(|container| {
             for pair in container.iter() {
                 let slot = pair.value();
-                if slot.t.fetch_add(0, Ordering::Acquire) == 0 {
+                if slot.t.load(Ordering::Acquire) == 0 {
+                    // Try to obtain a read lock, if one cannot be obtained, just give up
                     if let Ok(mut state) = slot.holder.state.try_write() {
                         let mut state = &mut *state;
                         match state {
@@ -134,12 +135,10 @@ impl<A: Allocator + 'static> AssetManager<A> {
                                 *state = asset::AssetState::Unloading(weak);
                             }
                             asset::AssetState::Unloading(weak) => {
-                                if let Some(strong) = Weak::upgrade(weak) {
-                                    if Arc::strong_count(&strong) <= 1 {
-                                        *state = asset::AssetState::Unloaded(
-                                            slot.holder.metadata.clone(),
-                                        );
-                                    }
+                                if Weak::upgrade(weak).is_none() {
+                                    *state = asset::AssetState::Unloaded(
+                                        slot.holder.metadata.clone(),
+                                    );
                                 }
                             }
                         }
