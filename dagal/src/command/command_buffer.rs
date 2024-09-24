@@ -324,8 +324,16 @@ impl CmdBuffer for CommandBufferState {
 impl CommandBufferState {
     pub fn begin(&mut self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
         *self = Self::from(match self {
-            CommandBufferState::Recording(r) => return Err(anyhow::anyhow!("Expected command buffer state to be in Ready, got Recording")),
-            CommandBufferState::Executable(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Ready, got Executable")),
+            CommandBufferState::Recording(r) => {
+                return Err(anyhow::anyhow!(
+                    "Expected command buffer state to be in Ready, got Recording"
+                ))
+            }
+            CommandBufferState::Executable(_) => {
+                return Err(anyhow::anyhow!(
+                    "Expected command buffer state to be in Ready, got Executable"
+                ))
+            }
             CommandBufferState::Ready(cmd) => unsafe {
                 Ok::<CommandBufferRecording, anyhow::Error>(cmd.clone().begin(flags).unwrap())
             },
@@ -333,31 +341,49 @@ impl CommandBufferState {
         Ok(())
     }
 
-
     // Recording
     pub fn end(&mut self) -> Result<()> {
         *self = Self::from(match self {
             CommandBufferState::Recording(r) => unsafe {
                 Ok::<CommandBufferExecutable, anyhow::Error>(r.clone().end()?)
             },
-            CommandBufferState::Executable(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Recording, got Executable")),
-            CommandBufferState::Ready(_) => return Err(anyhow::anyhow!("Expected command buffer state to be in Recording, got Ready")),
+            CommandBufferState::Executable(_) => {
+                return Err(anyhow::anyhow!(
+                    "Expected command buffer state to be in Recording, got Executable"
+                ))
+            }
+            CommandBufferState::Ready(_) => {
+                return Err(anyhow::anyhow!(
+                    "Expected command buffer state to be in Recording, got Ready"
+                ))
+            }
         }?);
         Ok(())
     }
 
     // Executable
-    pub fn submit(&mut self,
-                  queue: vk::Queue,
-                  submit_infos: &[vk::SubmitInfo2],
-                  fence: vk::Fence
+    pub fn submit(
+        &mut self,
+        queue: vk::Queue,
+        submit_infos: &[vk::SubmitInfo2],
+        fence: vk::Fence,
     ) -> Result<()> {
         *self = Self::from(match self {
             CommandBufferState::Executable(r) => unsafe {
-                Ok::<CommandBuffer, anyhow::Error>(r.clone().submit(queue, submit_infos, fence).unwrap())
+                Ok::<CommandBuffer, anyhow::Error>(
+                    r.clone().submit(queue, submit_infos, fence).unwrap(),
+                )
             },
-            CommandBufferState::Recording(_) => return Err(anyhow::anyhow!("Command buffer state expected to be in Executable, got Recording")),
-            CommandBufferState::Ready(_) => return Err(anyhow::anyhow!("Command buffer state expected to be in Executable, got Ready")),
+            CommandBufferState::Recording(_) => {
+                return Err(anyhow::anyhow!(
+                    "Command buffer state expected to be in Executable, got Recording"
+                ))
+            }
+            CommandBufferState::Ready(_) => {
+                return Err(anyhow::anyhow!(
+                    "Command buffer state expected to be in Executable, got Ready"
+                ))
+            }
         }?);
         Ok(())
     }

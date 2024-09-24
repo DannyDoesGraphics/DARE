@@ -250,7 +250,7 @@ impl RenderContext {
             width: window.width(),
             height: window.height(),
         });
-        let swapchain= swapchain
+        let swapchain = swapchain
             .push_queue(&self.graphics_queue)
             .request_present_mode(vk::PresentModeKHR::MAILBOX)
             .request_present_mode(vk::PresentModeKHR::FIFO)

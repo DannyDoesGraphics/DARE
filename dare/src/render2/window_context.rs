@@ -22,24 +22,25 @@ impl WindowContext {
         }
     }
 
-    pub async fn build_surface(&self, ci: super::surface_context::SurfaceContextCreateInfo<'_>) -> Result<()> {
+    pub async fn build_surface(
+        &self,
+        ci: super::surface_context::SurfaceContextCreateInfo<'_>,
+    ) -> Result<()> {
         if let Some(surface_context) = self.surface_context.write().await.take() {
             drop(surface_context);
         }
         unsafe {
             let mut surface_guard = self.surface_context.write().await;
-            *surface_guard = Some(
-                SurfaceContext::new(
-                    super::surface_context::InnerSurfaceContextCreateInfo {
-                        instance: &ci.instance,
-                        physical_device: &ci.physical_device,
-                        allocator: ci.allocator,
-                        present_queue: self.present_queue.clone(),
-                        window: &ci.window,
-                        frames_in_flight: ci.frames_in_flight,
-                    }
-                )?
-            );
+            *surface_guard = Some(SurfaceContext::new(
+                super::surface_context::InnerSurfaceContextCreateInfo {
+                    instance: &ci.instance,
+                    physical_device: &ci.physical_device,
+                    allocator: ci.allocator,
+                    present_queue: self.present_queue.clone(),
+                    window: &ci.window,
+                    frames_in_flight: ci.frames_in_flight,
+                },
+            )?);
             println!("Making frames");
             let surface_context = surface_guard.as_mut().unwrap();
             surface_context.create_frames(&self.present_queue).await?;

@@ -95,11 +95,7 @@ impl Fence {
 
     /// Get the fence status
     pub fn get_fence_status(&self) -> Result<bool> {
-        unsafe {
-            Ok(self.device
-                .get_handle()
-                .get_fence_status(self.handle)?)
-        }
+        unsafe { Ok(self.device.get_handle().get_fence_status(self.handle)?) }
     }
 }
 
@@ -141,29 +137,29 @@ impl Future for Fence {
                         #[cfg(feature = "tokio")]
                         tokio::spawn(async move {
                             unsafe {
-                                device.get_handle()
-                                      .wait_for_fences(&[fence], true, u64::MAX)
-                                      .unwrap();
+                                device
+                                    .get_handle()
+                                    .wait_for_fences(&[fence], true, u64::MAX)
+                                    .unwrap();
                             }
                             waker.wake();
                         });
                         #[cfg(not(feature = "tokio"))]
                         std::thread::spawn(move || {
                             unsafe {
-                                device.get_handle()
-                                      .wait_for_fences(&[fence], true, u64::MAX)
-                                      .unwrap();
+                                device
+                                    .get_handle()
+                                    .wait_for_fences(&[fence], true, u64::MAX)
+                                    .unwrap();
                             }
                             waker.wake();
                         });
                         Poll::Pending
                     }
-                }
-            }
-            Err(e) => {
-                Poll::Ready(Err(anyhow::Error::from(e)))
-            }
-        }
+                },
+            },
+            Err(e) => Poll::Ready(Err(anyhow::Error::from(e))),
+        };
     }
 }
 

@@ -110,7 +110,12 @@ impl<
     }
 
     /// If no `t` parameter is specified, defaults to `ttl` parameter
-    pub fn insert(&mut self, element: T, ttl: usize, t: Option<usize>) -> WeakDeferredDeletionSlot<T> {
+    pub fn insert(
+        &mut self,
+        element: T,
+        ttl: usize,
+        t: Option<usize>,
+    ) -> WeakDeferredDeletionSlot<T> {
         let element = Arc::new(element);
         let slot = self.container.insert(DeferredDeletionSlotInner {
             entry: element.clone(),

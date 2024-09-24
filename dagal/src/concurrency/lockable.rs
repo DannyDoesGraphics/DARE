@@ -1,9 +1,11 @@
-use std::ops::{Deref, DerefMut};
 use anyhow::Result;
+use std::ops::{Deref, DerefMut};
 /// Abstracts over multiple concurrency libraries
 
 pub trait Lockable {
-    type Lock<'a>: Deref<Target = Self::Target> + DerefMut + 'a where Self: 'a;
+    type Lock<'a>: Deref<Target = Self::Target> + DerefMut + 'a
+    where
+        Self: 'a;
     type Target: ?Sized;
 }
 

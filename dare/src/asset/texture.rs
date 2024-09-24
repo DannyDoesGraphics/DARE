@@ -1,7 +1,7 @@
+use crate::asset::prelude as asset;
 use dagal::allocators::Allocator;
 use dagal::resource;
 use dare_containers::prelude as containers;
-use crate::asset::prelude as asset;
 
 /// Represents weak textures
 #[derive(Debug, Clone)]

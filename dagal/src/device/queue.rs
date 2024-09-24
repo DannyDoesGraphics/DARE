@@ -64,7 +64,10 @@ impl Queue {
     pub async fn acquire_queue_lock(&self) -> Result<MutexGuard<vk::Queue>> {
         #[cfg(not(feature = "tokio"))]
         {
-            Ok(self.handle.lock().map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
+            Ok(self
+                .handle
+                .lock()
+                .map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
         }
         #[cfg(feature = "tokio")]
         {
@@ -75,7 +78,10 @@ impl Queue {
     pub fn blocking_acquire_queue_lock(&self) -> Result<MutexGuard<vk::Queue>> {
         #[cfg(not(feature = "tokio"))]
         {
-            Ok(self.handle.lock().map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
+            Ok(self
+                .handle
+                .lock()
+                .map_err(|_| anyhow::Error::from(DagalError::PoisonError))?)
         }
         #[cfg(feature = "tokio")]
         {

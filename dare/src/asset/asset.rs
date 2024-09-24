@@ -1,8 +1,8 @@
-use std::fmt;
 use anyhow::Result;
 use futures::stream::BoxStream;
+use std::fmt;
 use std::fmt::{Debug, Formatter, Pointer};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 
@@ -29,9 +29,9 @@ impl<A: AssetDescriptor> Clone for WeakAssetRef<A> {
 impl<A: AssetDescriptor> Debug for WeakAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-         .field("metadata", &self.metadata)
-         .field("state", &self.state.upgrade())
-         .finish()
+            .field("metadata", &self.metadata)
+            .field("state", &self.state.upgrade())
+            .finish()
     }
 }
 
@@ -74,20 +74,20 @@ impl<A: AssetDescriptor> Clone for StrongAssetRef<A> {
 impl<A: AssetDescriptor> Debug for StrongAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-         .field("metadata", &self.metadata)
-         .field("state", &self.state)
-         .finish()
+            .field("metadata", &self.metadata)
+            .field("state", &self.state)
+            .finish()
     }
 }
 
 /// Holds an asset and tracks its loaded state and metadata
 #[derive(Debug)]
-pub struct AssetHolder<A: AssetDescriptor> {
+pub struct AssetMetadataAndState<A: AssetDescriptor> {
     pub metadata: A::Metadata,
     pub state: Arc<RwLock<AssetState<A>>>,
 }
 
-impl<A: AssetDescriptor> Clone for AssetHolder<A> {
+impl<A: AssetDescriptor> Clone for AssetMetadataAndState<A> {
     fn clone(&self) -> Self {
         Self {
             metadata: self.metadata.clone(),
@@ -96,14 +96,20 @@ impl<A: AssetDescriptor> Clone for AssetHolder<A> {
     }
 }
 
-impl<A: AssetDescriptor> PartialEq for AssetHolder<A> {
+impl<A: AssetDescriptor> PartialEq for AssetMetadataAndState<A> {
     fn eq(&self, other: &Self) -> bool {
         self.metadata == other.metadata
     }
 }
-impl<A: AssetDescriptor> Eq for AssetHolder<A> {}
+impl<A: AssetDescriptor> Eq for AssetMetadataAndState<A> {}
 
-impl<A: AssetDescriptor> AssetHolder<A> {
+impl<A: AssetDescriptor> Hash for AssetMetadataAndState<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.metadata.hash(state);
+    }
+}
+
+impl<A: AssetDescriptor> AssetMetadataAndState<A> {
     pub fn new(metadata: A::Metadata) -> Self {
         Self {
             metadata: metadata.clone(),
@@ -187,5 +193,5 @@ pub enum MetaDataLocation {
     /// Data is behind a link
     Link(String),
     /// Describes the data is held in memory
-    Memory(Arc<[u8]>)
+    Memory(Arc<[u8]>),
 }

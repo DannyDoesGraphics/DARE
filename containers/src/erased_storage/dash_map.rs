@@ -5,6 +5,10 @@ use std::any::{Any, TypeId};
 use std::hash::RandomState;
 
 /// A dashmap which has type erasure
+///
+/// # References
+/// We do not hand out any references in the erased storage dash map. Instead, to access the interior,
+/// you must first use [`ErasedStorageDashMap::with`] to get a reference.
 #[derive(Debug, Default)]
 pub struct ErasedStorageDashMap {
     dash_map: DashMap<TypeId, Box<dyn Any>>,
@@ -34,6 +38,22 @@ impl ErasedStorageDashMap {
         self.dash_map
             .get(&TypeId::of::<T>())
             .and_then(|data| data.downcast_ref::<T>().map(f))
+    }
+
+    pub fn with_or_default<T: 'static + Default, R, F: FnOnce(&T) -> R>(&self, f: F) -> R {
+        match self.dash_map.get(&TypeId::of::<T>()) {
+            None => {
+                self.dash_map
+                    .insert(TypeId::of::<T>(), Box::new(T::default()));
+                // SAFETY: we know this must exist
+                self.dash_map
+                    .get(&TypeId::of::<T>())
+                    .map(|data| data.downcast_ref::<T>().map(f))
+                    .flatten()
+                    .unwrap()
+            }
+            Some(data) => data.downcast_ref::<T>().map(f).unwrap(),
+        }
     }
 
     pub fn with_mut<T: 'static, R, F: FnOnce(&mut T) -> R>(&self, f: F) -> Option<R> {

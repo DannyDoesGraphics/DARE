@@ -1,6 +1,5 @@
 pub mod send_types;
 
-use std::cmp::PartialEq;
 use crate::render2::prelude as render;
 use crate::render2::prelude::RenderServerRequests;
 use crate::render2::server::send_types::RenderServerPacket;
@@ -8,10 +7,11 @@ use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::IntoSystemConfigs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::winit;
+use std::cmp::PartialEq;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
-use dagal::winit;
 
 #[derive(Debug, Clone)]
 pub struct RenderServer {
@@ -29,18 +29,16 @@ impl RenderServer {
         {
             let render_context = render_context.clone();
             // Render thread
-            tokio::task::spawn_blocking( move || {
+            tokio::task::spawn_blocking(move || {
                 let mut world = becs::World::new();
-                world
-                    .insert_resource(render_context);
-                world
-                    .insert_resource(super::frame_number::FrameCount::default());
+                world.insert_resource(render_context);
+                world.insert_resource(super::frame_number::FrameCount::default());
                 let mut schedule = becs::Schedule::default();
+                schedule.add_systems(super::present_system::present_system_begin);
                 schedule.add_systems(
-                    super::present_system::present_system_begin
+                    super::present_system::present_system_end
+                        .after(super::present_system::present_system_begin),
                 );
-                schedule.add_systems(super::present_system::present_system_end
-                    .after(super::present_system::present_system_begin));
                 let mut stop_flag = false;
                 while stop_flag == false {
                     match new_recv.try_recv() {
@@ -49,22 +47,20 @@ impl RenderServer {
                                 RenderServerRequests::Render => {
                                     println!("Processing render");
                                     schedule.run(&mut world);
-                                },
+                                }
                                 RenderServerRequests::Stop => {
                                     println!("Processing stop");
                                     stop_flag = true;
-                                },
+                                }
                             };
                             packet.callback.0.notify_waiters();
-                        },
-                        Err(e) => {
-                            match e {
-                                TryRecvError::Disconnected => {
-                                    stop_flag = true;
-                                    break;
-                                }
-                                _ => {},
+                        }
+                        Err(e) => match e {
+                            TryRecvError::Disconnected => {
+                                stop_flag = true;
+                                break;
                             }
+                            _ => {}
                         },
                     }
                 }
@@ -80,12 +76,12 @@ impl RenderServer {
     pub async fn send(&self, request: RenderServerRequests) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
         println!("Requested {:?}", request);
-        self.new_sender.send(
-            RenderServerPacket {
+        self.new_sender
+            .send(RenderServerPacket {
                 callback: send_types::Callback(notify.clone()),
                 request,
-            }
-        ).await?;
+            })
+            .await?;
         Ok(notify)
     }
 
@@ -95,27 +91,30 @@ impl RenderServer {
             _ => {}
         }
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.new_sender.blocking_send(
-            RenderServerPacket {
-                callback: send_types::Callback(notify.clone()),
-                request,
-            }
-        )?;
+        self.new_sender.blocking_send(RenderServerPacket {
+            callback: send_types::Callback(notify.clone()),
+            request,
+        })?;
         Ok(notify)
     }
 
     pub async fn create_surface(&self, window: &winit::window::Window) -> Result<()> {
-        self.render_context.inner.window_context.build_surface(
-                render::create_infos::SurfaceContextCreateInfo {
-                    instance: &self.render_context.inner.instance,
-                    physical_device: &self.render_context.inner.physical_device,
-                    allocator: self.render_context.inner.allocator.clone(),
-                    window,
-                    frames_in_flight: Some(
-                        self.render_context.inner.configuration.target_frames_in_flight
-                    ),
-                }
-            ).await?;
+        self.render_context
+            .inner
+            .window_context
+            .build_surface(render::create_infos::SurfaceContextCreateInfo {
+                instance: &self.render_context.inner.instance,
+                physical_device: &self.render_context.inner.physical_device,
+                allocator: self.render_context.inner.allocator.clone(),
+                window,
+                frames_in_flight: Some(
+                    self.render_context
+                        .inner
+                        .configuration
+                        .target_frames_in_flight,
+                ),
+            })
+            .await?;
         Ok(())
     }
 

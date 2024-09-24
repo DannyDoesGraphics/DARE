@@ -1,8 +1,3 @@
-use std::backtrace;
-use std::collections::HashSet;
-use std::ffi::c_char;
-use std::sync::{Arc, RwLock, Weak};
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use crate::device::physical_device::PhysicalDevice;
 use crate::resource::traits::Resource;
 use crate::traits::{AsRaw, Destructible};
@@ -11,6 +6,11 @@ use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
+use std::backtrace;
+use std::collections::HashSet;
+use std::ffi::c_char;
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock, Weak};
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]

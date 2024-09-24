@@ -1,7 +1,7 @@
+use crate::traits::AsRaw;
 use ash;
 use ash::vk;
 use std::ops::Deref;
-use crate::traits::AsRaw;
 
 #[derive(Clone, Debug)]
 pub struct PhysicalDevice {

@@ -1,14 +1,14 @@
+use crate::render2::surface_context::SurfaceContext;
+use anyhow::Result;
+use bevy_ecs::prelude as becs;
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::ash::vk;
+use dagal::resource::traits::Resource;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ptr;
 use std::sync::Arc;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
-use dagal::ash::vk;
-use anyhow::Result;
-use dagal::resource::traits::Resource;
-use bevy_ecs::prelude as becs;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
-use crate::render2::surface_context::SurfaceContext;
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
@@ -27,11 +27,14 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub async fn new(surface_context: &SurfaceContext, present_queue: &dagal::device::Queue, image_number: Option<usize>) -> Result<Self> {
-
+    pub async fn new(
+        surface_context: &SurfaceContext,
+        present_queue: &dagal::device::Queue,
+        image_number: Option<usize>,
+    ) -> Result<Self> {
         let mut allocator = surface_context.allocator.clone();
-        let draw_image = dagal::resource::Image::new(
-            dagal::resource::ImageCreateInfo::NewAllocated {
+        let draw_image =
+            dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                 device: surface_context.allocator.device(),
                 allocator: &mut allocator,
                 location: dagal::allocators::MemoryLocation::GpuOnly,
@@ -60,28 +63,34 @@ impl Frame {
                     initial_layout: vk::ImageLayout::UNDEFINED,
                     _marker: Default::default(),
                 },
-                name: Some(image_number.map_or(String::from("Swapchain image"), |image_number| format!("Swapchain image {:?}", image_number)).as_str()),
-            }
-        )?;
+                name: Some(
+                    image_number
+                        .map_or(String::from("Swapchain image"), |image_number| {
+                            format!("Swapchain image {:?}", image_number)
+                        })
+                        .as_str(),
+                ),
+            })?;
         let render_semaphore = dagal::sync::BinarySemaphore::new(
             surface_context.allocator.device(),
-            vk::SemaphoreCreateFlags::empty()
+            vk::SemaphoreCreateFlags::empty(),
         )?;
         let swapchain_semaphore = dagal::sync::BinarySemaphore::new(
             surface_context.allocator.device(),
-            vk::SemaphoreCreateFlags::empty()
+            vk::SemaphoreCreateFlags::empty(),
         )?;
         let render_fence = dagal::sync::Fence::new(
             surface_context.allocator.device(),
-            vk::FenceCreateFlags::SIGNALED
+            vk::FenceCreateFlags::SIGNALED,
         )?;
         // make pools and buffers
         let command_pool = dagal::command::CommandPool::new(
             allocator.device(),
             present_queue,
-            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
         )?;
-        let command_buffer = dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
+        let command_buffer =
+            dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
         println!("FRAME CREATED");
         Ok(Frame {
             draw_image,

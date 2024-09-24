@@ -9,3 +9,5 @@ anyhow = "1.0.86"
 thiserror = "1.0.63"
 dashmap = { version = "6.0.1" }
 derivative = "2.2.0"
+flashmap = "0.1.0"
+tokio = "1.40.0"

@@ -1,6 +1,6 @@
-use crate::DagalError::PoisonError;
 /// Concerning implementations of Mute x
 pub use super::lockable::*;
+use crate::DagalError::PoisonError;
 
 impl<T> Lockable for std::sync::Mutex<T> {
     type Lock<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
@@ -15,11 +15,9 @@ impl<T> SyncLockable for std::sync::Mutex<T> {
     fn try_lock<'a>(&'a self) -> anyhow::Result<Option<Self::Lock<'a>>> {
         use std::sync::TryLockError;
         match self.try_lock() {
-            Ok(guard) => {
-                Ok(Some(guard))
-            }
+            Ok(guard) => Ok(Some(guard)),
             Err(TryLockError::WouldBlock) => Ok(None),
-            Err(TryLockError::Poisoned(_)) => Err(anyhow::Error::from(PoisonError))
+            Err(TryLockError::Poisoned(_)) => Err(anyhow::Error::from(PoisonError)),
         }
     }
 }

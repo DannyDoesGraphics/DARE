@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use dagal::winit;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Callback(pub(crate) Arc<tokio::sync::Notify>);

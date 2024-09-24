@@ -129,17 +129,43 @@ impl SwapchainBuilder {
     /// Clamps extent to the surface capabilities
     pub fn clamp_extent(&self, extent: &vk::Extent2D) -> vk::Extent2D {
         vk::Extent2D {
-            width: extent.width.clamp(self.surface_capabilities.min_image_extent.width, self.surface_capabilities.max_image_extent.width),
-            height: extent.height.clamp(self.surface_capabilities.min_image_extent.height, self.surface_capabilities.max_image_extent.height),
+            width: extent.width.clamp(
+                self.surface_capabilities.min_image_extent.width,
+                self.surface_capabilities.max_image_extent.width,
+            ),
+            height: extent.height.clamp(
+                self.surface_capabilities.min_image_extent.height,
+                self.surface_capabilities.max_image_extent.height,
+            ),
         }
     }
 
     /// Set swapchain image extents
     pub fn set_extent(mut self, extent: vk::Extent2D) -> Self {
-        assert!(self.surface_capabilities.min_image_extent.width <= extent.width, "{} <= {}", self.surface_capabilities.min_image_extent.width, extent.width);
-        assert!(self.surface_capabilities.max_image_extent.width >= extent.width, "{} >= {}", self.surface_capabilities.max_image_extent.width, extent.width);
-        assert!(self.surface_capabilities.min_image_extent.height <= extent.height, "{} <= {}", self.surface_capabilities.min_image_extent.height, extent.height);
-        assert!(self.surface_capabilities.max_image_extent.height >= extent.height, "{} >= {}", self.surface_capabilities.max_image_extent.height, extent.height);
+        assert!(
+            self.surface_capabilities.min_image_extent.width <= extent.width,
+            "{} <= {}",
+            self.surface_capabilities.min_image_extent.width,
+            extent.width
+        );
+        assert!(
+            self.surface_capabilities.max_image_extent.width >= extent.width,
+            "{} >= {}",
+            self.surface_capabilities.max_image_extent.width,
+            extent.width
+        );
+        assert!(
+            self.surface_capabilities.min_image_extent.height <= extent.height,
+            "{} <= {}",
+            self.surface_capabilities.min_image_extent.height,
+            extent.height
+        );
+        assert!(
+            self.surface_capabilities.max_image_extent.height >= extent.height,
+            "{} >= {}",
+            self.surface_capabilities.max_image_extent.height,
+            extent.height
+        );
         self.image_extent = extent;
         self
     }

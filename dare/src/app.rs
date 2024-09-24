@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use dagal::winit;
-use dagal::winit::window::WindowId;
 use crate::render2::prelude as render;
 use anyhow::Result;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::raw_window_handle::HasRawDisplayHandle;
+use dagal::winit;
 use dagal::winit::window;
+use dagal::winit::window::WindowId;
+use std::sync::Arc;
 
 /// This app only exists to get the first window
 pub struct App {
@@ -17,16 +17,18 @@ pub struct App {
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let window = Arc::new(
-            event_loop.create_window(
-                window::WindowAttributes::default()
-                    .with_title("DARE")
-                    .with_resizable(true)
-            ).unwrap()
+            event_loop
+                .create_window(
+                    window::WindowAttributes::default()
+                        .with_title("DARE")
+                        .with_resizable(true),
+                )
+                .unwrap(),
         );
         self.window = Some(window.clone());
 
         // If `render_server` is synchronous, handle it in a blocking thread
-        let render_server = self.render_server.take();  // Take the render_server out
+        let render_server = self.render_server.take(); // Take the render_server out
         let window = window.clone();
         let config = self.configuration.clone();
 
@@ -38,7 +40,7 @@ impl winit::application::ApplicationHandler for App {
                             render::create_infos::RenderContextCreateInfo {
                                 rdh: window.raw_display_handle().unwrap(),
                                 configuration: config,
-                            }
+                            },
                         );
                         // Call the synchronous blocking send function
 
@@ -56,28 +58,34 @@ impl winit::application::ApplicationHandler for App {
         self.render_server = Some(render_server);
     }
 
-    fn window_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, window_id: WindowId, event: winit::event::WindowEvent) {
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: WindowId,
+        event: winit::event::WindowEvent,
+    ) {
         use winit::event::WindowEvent;
         match event {
             WindowEvent::RedrawRequested => {
                 if let Some(rs) = self.render_server.as_ref().cloned() {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
-                            let render = rs.send(render::RenderServerRequests::Render).await.unwrap();
+                            let render =
+                                rs.send(render::RenderServerRequests::Render).await.unwrap();
                             render.notified().await;
                         });
                     });
                 } else {
-
                 }
-            },
+            }
             WindowEvent::CloseRequested => {
                 if let Some(rs) = self.render_server.take() {
                     {
                         let rs = rs.clone();
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async move {
-                                let render = rs.send(render::RenderServerRequests::Stop).await.unwrap();
+                                let render =
+                                    rs.send(render::RenderServerRequests::Stop).await.unwrap();
                                 render.notified().await;
                             });
                         });
@@ -101,7 +109,7 @@ impl winit::application::ApplicationHandler for App {
                     }
                 };
             }
-            _ => {},
+            _ => {}
         }
     }
 

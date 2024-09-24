@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use dagal::allocators::Allocator;
 use crate::asset::prelude as asset;
 use bevy_ecs::prelude as becs;
+use dagal::allocators::Allocator;
+use std::sync::Arc;
 
 /// Deals with a render mesh
 #[derive(Debug, Clone, becs::Component)]

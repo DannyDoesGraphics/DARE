@@ -100,10 +100,7 @@ impl Surface {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkSurface {:p}", handle);
 
-        Ok(Self {
-            handle,
-            ext,
-        })
+        Ok(Self { handle, ext })
     }
 
     /// Determine the [`vk::SurfaceCapabilitiesKHR`] and [`vk::SurfaceFormatKHR`] and [`vk::PresentModeKHR`]

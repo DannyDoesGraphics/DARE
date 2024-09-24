@@ -27,15 +27,15 @@ use dagal::{resource, winit};
 
 use crate::render::scene_data::SceneData;
 
+mod app;
 mod asset;
+mod engine;
 mod physics;
 mod ray_tracing;
 mod render;
+pub mod render2;
 mod traits;
 mod util;
-mod engine;
-pub mod render2;
-mod app;
 
 const FRAME_OVERLAP: usize = 2;
 
@@ -1212,15 +1212,14 @@ async fn main() {
 
     let bevy_loop = World::new();
     */
-    let mut app = app::App::new(
-        render2::prelude::create_infos::RenderContextConfiguration {
-            target_frames_in_flight: 2,
-            target_extent: vk::Extent2D {
-                width: 800,
-                height: 600,
-            },
-        }
-    ).unwrap();
+    let mut app = app::App::new(render2::prelude::create_infos::RenderContextConfiguration {
+        target_frames_in_flight: 2,
+        target_extent: vk::Extent2D {
+            width: 800,
+            height: 600,
+        },
+    })
+    .unwrap();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run_app(&mut app).unwrap();

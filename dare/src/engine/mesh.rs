@@ -1,8 +1,6 @@
-use dagal::allocators::Allocator;
-use bevy_ecs::prelude as becs;
 use crate::asset::prelude as asset;
-
-
+use bevy_ecs::prelude as becs;
+use dagal::allocators::Allocator;
 
 /// Creates a mesh
 #[derive(becs::Bundle)]

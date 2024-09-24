@@ -98,15 +98,7 @@ impl<A: Allocator> Image<A> {
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
-        unsafe {
-            Self::raw_transition(
-                *self.as_raw(),
-                cmd,
-                queue,
-                current_layout,
-                new_layout,
-            )
-        }
+        unsafe { Self::raw_transition(*self.as_raw(), cmd, queue, current_layout, new_layout) }
     }
 
     pub unsafe fn raw_transition(

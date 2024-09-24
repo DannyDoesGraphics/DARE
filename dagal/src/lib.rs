@@ -11,11 +11,11 @@ pub mod sync;
 pub mod util;
 pub mod wsi;
 
+pub mod concurrency;
 pub mod descriptor;
 pub mod pipelines;
 pub mod shader;
 pub mod traits;
-pub mod concurrency;
 
 pub use error::DagalError;
 

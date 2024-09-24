@@ -1,4 +1,4 @@
-pub mod prelude;
-mod mesh;
 mod label;
+mod mesh;
+pub mod prelude;
 mod surface;
