@@ -30,7 +30,9 @@ pub fn present_system_begin(
         }
         let surface_context = surface.unwrap();
         let frame_number = frame_count.load(Ordering::Acquire);
-        println!("Starting frame {frame_number}");
+        #[cfg(feature = "tracing")]
+        tracing::trace!("Starting frame {frame_number}");
+
         let mut frame_guard = surface_context.frames
             [frame_number % surface_context.frames_in_flight]
             .lock()
@@ -106,7 +108,10 @@ pub fn present_system_end(
 ) {
     let window_context = render_context.inner.window_context.clone();
     let frame_count = frame_count.0.clone();
-    println!("Ending frame number {:?}", frame_count);
+
+    #[cfg(feature = "tracing")]
+    tracing::trace!("Submitting frame {:?}", frame_count);
+
     tokio::runtime::Handle::current().block_on(async move {
         if window_context.surface_context.read().await.is_none() {
             return;
@@ -216,6 +221,7 @@ pub fn present_system_end(
         }
         // progress to next frame
         frame_count.fetch_add(1, Ordering::Release);
-        println!("Finished frame {frame_number}");
+        #[cfg(feature = "tracing")]
+        tracing::trace!("Finished frame {frame_number}");
     });
 }
