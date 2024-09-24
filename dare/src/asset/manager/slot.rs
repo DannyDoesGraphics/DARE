@@ -97,7 +97,7 @@ impl<T: asset::AssetDescriptor> Deref for AssetSlotRef<T> {
 impl<T: asset::AssetDescriptor> AssetSlotRef<T> {
     /// Keep the asset reference alive
     pub fn keep_alive(&self) {
-        self.t_ref.fetch_add(self.ttl, Ordering::Release);
+        self.t_ref.store(self.ttl, Ordering::Release);
     }
 }
 
