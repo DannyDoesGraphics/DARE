@@ -29,7 +29,7 @@ pub fn present_system_begin(
             return;
         }
         let surface_context = surface.unwrap();
-        let frame_number = frame_count.fetch_add(0, Ordering::SeqCst);
+        let frame_number = frame_count.load(Ordering::Acquire);
         println!("Starting frame {frame_number}");
         let mut frame_guard = surface_context.frames
             [frame_number % surface_context.frames_in_flight]
@@ -113,7 +113,7 @@ pub fn present_system_end(
         }
         let surface_guard = window_context.surface_context.read().await;
         let surface_context = surface_guard.as_ref().unwrap();
-        let frame_number = frame_count.fetch_add(0, Ordering::SeqCst);
+        let frame_number = frame_count.load(Ordering::Acquire);
         let mut frame_guard = surface_context.frames
             [frame_number % surface_context.frames_in_flight]
             .lock()
@@ -215,7 +215,7 @@ pub fn present_system_end(
             }
         }
         // progress to next frame
-        frame_count.fetch_add(1, Ordering::SeqCst);
+        frame_count.fetch_add(1, Ordering::Release);
         println!("Finished frame {frame_number}");
     });
 }
