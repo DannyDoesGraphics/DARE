@@ -2,7 +2,6 @@
 pub use super::lockable::*;
 use crate::DagalError::PoisonError;
 
-
 impl<T> Lockable for std::sync::Mutex<T> {
     type Lock<'a> = std::sync::MutexGuard<'a, T> where T: 'a;
     type Target = T;
@@ -13,12 +12,14 @@ impl<T> Lockable for std::sync::Mutex<T> {
 }
 
 impl<T> SyncLockable for std::sync::Mutex<T> {
-    fn lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
-        Ok(self.lock().map_err(|_| anyhow::Error::from(PoisonError))?)
+    fn lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self.lock().map_err(|_| anyhow::Error::from(PoisonError))
     }
 
-    fn try_lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
-        Ok(self.try_lock().map_err(|_| anyhow::Error::from(PoisonError))?)
+    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self
+            .try_lock()
+            .map_err(|_| anyhow::Error::from(PoisonError))
     }
 }
 
@@ -37,11 +38,11 @@ impl<T> AsyncLockable for tokio::sync::Mutex<T> {
         Ok(self.lock().await)
     }
 
-    fn blocking_lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
+    fn blocking_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         Ok(self.blocking_lock())
     }
 
-    fn try_lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
+    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         Ok(self.try_lock()?)
     }
 }

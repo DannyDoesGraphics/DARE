@@ -111,7 +111,10 @@ impl<'a> LogicalDeviceBuilder<'a> {
         self
     }
 
-    pub fn build(mut self, instance: &ash::Instance) -> Result<(crate::device::LogicalDevice, Vec<crate::device::Queue>)> {
+    pub fn build(
+        mut self,
+        instance: &ash::Instance,
+    ) -> Result<(crate::device::LogicalDevice, Vec<crate::device::Queue>)> {
         let mut queue_priorities: Vec<f32> = Vec::new();
         let queue_families = self.physical_device.get_total_queue_families();
 

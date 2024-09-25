@@ -1,9 +1,9 @@
 use crate::asset::asset::{AssetDescriptor, AssetState, AssetUnloaded, MetaDataLocation};
 use crate::asset::format::Format;
 use crate::asset::manager::AssetError;
+use crate::prelude::asset;
+use crate::prelude::render;
 use anyhow::Result;
-use crate::prelude::asset as asset;
-use crate::prelude::render as render;
 use async_stream::stream;
 use bytemuck::Pod;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
@@ -222,13 +222,15 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
                 unsafe {
                     load_info
                         .transfer
-                        .transfer_gpu(render::util::TransferRequest::Buffer(render::util::BufferTransferRequest {
-                            src_buffer: *write_buffer.as_raw(),
-                            dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
-                            src_offset: 0,
-                            dst_offset: write_offset,
-                            length: load_info.stream_info.chunk_size as vk::DeviceSize,
-                        }))
+                        .transfer_gpu(render::util::TransferRequest::Buffer(
+                            render::util::BufferTransferRequest {
+                                src_buffer: *write_buffer.as_raw(),
+                                dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
+                                src_offset: 0,
+                                dst_offset: write_offset,
+                                length: load_info.stream_info.chunk_size as vk::DeviceSize,
+                            },
+                        ))
                         .await?;
                 }
             }

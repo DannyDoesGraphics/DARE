@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::{ptr, thread};
+use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -132,7 +132,7 @@ impl Future for Fence {
                     false => {
                         let waker = cx.waker().clone();
                         self.wait_thread_spawned = true;
-                        let fence = self.handle.clone();
+                        let fence = self.handle;
                         let device = self.device.clone();
                         #[cfg(feature = "tokio")]
                         tokio::spawn(async move {
@@ -158,7 +158,7 @@ impl Future for Fence {
                     }
                 },
             },
-            Err(e) => Poll::Ready(Err(anyhow::Error::from(e))),
+            Err(e) => Poll::Ready(Err(e)),
         };
     }
 }

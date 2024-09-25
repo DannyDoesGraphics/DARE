@@ -72,7 +72,10 @@ impl RenderServer {
         }
     }
 
-    pub async fn send(&self, request: render::RenderServerNoCallbackRequest) -> Result<Arc<tokio::sync::Notify>> {
+    pub async fn send(
+        &self,
+        request: render::RenderServerNoCallbackRequest,
+    ) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
         println!("Requested {:?}", request);
         self.new_sender
@@ -84,7 +87,10 @@ impl RenderServer {
         Ok(notify)
     }
 
-    pub fn blocking_send(&self, request: render::RenderServerNoCallbackRequest) -> Result<Arc<tokio::sync::Notify>> {
+    pub fn blocking_send(
+        &self,
+        request: render::RenderServerNoCallbackRequest,
+    ) -> Result<Arc<tokio::sync::Notify>> {
         match &request {
             render::RenderServerNoCallbackRequest::Stop => {}
             _ => {}

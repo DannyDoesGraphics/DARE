@@ -1,7 +1,7 @@
 pub mod concurrency;
 pub mod device;
-pub mod util;
 mod mesh;
+pub mod util;
 
 #[cfg(feature = "gpu-allocator")]
 pub use gpu_allocator;

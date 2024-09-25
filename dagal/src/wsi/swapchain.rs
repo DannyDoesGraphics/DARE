@@ -1,6 +1,6 @@
 use std::ptr;
 
-use crate::allocators::{Allocator, GPUAllocatorImpl};
+use crate::allocators::Allocator;
 use crate::resource::traits::Resource;
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;

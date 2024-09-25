@@ -1,6 +1,7 @@
 use crate::asset::asset::AssetUnloaded;
 use crate::asset::buffer::BufferMetaData;
 use crate::asset::format::{ElementFormat, Format};
+use crate::prelude::*;
 use anyhow::Result;
 use async_stream::stream;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
@@ -17,7 +18,6 @@ use std::pin::Pin;
 use std::ptr;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
-use crate::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Image<A: Allocator> {
@@ -174,15 +174,17 @@ impl<A: Allocator + 'static> AssetUnloaded for ImageMetaData<A> {
         unsafe {
             load_info
                 .transfer
-                .transfer_gpu(render::util::TransferRequest::Image(render::util::ImageTransferRequest {
-                    src_buffer: *transfer_buffer.as_raw(),
-                    src_offset: 0,
-                    src_length: transfer_buffer.get_size(),
-                    extent: image_extent,
-                    dst_image: *dst_image.as_raw(),
-                    dst_offset: vk::Offset3D::default(),
-                    dst_length: image_size as vk::DeviceSize,
-                }))
+                .transfer_gpu(render::util::TransferRequest::Image(
+                    render::util::ImageTransferRequest {
+                        src_buffer: *transfer_buffer.as_raw(),
+                        src_offset: 0,
+                        src_length: transfer_buffer.get_size(),
+                        extent: image_extent,
+                        dst_image: *dst_image.as_raw(),
+                        dst_offset: vk::Offset3D::default(),
+                        dst_length: image_size as vk::DeviceSize,
+                    },
+                ))
                 .await?;
         }
         Ok(Arc::new(ImageLoaded {

@@ -6,11 +6,11 @@ pub use slot_map::*;
 
 pub mod align;
 pub mod free_list_allocator;
+pub mod queue_allocator;
 /// Utility functions commonly used
 pub mod slot_map;
 pub mod tests;
 mod traits;
-pub mod queue_allocator;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {
     raw_pointers.iter().map(|&p| wrap_c_str(p)).collect()

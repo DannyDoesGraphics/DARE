@@ -79,42 +79,43 @@ impl RenderContext {
             })
             .select(&instance)?;
         // Make logical device
-        let (device, queues) = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
-            .add_queue_allocation(dagal::bootstrap::QueueRequest {
-                family_flags: vk::QueueFlags::GRAPHICS,
-                count: 1,
-                dedicated: true,
-            })
-            .attach_feature_1_3(vk::PhysicalDeviceVulkan13Features {
-                dynamic_rendering: vk::TRUE,
-                synchronization2: vk::TRUE,
-                ..Default::default()
-            })
-            .attach_feature_1_2(vk::PhysicalDeviceVulkan12Features {
-                buffer_device_address: vk::TRUE,
-                descriptor_indexing: vk::TRUE,
-                descriptor_binding_partially_bound: vk::TRUE,
-                descriptor_binding_update_unused_while_pending: vk::TRUE,
-                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
-                descriptor_binding_storage_image_update_after_bind: vk::TRUE,
-                descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
-                shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
-                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
-                shader_storage_image_array_non_uniform_indexing: vk::TRUE,
-                runtime_descriptor_array: vk::TRUE,
-                scalar_block_layout: vk::TRUE,
-                ..Default::default()
-            })
-            .attach_feature_1_1(vk::PhysicalDeviceVulkan11Features {
-                variable_pointers: vk::TRUE,
-                variable_pointers_storage_buffer: vk::TRUE,
-                ..Default::default()
-            })
-            .attach_feature_1_0(vk::PhysicalDeviceFeatures {
-                shader_int64: vk::TRUE,
-                ..Default::default()
-            })
-            .build(&instance)?;
+        let (device, queues) =
+            dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
+                .add_queue_allocation(dagal::bootstrap::QueueRequest {
+                    family_flags: vk::QueueFlags::GRAPHICS,
+                    count: 1,
+                    dedicated: true,
+                })
+                .attach_feature_1_3(vk::PhysicalDeviceVulkan13Features {
+                    dynamic_rendering: vk::TRUE,
+                    synchronization2: vk::TRUE,
+                    ..Default::default()
+                })
+                .attach_feature_1_2(vk::PhysicalDeviceVulkan12Features {
+                    buffer_device_address: vk::TRUE,
+                    descriptor_indexing: vk::TRUE,
+                    descriptor_binding_partially_bound: vk::TRUE,
+                    descriptor_binding_update_unused_while_pending: vk::TRUE,
+                    descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                    descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+                    descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+                    shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+                    shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                    shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                    runtime_descriptor_array: vk::TRUE,
+                    scalar_block_layout: vk::TRUE,
+                    ..Default::default()
+                })
+                .attach_feature_1_1(vk::PhysicalDeviceVulkan11Features {
+                    variable_pointers: vk::TRUE,
+                    variable_pointers_storage_buffer: vk::TRUE,
+                    ..Default::default()
+                })
+                .attach_feature_1_0(vk::PhysicalDeviceFeatures {
+                    shader_int64: vk::TRUE,
+                    ..Default::default()
+                })
+                .build(&instance)?;
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(queues);
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         // Create allocator
@@ -139,7 +140,9 @@ impl RenderContext {
 
         // pq
         let present_queue = queue_allocator
-            .retrieve_queues(vk::QueueFlags::TRANSFER, 1)?.pop().unwrap();
+            .retrieve_queues(vk::QueueFlags::TRANSFER, 1)?
+            .pop()
+            .unwrap();
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },

@@ -105,7 +105,7 @@ impl CommandBufferRecording {
     /// SAFETY: You should never be cloning command buffers around, but this is done to help with utility internally
     pub unsafe fn clone(&self) -> Self {
         Self {
-            handle: self.handle.clone(),
+            handle: self.handle,
             device: self.device.clone(),
         }
     }
@@ -288,9 +288,9 @@ impl Deref for CommandBufferState {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            CommandBufferState::Ready(r) => &r,
-            CommandBufferState::Recording(r) => &r,
-            CommandBufferState::Executable(r) => &r,
+            CommandBufferState::Ready(r) => r,
+            CommandBufferState::Recording(r) => r,
+            CommandBufferState::Executable(r) => r,
         }
     }
 }

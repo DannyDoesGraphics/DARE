@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use ash::vk;
 
-use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use crate::allocators::{Allocator, GPUAllocatorImpl};
 use crate::device::LogicalDevice;
 use crate::resource::traits::{Nameable, Resource};
 use crate::resource::Buffer;

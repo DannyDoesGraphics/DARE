@@ -1,1 +1,3 @@
-pub use super::super::util::transfer::{TransferRequest, TransferPool, BufferTransferRequest, ImageTransferRequest};
+pub use super::super::util::transfer::{
+    BufferTransferRequest, ImageTransferRequest, TransferPool, TransferRequest,
+};

@@ -20,21 +20,21 @@ pub enum TryLockError {
 }
 
 pub trait SyncLockable: Lockable {
-    fn lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+    fn lock(&self) -> Result<Self::Lock<'_>>;
 
     /// Attempts to get a lock
     ///
     /// If enc
-    fn try_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+    fn try_lock(&self) -> Result<Self::Lock<'_>>;
 }
 
 pub trait AsyncLockable: Lockable {
     async fn lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
 
-    fn blocking_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+    fn blocking_lock(&self) -> Result<Self::Lock<'_>>;
 
     /// Attempts to get a lock
     ///
     /// If enc
-    fn try_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+    fn try_lock(&self) -> Result<Self::Lock<'_>>;
 }

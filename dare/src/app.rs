@@ -70,8 +70,10 @@ impl winit::application::ApplicationHandler for App {
                 if let Some(rs) = self.render_server.as_ref().cloned() {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
-                            let render =
-                                rs.send(render::RenderServerNoCallbackRequest::Render).await.unwrap();
+                            let render = rs
+                                .send(render::RenderServerNoCallbackRequest::Render)
+                                .await
+                                .unwrap();
                             render.notified().await;
                         });
                     });
@@ -87,8 +89,10 @@ impl winit::application::ApplicationHandler for App {
                         let rs = rs.clone();
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async move {
-                                let render =
-                                    rs.send(render::RenderServerNoCallbackRequest::Stop).await.unwrap();
+                                let render = rs
+                                    .send(render::RenderServerNoCallbackRequest::Stop)
+                                    .await
+                                    .unwrap();
                                 render.notified().await;
                             });
                         });

@@ -1,7 +1,7 @@
 pub mod slot;
 
-use crate::prelude::*;
 use crate::asset::prelude::AssetUnloaded;
+use crate::prelude::*;
 use crate::util::either::Either;
 use anyhow::Result;
 use containers::dashmap::DashMap;
@@ -134,9 +134,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
                             }
                             asset::AssetState::Unloading(weak) => {
                                 if Weak::upgrade(weak).is_none() {
-                                    *state = asset::AssetState::Unloaded(
-                                        slot.holder.metadata.clone(),
-                                    );
+                                    *state =
+                                        asset::AssetState::Unloaded(slot.holder.metadata.clone());
                                 }
                             }
                         }
@@ -367,13 +366,15 @@ impl<A: Allocator + 'static> AssetManager<A> {
                             chunk_buffer.write(0, &chunk)?;
                             unsafe {
                                 self.transfer
-                                    .transfer_gpu(render::util::TransferRequest::Buffer(render::util::BufferTransferRequest {
-                                        src_buffer: *chunk_buffer.as_raw(),
-                                        dst_buffer: *buffer.as_raw(),
-                                        src_offset: 0,
-                                        dst_offset,
-                                        length: chunk_size as vk::DeviceSize,
-                                    }))
+                                    .transfer_gpu(render::util::TransferRequest::Buffer(
+                                        render::util::BufferTransferRequest {
+                                            src_buffer: *chunk_buffer.as_raw(),
+                                            dst_buffer: *buffer.as_raw(),
+                                            src_offset: 0,
+                                            dst_offset,
+                                            length: chunk_size as vk::DeviceSize,
+                                        },
+                                    ))
                                     .await?;
                             }
                             dst_offset += chunk_size as vk::DeviceSize;

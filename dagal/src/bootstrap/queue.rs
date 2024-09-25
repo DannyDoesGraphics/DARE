@@ -38,7 +38,7 @@ pub struct QueueFamily {
 ///
 /// Returns a vector containing a 1:1 mapping to the [`queue_requests`] parameter
 pub(crate) fn determine_queue_slotting(
-    mut queue_families: Vec<vk::QueueFamilyProperties>,
+    queue_families: Vec<vk::QueueFamilyProperties>,
     queue_requests: Vec<QueueRequest>,
 ) -> Result<Vec<Vec<QueueAllocation>>> {
     if queue_requests.is_empty() {
@@ -54,7 +54,7 @@ pub(crate) fn determine_queue_slotting(
         .enumerate()
         .map(|(family_index, family)| QueueFamily {
             free_index: 0,
-            family: family.clone(),
+            family: *family,
             family_index,
         })
         .collect::<Vec<QueueFamily>>();
@@ -66,7 +66,7 @@ pub(crate) fn determine_queue_slotting(
             let mut suitable_families: Vec<QueueAllocation> = Vec::new();
             while remaining_queues > 0 {
                 // amount taken from the family
-                let suitable_family = queue_families.iter_mut().find_map(|mut family| {
+                let suitable_family = queue_families.iter_mut().find_map(|family| {
                     if family.family.queue_flags & request.family_flags == request.family_flags
                         && family.free_index < family.family.queue_count
                     {

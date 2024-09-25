@@ -23,12 +23,14 @@ pub struct TestSettings {
     pub logical_device_extensions: Vec<CString>,
 }
 
-pub struct TestVulkan<M: dagal::concurrency::Lockable<Target=vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
+pub struct TestVulkan<
+    M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,
+> {
     pub device: Option<crate::device::LogicalDevice>,
     pub debug_messenger: Option<crate::device::DebugMessenger>,
     pub physical_device: Option<crate::device::PhysicalDevice>,
     pub instance: crate::core::Instance,
-    pub queue_allocator: Option<crate::util::queue_allocator::QueueAllocator<M>>
+    pub queue_allocator: Option<crate::util::queue_allocator::QueueAllocator<M>>,
 }
 
 impl TestSettings {

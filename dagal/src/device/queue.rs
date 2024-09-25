@@ -2,8 +2,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
-#[cfg(feature = "tokio")]
-use tokio::sync::{Mutex, MutexGuard};
 
 #[allow(unused_imports)]
 use crate::DagalError;
@@ -17,7 +15,9 @@ use crate::prelude as dagal;
 
 /// Represents a [`vk::Queue`] and it's indices
 #[derive(Debug)]
-pub struct Queue<M: dagal::concurrency::Lockable<Target=vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
+pub struct Queue<
+    M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,
+> {
     /// Handle to [`vk::Queue`]
     handle: Arc<M>,
 
@@ -33,7 +33,7 @@ pub struct Queue<M: dagal::concurrency::Lockable<Target=vk::Queue> = dagal::DEFA
     /// Flags of the queue
     queue_flags: vk::QueueFlags,
 }
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Clone for Queue<M> {
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for Queue<M> {
     fn clone(&self) -> Self {
         Self {
             handle: self.handle.clone(),
@@ -44,20 +44,20 @@ impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Clone for Queue<M> {
         }
     }
 }
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> PartialEq for Queue<M> {
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> PartialEq for Queue<M> {
     fn eq(&self, other: &Self) -> bool {
         self.family_index == other.family_index && self.index == other.index
     }
 }
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Eq for Queue<M> {}
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Hash for Queue<M> {
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Eq for Queue<M> {}
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Hash for Queue<M> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.family_index.hash(state);
         self.index.hash(state);
     }
 }
-unsafe impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Send for Queue<M> {}
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Queue<M> {
+unsafe impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Send for Queue<M> {}
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     pub fn get_index(&self) -> u32 {
         self.index
     }
@@ -75,7 +75,7 @@ impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Queue<M> {
     }
 }
 
-impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Queue<M> {
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     /// It is undefined behavior to pass in a [`vk:Queue`] from an already existing [`Queue`]
     pub unsafe fn new(
         handle: vk::Queue,
@@ -98,27 +98,26 @@ impl<M: dagal::concurrency::Lockable<Target=vk::Queue>> Queue<M> {
     }
 }
 
-impl<M: dagal::concurrency::SyncLockable<Target=vk::Queue>> Queue<M> {
-
-    pub fn acquire_queue_lock<'a>(&'a self) -> Result<M::Lock<'a>> {
+impl<M: dagal::concurrency::SyncLockable<Target = vk::Queue>> Queue<M> {
+    pub fn acquire_queue_lock(&self) -> Result<M::Lock<'_>> {
         self.handle.lock()
     }
 
-    pub fn try_queue_lock<'a>(&'a self) -> Result<M::Lock<'a>> {
+    pub fn try_queue_lock(&self) -> Result<M::Lock<'_>> {
         self.handle.try_lock()
     }
 }
 
-impl<M: dagal::concurrency::AsyncLockable<Target=vk::Queue>> Queue<M> {
+impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> Queue<M> {
     pub async fn acquire_queue_async<'a>(&'a self) -> Result<M::Lock<'a>> {
-        Ok(self.handle.lock().await?)
+        self.handle.lock().await
     }
 
-    pub fn acquire_queue_blocking<'a>(&'a self) -> M::Lock<'a> {
+    pub fn acquire_queue_blocking(&self) -> M::Lock<'_> {
         self.handle.blocking_lock().unwrap()
     }
 
-    pub fn try_queue_lock_async<'a>(&'a self) -> Result<M::Lock<'a>> {
-        Ok(self.handle.try_lock()?)
+    pub fn try_queue_lock_async(&self) -> Result<M::Lock<'_>> {
+        self.handle.try_lock()
     }
 }
