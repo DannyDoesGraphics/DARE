@@ -91,7 +91,6 @@ impl Frame {
         )?;
         let command_buffer =
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
-        println!("FRAME CREATED");
         Ok(Frame {
             draw_image,
             render_fence,
