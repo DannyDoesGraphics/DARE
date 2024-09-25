@@ -181,7 +181,7 @@ pub fn present_system_end(
                     .submit(
                         *window_context
                             .present_queue
-                            .acquire_queue_lock()
+                            .acquire_queue_async()
                             .await
                             .unwrap(),
                         &[submit_info],
@@ -203,7 +203,7 @@ pub fn present_system_end(
                     match surface_context.swapchain.get_ext().queue_present(
                         *window_context
                             .present_queue
-                            .acquire_queue_lock()
+                            .acquire_queue_async()
                             .await
                             .unwrap(),
                         &present_info,

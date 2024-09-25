@@ -111,7 +111,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
         self
     }
 
-    pub fn build(mut self, instance: &ash::Instance) -> Result<crate::device::LogicalDevice> {
+    pub fn build(mut self, instance: &ash::Instance) -> Result<(crate::device::LogicalDevice, Vec<crate::device::Queue>)> {
         let mut queue_priorities: Vec<f32> = Vec::new();
         let queue_families = self.physical_device.get_total_queue_families();
 
@@ -223,15 +223,14 @@ impl<'a> LogicalDeviceBuilder<'a> {
                             _marker: Default::default(),
                         },
                         dedicated,
-                        queue_flags,
+                        // use the provided allocation family flags since it contains
+                        // all flags in the family and not just the requested one
+                        allocation.family_flags,
                     )
                 });
             }
         }
-        unsafe {
-            device.insert_queues(queues)?;
-        }
-        Ok(device)
+        Ok((device, queues))
     }
 }
 

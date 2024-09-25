@@ -50,11 +50,11 @@ pub(super) struct InnerSurfaceContextCreateInfo<'a> {
 impl SurfaceContext {
     pub fn new(window_context_ci: InnerSurfaceContextCreateInfo) -> Result<Self> {
         // expect present queue with graphics bit
-        if window_context_ci.present_queue.get_queue_flags() & vk::QueueFlags::GRAPHICS
-            != vk::QueueFlags::GRAPHICS
+        if window_context_ci.present_queue.get_queue_flags() & vk::QueueFlags::TRANSFER
+            != vk::QueueFlags::TRANSFER
         {
             return Err(anyhow::anyhow!(
-                "Expected a queue flag with GRAPHICS, got queue bit flag: {:?}",
+                "Expected a queue flag with TRANSFER, got queue bit flag: {:?}",
                 window_context_ci.present_queue.get_queue_flags()
             ));
         }

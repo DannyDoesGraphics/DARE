@@ -7,6 +7,8 @@ pub trait Lockable {
     where
         Self: 'a;
     type Target: ?Sized;
+
+    fn new(t: Self::Target) -> Self;
 }
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
@@ -23,14 +25,16 @@ pub trait SyncLockable: Lockable {
     /// Attempts to get a lock
     ///
     /// If enc
-    fn try_lock<'a>(&'a self) -> Result<Option<Self::Lock<'a>>>;
+    fn try_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
 }
 
 pub trait AsyncLockable: Lockable {
     async fn lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
 
+    fn blocking_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+
     /// Attempts to get a lock
     ///
     /// If enc
-    async fn try_lock<'a>(&'a self) -> Result<Option<Self::Lock<'a>>>;
+    fn try_lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
 }

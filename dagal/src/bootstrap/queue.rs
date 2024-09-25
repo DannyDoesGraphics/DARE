@@ -81,6 +81,7 @@ pub(crate) fn determine_queue_slotting(
                             family_index: family.family_index as u32,
                             index: family.free_index - take_amount,
                             count: take_amount,
+                            family_flags: family.family.queue_flags,
                         })
                     } else {
                         None

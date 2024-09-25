@@ -11,7 +11,6 @@ use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
-use crate::util::immediate_submit::ImmediateSubmitContext;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -83,76 +82,6 @@ impl<A: Allocator> Buffer<A> {
             None => None,
             Some(allocation) => allocation.mapped_ptr().unwrap(),
         }
-    }
-
-    /// Upload data to a buffer with basic safety ensured.
-    ///
-    /// We currently only check if the buffer is smaller
-    pub async fn upload<T: Sized>(
-        &mut self,
-        immediate: &mut crate::util::ImmediateSubmit,
-        allocator: &mut ArcAllocator<A>,
-        content: &[T],
-    ) -> Result<()> {
-        if (size_of_val(content) as vk::DeviceSize) > self.size {
-            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
-        }
-        unsafe {
-            self.upload_arbitrary::<T>(immediate, allocator, content)
-                .await
-        }
-    }
-
-    /// Upload arbitrary data to a buffer without any form of safety checking
-    ///
-    /// # Safety
-    /// We do not make guarantees the type you're uploading fits inside the buffer
-    pub async unsafe fn upload_arbitrary<T: Sized>(
-        &mut self,
-        immediate: &mut crate::util::ImmediateSubmit,
-        allocator: &mut ArcAllocator<A>,
-        content: &[T],
-    ) -> Result<()> {
-        let buffer_size: vk::DeviceSize = mem::size_of_val(content) as vk::DeviceSize;
-        let staging_buffer = Self::new(BufferCreateInfo::NewEmptyBuffer {
-            device: self.device.clone(),
-            allocator,
-            size: buffer_size,
-            memory_type: crate::allocators::MemoryLocation::CpuToGpu,
-            usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-        })?;
-        unsafe {
-            ptr::copy_nonoverlapping::<u8>(
-                content.as_ptr() as *const u8,
-                staging_buffer.mapped_ptr().unwrap().as_ptr() as *mut u8,
-                buffer_size as usize,
-            );
-        }
-        {
-            immediate
-                .submit(Box::new({
-                    let src_buffer = unsafe { *staging_buffer.as_raw() };
-                    let dst_buffer = unsafe { *self.as_raw() };
-                    move |context: ImmediateSubmitContext| {
-                        let copy = vk::BufferCopy {
-                            src_offset: 0,
-                            dst_offset: 0,
-                            size: buffer_size,
-                        };
-                        unsafe {
-                            context.device.get_handle().cmd_copy_buffer(
-                                context.cmd.handle(),
-                                src_buffer,
-                                dst_buffer,
-                                &[copy],
-                            );
-                        }
-                    }
-                }))
-                .await?;
-        }
-        drop(staging_buffer);
-        Ok(())
     }
 
     /// Write to a mapped pointer if one exists

@@ -111,6 +111,8 @@ pub struct QueueAllocation {
     pub index: u32,
     /// Number of queues
     pub count: u32,
+    /// Family flags
+    pub family_flags: vk::QueueFlags,
 }
 
 /// Get Vulkan version from the version given by Khronos

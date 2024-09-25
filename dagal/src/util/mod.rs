@@ -2,16 +2,15 @@ use std::ffi::{c_char, CStr, CString};
 
 pub use align::*;
 pub use free_list_allocator::FreeList;
-pub use immediate_submit::ImmediateSubmit;
 pub use slot_map::*;
 
 pub mod align;
 pub mod free_list_allocator;
 /// Utility functions commonly used
-pub mod immediate_submit;
 pub mod slot_map;
 pub mod tests;
 mod traits;
+pub mod queue_allocator;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {
     raw_pointers.iter().map(|&p| wrap_c_str(p)).collect()

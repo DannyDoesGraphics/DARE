@@ -1,6 +1,6 @@
 pub mod asset;
 pub mod buffer;
-mod error;
+pub mod error;
 pub mod format;
 pub mod gltf;
 pub mod image;

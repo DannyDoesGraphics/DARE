@@ -1,9 +1,9 @@
 use crate::asset::asset::{AssetDescriptor, AssetState, AssetUnloaded, MetaDataLocation};
 use crate::asset::format::Format;
 use crate::asset::manager::AssetError;
-use crate::render::transfer::{BufferTransferRequest, TransferRequest};
-use crate::{asset, render};
 use anyhow::Result;
+use crate::prelude::asset as asset;
+use crate::prelude::render as render;
 use async_stream::stream;
 use bytemuck::Pod;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
@@ -39,7 +39,7 @@ impl<A: Allocator + 'static> AssetDescriptor for Buffer<A> {
 pub struct BufferLoadInfo<A: Allocator + 'static> {
     allocator: ArcAllocator<A>,
     stream_info: BufferStreamInfo,
-    transfer: render::transfer::TransferPool,
+    transfer: render::util::TransferPool,
     target_format: Option<Format>,
     buffer_location: MemoryLocation,
     usage_flags: vk::BufferUsageFlags,
@@ -222,7 +222,7 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
                 unsafe {
                     load_info
                         .transfer
-                        .transfer_gpu(TransferRequest::Buffer(BufferTransferRequest {
+                        .transfer_gpu(render::util::TransferRequest::Buffer(render::util::BufferTransferRequest {
                             src_buffer: *write_buffer.as_raw(),
                             dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
                             src_offset: 0,
@@ -289,7 +289,7 @@ impl<A: Allocator> BufferMetaData<A> {
         Ok(stream?
             .map(move |chunk| {
                 chunk.map(|chunk| {
-                    use asset::format::ElementFormat::*;
+                    use crate::asset::format::ElementFormat::*;
                     let chunk = match (
                         current_format.element_format(),
                         target_format.element_format(),

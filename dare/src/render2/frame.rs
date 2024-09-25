@@ -29,7 +29,7 @@ pub struct Frame {
 impl Frame {
     pub async fn new(
         surface_context: &SurfaceContext,
-        present_queue: &dagal::device::Queue,
+        present_queue: &dagal::device::Queue<tokio::sync::Mutex<vk::Queue>>,
         image_number: Option<usize>,
     ) -> Result<Self> {
         let mut allocator = surface_context.allocator.clone();

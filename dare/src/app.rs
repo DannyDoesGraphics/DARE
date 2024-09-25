@@ -71,10 +71,13 @@ impl winit::application::ApplicationHandler for App {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
                             let render =
-                                rs.send(render::RenderServerRequests::Render).await.unwrap();
+                                rs.send(render::RenderServerNoCallbackRequest::Render).await.unwrap();
                             render.notified().await;
                         });
                     });
+                    if let Some(window) = self.window.as_ref() {
+                        window.set_title(&format!("DARE | FPS: {}", 1));
+                    }
                 } else {
                 }
             }
@@ -85,7 +88,7 @@ impl winit::application::ApplicationHandler for App {
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async move {
                                 let render =
-                                    rs.send(render::RenderServerRequests::Stop).await.unwrap();
+                                    rs.send(render::RenderServerNoCallbackRequest::Stop).await.unwrap();
                                 render.notified().await;
                             });
                         });

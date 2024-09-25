@@ -1,7 +1,6 @@
 pub mod send_types;
 
 use crate::render2::prelude as render;
-use crate::render2::prelude::RenderServerRequests;
 use crate::render2::server::send_types::RenderServerPacket;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
@@ -44,11 +43,11 @@ impl RenderServer {
                     match new_recv.try_recv() {
                         Ok(packet) => {
                             match packet.request {
-                                RenderServerRequests::Render => {
+                                render::RenderServerNoCallbackRequest::Render => {
                                     println!("Processing render");
                                     schedule.run(&mut world);
                                 }
-                                RenderServerRequests::Stop => {
+                                render::RenderServerNoCallbackRequest::Stop => {
                                     println!("Processing stop");
                                     stop_flag = true;
                                 }
@@ -73,7 +72,7 @@ impl RenderServer {
         }
     }
 
-    pub async fn send(&self, request: RenderServerRequests) -> Result<Arc<tokio::sync::Notify>> {
+    pub async fn send(&self, request: render::RenderServerNoCallbackRequest) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
         println!("Requested {:?}", request);
         self.new_sender
@@ -85,9 +84,9 @@ impl RenderServer {
         Ok(notify)
     }
 
-    pub fn blocking_send(&self, request: RenderServerRequests) -> Result<Arc<tokio::sync::Notify>> {
+    pub fn blocking_send(&self, request: render::RenderServerNoCallbackRequest) -> Result<Arc<tokio::sync::Notify>> {
         match &request {
-            RenderServerRequests::Stop => {}
+            render::RenderServerNoCallbackRequest::Stop => {}
             _ => {}
         }
         let notify = Arc::new(tokio::sync::Notify::new());

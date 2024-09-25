@@ -68,13 +68,18 @@ impl RenderContext {
             .add_required_extension(dagal::ash::khr::swapchain::NAME.as_ptr())
             .set_minimum_vulkan_version((1, 3, 0))
             .add_required_queue(dagal::bootstrap::QueueRequest {
+                family_flags: vk::QueueFlags::TRANSFER,
+                count: 1,
+                dedicated: true,
+            })
+            .add_required_queue(dagal::bootstrap::QueueRequest {
                 family_flags: vk::QueueFlags::GRAPHICS,
                 count: 1,
                 dedicated: true,
             })
             .select(&instance)?;
         // Make logical device
-        let device = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
+        let (device, queues) = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
             .add_queue_allocation(dagal::bootstrap::QueueRequest {
                 family_flags: vk::QueueFlags::GRAPHICS,
                 count: 1,
@@ -110,6 +115,7 @@ impl RenderContext {
                 ..Default::default()
             })
             .build(&instance)?;
+        let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(queues);
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         // Create allocator
         let allocator = dagal::allocators::ArcAllocator::new(GPUAllocatorImpl::new(
@@ -132,10 +138,9 @@ impl RenderContext {
         )?);
 
         // pq
-        let present_queue = device
-            .acquire_queue(vk::QueueFlags::GRAPHICS, Some(true), None, Some(1))?
-            .pop()
-            .unwrap();
+        let present_queue = queue_allocator
+            .retrieve_queues(vk::QueueFlags::TRANSFER, 1)?.pop().unwrap();
+
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },
         );

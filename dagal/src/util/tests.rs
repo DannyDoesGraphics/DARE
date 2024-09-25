@@ -8,6 +8,8 @@ use raw_window_handle::RawDisplayHandle;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 
+use crate::prelude as dagal;
+
 /// Quick utility stuff for tests
 #[derive(Default, Clone)]
 pub struct TestSettings {
@@ -21,12 +23,12 @@ pub struct TestSettings {
     pub logical_device_extensions: Vec<CString>,
 }
 
-pub struct TestVulkan {
-    pub compute_queue: Option<crate::device::Queue>,
+pub struct TestVulkan<M: dagal::concurrency::Lockable<Target=vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
     pub device: Option<crate::device::LogicalDevice>,
     pub debug_messenger: Option<crate::device::DebugMessenger>,
     pub physical_device: Option<crate::device::PhysicalDevice>,
     pub instance: crate::core::Instance,
+    pub queue_allocator: Option<crate::util::queue_allocator::QueueAllocator<M>>
 }
 
 impl TestSettings {
@@ -69,11 +71,11 @@ pub fn create_vulkan(settings: TestSettings) -> TestVulkan {
     let debug_messenger =
         crate::device::DebugMessenger::new(instance.get_entry(), instance.get_instance()).unwrap();
     TestVulkan {
-        compute_queue: None,
         device: None,
         debug_messenger: Some(debug_messenger),
         physical_device: None,
         instance,
+        queue_allocator: None,
     }
 }
 
@@ -94,18 +96,17 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
     for ext in settings.logical_device_extensions.iter() {
         logical_device = logical_device.add_extension(ext.as_ptr());
     }
-    let logical_device = logical_device
+    let (logical_device, queues) = logical_device
         .build(test_vulkan.instance.get_instance())
         .unwrap();
-    let mut compute_queue = logical_device
-        .acquire_queue(vk::QueueFlags::COMPUTE, Some(true), Some(false), None)
-        .unwrap();
+
+    let queue_allocator = dagal::util::QueueAllocator::from(queues);
     TestVulkan {
-        compute_queue: compute_queue.pop(),
         device: Some(logical_device),
         debug_messenger: test_vulkan.debug_messenger,
         physical_device: Some(physical_device),
         instance: test_vulkan.instance,
+        queue_allocator: Some(queue_allocator),
     }
 }
 

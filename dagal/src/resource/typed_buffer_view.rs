@@ -65,17 +65,6 @@ impl<'a, T: Sized, A: Allocator> Nameable for TypedBufferView<'a, T, A> {
 }
 
 impl<'a, T: Sized, A: Allocator> TypedBufferView<'a, T, A> {
-    /// Upload into the typed buffer using the type exclusively
-    pub async fn upload(
-        &mut self,
-        immediate: &mut crate::util::ImmediateSubmit,
-        allocator: &mut ArcAllocator<A>,
-        content: &[T],
-    ) -> Result<()> {
-        self.buffer.upload(immediate, allocator, content).await?;
-        Ok(())
-    }
-
     /// Get reference to underlying untyped buffer
     pub fn get_untyped_buffer(&self) -> &Buffer<A> {
         self.buffer

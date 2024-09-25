@@ -1,9 +1,7 @@
 pub mod slot;
 
-use super::prelude as asset;
+use crate::prelude::*;
 use crate::asset::prelude::AssetUnloaded;
-use crate::render;
-use crate::render::transfer::{BufferTransferRequest, TransferRequest};
 use crate::util::either::Either;
 use anyhow::Result;
 use containers::dashmap::DashMap;
@@ -65,7 +63,7 @@ pub struct AssetManager<A: Allocator> {
     /// Allocator
     allocator: ArcAllocator<A>,
     /// Transfer
-    transfer: render::transfer::TransferPool,
+    transfer: render::util::TransferPool,
     /// GPU Resource Table
     gpu_rt: GPUResourceTable<A>,
     /// Inner
@@ -95,7 +93,7 @@ impl From<anyhow::Error> for AssetError {
 impl<A: Allocator + 'static> AssetManager<A> {
     pub fn new(
         allocator: ArcAllocator<A>,
-        transfer: render::transfer::TransferPool,
+        transfer: render::util::TransferPool,
         gpu_rt: GPUResourceTable<A>,
         keys: Vec<TypeId>,
         ttl: usize,
@@ -369,7 +367,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                             chunk_buffer.write(0, &chunk)?;
                             unsafe {
                                 self.transfer
-                                    .transfer_gpu(TransferRequest::Buffer(BufferTransferRequest {
+                                    .transfer_gpu(render::util::TransferRequest::Buffer(render::util::BufferTransferRequest {
                                         src_buffer: *chunk_buffer.as_raw(),
                                         dst_buffer: *buffer.as_raw(),
                                         src_offset: 0,
