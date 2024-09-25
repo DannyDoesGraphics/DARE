@@ -114,6 +114,12 @@ impl TransferPool {
         command_pool: Arc<dagal::command::CommandPool>,
         queues: Arc<Vec<dagal::device::Queue>>,
     ) -> Result<()> {
+        for queue in queues.iter() {
+            if queue.get_family_flags() & vk::QueueFlags::TRANSFER != vk::QueueFlags::TRANSFER {
+                return Err(anyhow::anyhow!("Expected a queue with TRANSFER, got bit flag {}", queue.get_family_flags()))
+            }
+        }
+
         while let Some(request) = receiver.recv().await {
             let permits = semaphore
                 .acquire_many(match &request.request {
