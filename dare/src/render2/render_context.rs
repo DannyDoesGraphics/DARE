@@ -11,6 +11,7 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use crate::prelude as dare;
 
 pub struct RenderContextCreateInfo {
     pub(crate) rdh: dagal::raw_window_handle::RawDisplayHandle,
@@ -33,7 +34,7 @@ pub struct RenderContextInner {
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub device: dagal::device::LogicalDevice,
     pub physical_device: dagal::device::PhysicalDevice,
-    pub instance: ManuallyDrop<dagal::core::Instance>,
+    pub instance: dagal::core::Instance,
 }
 
 impl Drop for RenderContextInner {
@@ -47,6 +48,7 @@ impl Drop for RenderContextInner {
 /// Describes the render context
 #[derive(Debug, Clone, becs::Resource)]
 pub struct RenderContext {
+    pub asset_manager: dare::asset::AssetManager<GPUAllocatorImpl>,
     pub inner: Arc<RenderContextInner>,
 }
 
@@ -69,7 +71,7 @@ impl RenderContext {
             .set_minimum_vulkan_version((1, 3, 0))
             .add_required_queue(dagal::bootstrap::QueueRequest {
                 family_flags: vk::QueueFlags::TRANSFER,
-                count: 1,
+                count: 2,
                 dedicated: true,
             })
             .add_required_queue(dagal::bootstrap::QueueRequest {
@@ -119,7 +121,7 @@ impl RenderContext {
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(queues);
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         // Create allocator
-        let allocator = dagal::allocators::ArcAllocator::new(GPUAllocatorImpl::new(
+        let mut allocator = dagal::allocators::ArcAllocator::new(GPUAllocatorImpl::new(
             gpu_allocator::vulkan::AllocatorCreateDesc {
                 instance: instance.get_instance().clone(),
                 device: device.get_handle().clone(),
@@ -139,24 +141,61 @@ impl RenderContext {
         )?);
 
         // pq
-        let present_queue = queue_allocator
-            .retrieve_queues(vk::QueueFlags::TRANSFER, 1)?
-            .pop()
-            .unwrap();
+        let mut transfer_queues = queue_allocator
+            .retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
+        let present_queue = transfer_queues.pop().unwrap();
+        let transfer_queue = transfer_queues.pop().unwrap();
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },
         );
+        let gpu_rt = dare::render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
+            device.clone(),
+            &mut allocator,
+        )?;
+        /// 128mb transfers
+        let transfer_pool = {
+            let transfer_command_pool = dagal::command::CommandPool::new(
+                device.clone(),
+                &transfer_queue,
+                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+            )?;
+            let transfer_command_pool = Arc::new(transfer_command_pool);
+            dare::render::util::TransferPool::new(
+                device.clone(),
+                vk::DeviceSize::from(128_000_u64),
+                allocator.clone(),
+                transfer_command_pool,
+                Arc::new(vec![transfer_queue]),
+            )?
+        };
+
+        let asset_manager = {
+            use std::any::TypeId;
+            dare::asset::AssetManager::new(
+                allocator.clone(),
+                transfer_pool.clone(),
+                gpu_rt,
+                vec![
+                    TypeId::of::<dare::asset::Buffer<GPUAllocatorImpl>>(),
+                    TypeId::of::<dare::asset::Image<GPUAllocatorImpl>>(),
+                    TypeId::of::<dare::asset::ImageView<GPUAllocatorImpl>>(),
+                ],
+                // hold for 10 * fif
+                ci.configuration.target_frames_in_flight * 10
+            )?
+        };
 
         Ok(Self {
             inner: Arc::new(RenderContextInner {
-                instance: ManuallyDrop::new(instance),
+                instance,
                 physical_device,
                 device,
                 allocator,
                 window_context: Arc::new(window_context),
                 configuration: ci.configuration,
             }),
+            asset_manager,
         })
     }
 

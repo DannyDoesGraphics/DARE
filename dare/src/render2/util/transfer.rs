@@ -48,6 +48,8 @@ pub struct TransferPool {
     semaphore: Arc<tokio::sync::Semaphore>,
     sender: Arc<tokio::sync::mpsc::Sender<TransferRequestInner>>,
 }
+unsafe impl Send for TransferPool {}
+unsafe impl Sync for TransferPool {}
 
 async fn pick_available_queues(
     queues: &[dagal::device::Queue],
@@ -79,7 +81,7 @@ impl TransferPool {
             sender: Arc::new(sender),
         };
         let semaphore = sf.semaphore.clone();
-        tokio::task::spawn(async move {
+        tokio::spawn(async move {
             Self::process_upload_requests(
                 semaphore,
                 receiver,
@@ -115,8 +117,8 @@ impl TransferPool {
         queues: Arc<Vec<dagal::device::Queue>>,
     ) -> Result<()> {
         for queue in queues.iter() {
-            if queue.get_family_flags() & vk::QueueFlags::TRANSFER != vk::QueueFlags::TRANSFER {
-                return Err(anyhow::anyhow!("Expected a queue with TRANSFER, got bit flag {}", queue.get_family_flags()))
+            if queue.get_queue_flags() & vk::QueueFlags::TRANSFER != vk::QueueFlags::TRANSFER {
+                return Err(anyhow::anyhow!("Expected a queue with TRANSFER, got bit flag OTHER"))
             }
         }
 

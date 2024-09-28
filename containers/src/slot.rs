@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 #[derive(Derivative)]
 #[derivative(Debug, PartialEq, Eq, Hash)]
 pub struct Slot<T> {
-    id: usize,
-    generation: usize,
+    pub(crate) id: usize,
+    pub(crate) generation: usize,
     #[derivative(Debug = "ignore", PartialEq = "ignore", Hash = "ignore")]
     _marker: PhantomData<T>,
 }

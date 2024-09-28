@@ -10,6 +10,12 @@ pub struct Sampler {
     handle: vk::Sampler,
     device: crate::device::LogicalDevice,
 }
+impl PartialEq for Sampler {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
+    }
+}
+impl Eq for Sampler {}
 
 impl Destructible for Sampler {
     fn destroy(&mut self) {
@@ -61,8 +67,8 @@ impl<'a> Resource<'a> for Sampler {
     type CreateInfo = SamplerCreateInfo<'a>;
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
-        Self: Sized,
+           where
+               Self: Sized,
     {
         match create_info {
             SamplerCreateInfo::FromCreateInfo {

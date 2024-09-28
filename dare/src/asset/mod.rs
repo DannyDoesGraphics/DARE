@@ -12,3 +12,4 @@ pub mod prelude;
 pub mod storage;
 pub mod surface;
 pub mod texture;
+mod sampler;

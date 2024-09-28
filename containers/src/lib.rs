@@ -7,5 +7,6 @@ pub mod prelude;
 pub mod slot;
 pub mod sparse_slot_map;
 pub mod traits;
+mod slot_map;
 
 pub use dashmap;

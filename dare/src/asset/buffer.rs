@@ -81,6 +81,9 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
     type StreamInfo = BufferStreamInfo;
     type LoadInfo = BufferLoadInfo<A>;
 
+    /// # Cancellation safety
+    /// A buffer stream is considered to not be cancellation safe whatsoever. Cancellation will
+    /// lead to UB, primarily, infinitely loading buffers
     async fn stream(
         self,
         stream_info: Self::StreamInfo,
@@ -111,11 +114,14 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
                         match file.read_exact(&mut buffer).await {
                             Ok(_) => {
                                 if chunk.len() >= chunk_size {
-                                    /// Round down to 1 element size
+                                    // Round down to 1 element size
                                     yield Ok(chunk.drain(0..((chunk_size / element_size) * element_size)).collect())
                                 }
                                 chunk.extend_from_slice(&buffer);
-                                file.seek(io::SeekFrom::Current((stride - element_size) as i64)).await?;
+                                // Skip the padding
+                                if stride - element_size > 0 {
+                                    file.seek(io::SeekFrom::Current((stride - element_size) as i64)).await?;
+                                }
                                 elements_processed += 1;
                             }
                             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
@@ -178,70 +184,81 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
         mut load_info: Self::LoadInfo,
         sender: tokio::sync::watch::Sender<Option<Arc<Self::AssetLoaded>>>,
     ) -> Result<Arc<Self::AssetLoaded>> {
-        let metadata = self.clone();
+        let res: Result<Arc<resource::Buffer<A>>> = {
+            let metadata = self.clone();
 
-        let stream = metadata.clone().stream(load_info.stream_info).await?;
-        let mut stream = match load_info.target_format {
-            None => stream,
-            Some(target_format) => {
-                Self::cast_stream(Ok(stream), metadata.element_format, target_format).await?
+            let stream = metadata.clone().stream(load_info.stream_info).await?;
+            let mut stream = match load_info.target_format {
+                None => stream,
+                Some(target_format) => {
+                    Self::cast_stream(Ok(stream), metadata.element_format, target_format).await?
+                }
+            };
+            let mut write_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                device: load_info.allocator.device(),
+                allocator: &mut load_info.allocator,
+                size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
+                memory_type: load_info.buffer_location,
+                usage_flags: load_info.usage_flags,
+            })?;
+            let mut output_buffer: Option<resource::Buffer<A>> = None;
+            match load_info.buffer_location {
+                MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
+                MemoryLocation::GpuOnly => {
+                    // Swap write buffer to not be written to and make a dedicated transfer buffer
+                    let mut transfer_buffer =
+                        resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                            device: load_info.allocator.device(),
+                            allocator: &mut load_info.allocator,
+                            size: load_info.stream_info.chunk_size as vk::DeviceSize,
+                            memory_type: load_info.buffer_location,
+                            usage_flags: load_info.usage_flags,
+                        })?;
+                    // swap write with transfer
+                    std::mem::swap(&mut transfer_buffer, &mut write_buffer);
+                    output_buffer = Some(transfer_buffer);
+                }
+                MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => {}
             }
-        };
-        let mut write_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-            device: load_info.allocator.device(),
-            allocator: &mut load_info.allocator,
-            size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
-            memory_type: load_info.buffer_location,
-            usage_flags: load_info.usage_flags,
-        })?;
-        let mut output_buffer: Option<resource::Buffer<A>> = None;
-        match load_info.buffer_location {
-            MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
-            MemoryLocation::GpuOnly => {
-                // Swap write buffer to not be written to and make a dedicated transfer buffer
-                let mut transfer_buffer =
-                    resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                        device: load_info.allocator.device(),
-                        allocator: &mut load_info.allocator,
-                        size: load_info.stream_info.chunk_size as vk::DeviceSize,
-                        memory_type: load_info.buffer_location,
-                        usage_flags: load_info.usage_flags,
-                    })?;
-                // swap write with transfer
-                std::mem::swap(&mut transfer_buffer, &mut write_buffer);
-                output_buffer = Some(transfer_buffer);
-            }
-            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => {}
-        }
-        let mut write_offset: vk::DeviceSize = 0;
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            write_buffer.write(write_offset, &chunk)?;
-            write_offset += chunk.len() as vk::DeviceSize;
-            if load_info.buffer_location == MemoryLocation::GpuOnly {
-                unsafe {
-                    load_info
-                        .transfer
-                        .transfer_gpu(render::util::TransferRequest::Buffer(
-                            render::util::BufferTransferRequest {
-                                src_buffer: *write_buffer.as_raw(),
-                                dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
-                                src_offset: 0,
-                                dst_offset: write_offset,
-                                length: load_info.stream_info.chunk_size as vk::DeviceSize,
-                            },
-                        ))
-                        .await?;
+            let mut write_offset: vk::DeviceSize = 0;
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                write_buffer.write(write_offset, &chunk)?;
+                write_offset += chunk.len() as vk::DeviceSize;
+                if load_info.buffer_location == MemoryLocation::GpuOnly {
+                    unsafe {
+                        load_info
+                            .transfer
+                            .transfer_gpu(render::util::TransferRequest::Buffer(
+                                render::util::BufferTransferRequest {
+                                    src_buffer: *write_buffer.as_raw(),
+                                    dst_buffer: *output_buffer.as_ref().unwrap().as_raw(),
+                                    src_offset: 0,
+                                    dst_offset: write_offset,
+                                    length: load_info.stream_info.chunk_size as vk::DeviceSize,
+                                },
+                            ))
+                            .await?;
+                    }
                 }
             }
+            let output_buffer: Arc<resource::Buffer<A>> = Arc::new(match load_info.buffer_location {
+                MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
+                MemoryLocation::GpuOnly => output_buffer.unwrap(),
+                MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => write_buffer,
+            });
+            Ok(output_buffer)
+        };
+        match res {
+            Ok(buffer) => {
+                sender.send(Some(buffer.clone()))?;
+                Ok(buffer)
+            }
+            Err(e) => {
+                sender.send(None)?;
+                Err(e)
+            }
         }
-        let output_buffer: Arc<resource::Buffer<A>> = Arc::new(match load_info.buffer_location {
-            MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
-            MemoryLocation::GpuOnly => output_buffer.unwrap(),
-            MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => write_buffer,
-        });
-        sender.send(Some(output_buffer.clone()))?;
-        Ok(output_buffer)
     }
 }
 
@@ -262,7 +279,6 @@ impl<A: Allocator> BufferMetaData<A> {
                     warn!("File at {:?} has a length smaller than expected from metadata. Expected length: {:?}, got length: {:?}", path, length, bytes_read);
                 }
                 let _ = buffer.split_off(bytes_read);
-                println!("{:?}", buffer);
                 // read only up to element count of data
                 let processed_data = buffer[..(upper_size - self.offset)]
                     .chunks_exact(self.stride.unwrap_or(self.element_format.size()))

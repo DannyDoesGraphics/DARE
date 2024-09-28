@@ -29,9 +29,9 @@ impl<A: AssetDescriptor> Clone for WeakAssetRef<A> {
 impl<A: AssetDescriptor> Debug for WeakAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-            .field("metadata", &self.metadata)
-            .field("state", &self.state.upgrade())
-            .finish()
+         .field("metadata", &self.metadata)
+         .field("state", &self.state.upgrade())
+         .finish()
     }
 }
 
@@ -74,9 +74,9 @@ impl<A: AssetDescriptor> Clone for StrongAssetRef<A> {
 impl<A: AssetDescriptor> Debug for StrongAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-            .field("metadata", &self.metadata)
-            .field("state", &self.state)
-            .finish()
+         .field("metadata", &self.metadata)
+         .field("state", &self.state)
+         .finish()
     }
 }
 
@@ -121,7 +121,7 @@ impl<A: AssetDescriptor> AssetMetadataAndState<A> {
 pub trait AssetDescriptor {
     type Loaded: PartialEq + Eq + Debug;
     /// Any data as to how the asset should be loaded in
-    type Metadata: AssetUnloaded<AssetLoaded = Self::Loaded>;
+    type Metadata: AssetUnloaded<AssetLoaded=Self::Loaded>;
 }
 
 pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone + Debug {
@@ -152,32 +152,30 @@ pub enum AssetState<A: AssetDescriptor> {
     Unloading(Weak<A::Loaded>),
 }
 
-impl<A: AssetDescriptor> AssetState<A> {
-    pub fn unload(self) -> Self {
+impl<A: AssetDescriptor> Clone for AssetState<A> {
+    fn clone(&self) -> Self {
         match self {
-            AssetState::Loaded(loading) => AssetState::Unloading(Arc::downgrade(&loading)),
-            _ => unimplemented!(),
+            AssetState::Unloaded(metadata) => AssetState::Unloaded(metadata.clone()),
+            AssetState::Loading(notify) => AssetState::Loading(notify.clone()),
+            AssetState::Loaded(data) => AssetState::Loaded(data.clone()),
+            AssetState::Unloading(weak) => AssetState::Unloading(weak.clone())
         }
     }
+}
 
-    pub async fn load(
-        &mut self,
-        load_info: <<A as AssetDescriptor>::Metadata as AssetUnloaded>::LoadInfo,
-    ) -> Result<Self> {
+impl<A: AssetDescriptor> AssetState<A> {
+    pub fn unload(&mut self) -> Result<()> {
         match self {
-            AssetState::Unloaded(metadata) => {
-                let metadata = metadata.clone();
-                let (send, recv) = tokio::sync::watch::channel(None);
-                *self = Self::Loading(recv);
-                let loaded = metadata.load(load_info, send).await?;
-                Ok(Self::Loaded(loaded))
-            }
-            _ => unimplemented!(),
+            AssetState::Loaded(loading) => {
+                *self = AssetState::Unloading(Arc::downgrade(&loading));
+                Ok(())
+            },
+            _ => Err(anyhow::anyhow!("Expected asset state, loading, got other")),
         }
     }
 
     /// Get a ref to the underlying asset being held
-    pub async fn get_asset(&self) -> Option<Arc<A::Loaded>> {
+    pub fn get_asset(&self) -> Option<Arc<A::Loaded>> {
         match self {
             AssetState::Loaded(loaded) => Some(loaded.clone()),
             _ => None,

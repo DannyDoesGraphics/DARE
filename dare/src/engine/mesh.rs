@@ -1,4 +1,4 @@
-use crate::asset::prelude as asset;
+use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
 
@@ -6,5 +6,7 @@ use dagal::allocators::Allocator;
 #[derive(becs::Bundle)]
 pub struct Mesh<A: Allocator + 'static> {
     /// Reference to the underlying surface
-    pub surface: asset::Surface<A>,
+    pub surface: dare::asset::SurfaceMetadata<A>,
+    /// Expect a transform
+    pub transform: dare::physics::components::Transform,
 }
