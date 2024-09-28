@@ -194,13 +194,15 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
                     Self::cast_stream(Ok(stream), metadata.element_format, target_format).await?
                 }
             };
-            let mut write_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                device: load_info.allocator.device(),
-                allocator: &mut load_info.allocator,
-                size: (metadata.element_format.size() * metadata.element_count) as vk::DeviceSize,
-                memory_type: load_info.buffer_location,
-                usage_flags: load_info.usage_flags,
-            })?;
+            let mut write_buffer =
+                resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: load_info.allocator.device(),
+                    allocator: &mut load_info.allocator,
+                    size: (metadata.element_format.size() * metadata.element_count)
+                        as vk::DeviceSize,
+                    memory_type: load_info.buffer_location,
+                    usage_flags: load_info.usage_flags,
+                })?;
             let mut output_buffer: Option<resource::Buffer<A>> = None;
             match load_info.buffer_location {
                 MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
@@ -242,11 +244,12 @@ impl<A: Allocator + 'static> AssetUnloaded for BufferMetaData<A> {
                     }
                 }
             }
-            let output_buffer: Arc<resource::Buffer<A>> = Arc::new(match load_info.buffer_location {
-                MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
-                MemoryLocation::GpuOnly => output_buffer.unwrap(),
-                MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => write_buffer,
-            });
+            let output_buffer: Arc<resource::Buffer<A>> =
+                Arc::new(match load_info.buffer_location {
+                    MemoryLocation::GpuToCpu => unimplemented!(), // Wtf!? Why would you ever load from cpu to gpu back to cpu directly????
+                    MemoryLocation::GpuOnly => output_buffer.unwrap(),
+                    MemoryLocation::CpuOnly | MemoryLocation::CpuToGpu => write_buffer,
+                });
             Ok(output_buffer)
         };
         match res {

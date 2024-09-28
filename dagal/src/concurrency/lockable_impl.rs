@@ -17,8 +17,7 @@ impl<T> SyncLockable for std::sync::Mutex<T> {
     }
 
     fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
-        self
-            .try_lock()
+        self.try_lock()
             .map_err(|_| anyhow::Error::from(PoisonError))
     }
 }

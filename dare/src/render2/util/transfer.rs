@@ -118,7 +118,9 @@ impl TransferPool {
     ) -> Result<()> {
         for queue in queues.iter() {
             if queue.get_queue_flags() & vk::QueueFlags::TRANSFER != vk::QueueFlags::TRANSFER {
-                return Err(anyhow::anyhow!("Expected a queue with TRANSFER, got bit flag OTHER"))
+                return Err(anyhow::anyhow!(
+                    "Expected a queue with TRANSFER, got bit flag OTHER"
+                ));
             }
         }
 

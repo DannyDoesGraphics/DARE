@@ -4,11 +4,11 @@ use tracing_subscriber::FmtSubscriber;
 
 mod app;
 mod asset;
+mod engine;
 mod physics;
 mod prelude;
 mod render2;
 mod util;
-mod engine;
 
 #[tokio::main]
 async fn main() {

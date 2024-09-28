@@ -5,5 +5,5 @@ pub enum ContainerErrors {
     #[error("Expected a valid slot, got null")]
     NonexistentSlot,
     #[error("Slot generation mismatch")]
-    GenerationMismatch
+    GenerationMismatch,
 }

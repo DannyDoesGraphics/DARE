@@ -29,9 +29,9 @@ impl<A: AssetDescriptor> Clone for WeakAssetRef<A> {
 impl<A: AssetDescriptor> Debug for WeakAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-         .field("metadata", &self.metadata)
-         .field("state", &self.state.upgrade())
-         .finish()
+            .field("metadata", &self.metadata)
+            .field("state", &self.state.upgrade())
+            .finish()
     }
 }
 
@@ -74,9 +74,9 @@ impl<A: AssetDescriptor> Clone for StrongAssetRef<A> {
 impl<A: AssetDescriptor> Debug for StrongAssetRef<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("WeakAssetRef")
-         .field("metadata", &self.metadata)
-         .field("state", &self.state)
-         .finish()
+            .field("metadata", &self.metadata)
+            .field("state", &self.state)
+            .finish()
     }
 }
 
@@ -121,7 +121,7 @@ impl<A: AssetDescriptor> AssetMetadataAndState<A> {
 pub trait AssetDescriptor {
     type Loaded: PartialEq + Eq + Debug;
     /// Any data as to how the asset should be loaded in
-    type Metadata: AssetUnloaded<AssetLoaded=Self::Loaded>;
+    type Metadata: AssetUnloaded<AssetLoaded = Self::Loaded>;
 }
 
 pub trait AssetUnloaded: Hash + PartialEq + Eq + Clone + Debug {
@@ -158,7 +158,7 @@ impl<A: AssetDescriptor> Clone for AssetState<A> {
             AssetState::Unloaded(metadata) => AssetState::Unloaded(metadata.clone()),
             AssetState::Loading(notify) => AssetState::Loading(notify.clone()),
             AssetState::Loaded(data) => AssetState::Loaded(data.clone()),
-            AssetState::Unloading(weak) => AssetState::Unloading(weak.clone())
+            AssetState::Unloading(weak) => AssetState::Unloading(weak.clone()),
         }
     }
 }
@@ -169,7 +169,7 @@ impl<A: AssetDescriptor> AssetState<A> {
             AssetState::Loaded(loading) => {
                 *self = AssetState::Unloading(Arc::downgrade(&loading));
                 Ok(())
-            },
+            }
             _ => Err(anyhow::anyhow!("Expected asset state, loading, got other")),
         }
     }

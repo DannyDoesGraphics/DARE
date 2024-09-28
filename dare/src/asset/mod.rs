@@ -8,8 +8,8 @@ mod image_view;
 pub mod manager;
 pub mod material;
 pub mod prelude;
+mod sampler;
 /// Asset 2 system
 pub mod storage;
 pub mod surface;
 pub mod texture;
-mod sampler;

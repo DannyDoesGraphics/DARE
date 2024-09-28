@@ -67,8 +67,8 @@ impl<'a> Resource<'a> for Sampler {
     type CreateInfo = SamplerCreateInfo<'a>;
 
     fn new(create_info: Self::CreateInfo) -> Result<Self>
-           where
-               Self: Sized,
+    where
+        Self: Sized,
     {
         match create_info {
             SamplerCreateInfo::FromCreateInfo {

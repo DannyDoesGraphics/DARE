@@ -134,13 +134,14 @@ impl<A: Allocator + 'static> AssetUnloaded for ImageMetaData<A> {
                 .flat_map(|pixel| pixel.0)
                 .collect::<Vec<u8>>();
             let mut allocator = load_info.allocator.clone();
-            let transfer_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                device: load_info.allocator.device(),
-                allocator: &mut allocator,
-                size: pixels.len() as vk::DeviceSize,
-                memory_type: MemoryLocation::CpuToGpu,
-                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
-            })?;
+            let transfer_buffer =
+                resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: load_info.allocator.device(),
+                    allocator: &mut allocator,
+                    size: pixels.len() as vk::DeviceSize,
+                    memory_type: MemoryLocation::CpuToGpu,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC,
+                })?;
             let family_indices = load_info
                 .queues
                 .iter()
@@ -205,5 +206,4 @@ impl<A: Allocator + 'static> AssetUnloaded for ImageMetaData<A> {
             }
         }
     }
-
 }

@@ -1,8 +1,8 @@
 pub mod slot;
 
-use crate::render2::prelude::util::GPUResourceTable;
 use crate::asset::prelude::AssetUnloaded;
 use crate::prelude::*;
+use crate::render2::prelude::util::GPUResourceTable;
 use crate::util::either::Either;
 use anyhow::Result;
 use containers::dashmap::DashMap;
@@ -10,6 +10,7 @@ use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource;
 use dagal::resource::traits::Resource;
+use dagal::resource::Buffer;
 use dagal::traits::AsRaw;
 use dare_containers::prelude as containers;
 use futures::{FutureExt, SinkExt, StreamExt};
@@ -21,7 +22,6 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use tokio::io::AsyncReadExt;
-use dagal::resource::Buffer;
 
 /// Contains the metadata hash of an [`AssetDescriptor`]
 ///
@@ -206,7 +206,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                 key.hash(&mut hash);
                 let hash = hash.finish();
                 map.get(&hash)
-                   .map(move |resource| slot::AssetSlotRef::from(resource.value()))
+                    .map(move |resource| slot::AssetSlotRef::from(resource.value()))
             })
             .flatten()
     }
@@ -224,7 +224,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                     hasher.finish()
                 };
                 map.get(&hash)
-                   .map(|resource| resource.get_holder().metadata.clone())
+                    .map(|resource| resource.get_holder().metadata.clone())
             })
             .flatten()
     }
@@ -319,7 +319,8 @@ impl<A: Allocator + 'static> AssetManager<A> {
         &self,
         load_request: BufferRequest<A>,
     ) -> Result<Arc<resource::Buffer<A>>> {
-        let slot_holder = match self.get::<asset::Buffer<A>>(Either::Right(&load_request.metadata)) {
+        let slot_holder = match self.get::<asset::Buffer<A>>(Either::Right(&load_request.metadata))
+        {
             None => Err(anyhow::anyhow!("No asset slot found")),
             Some(slot) => Ok(slot.holder.clone()),
         }?;
@@ -335,10 +336,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                         *state_write = asset::AssetState::Loading(receiver.clone());
                         drop(state_write);
 
-                        let buffer = Arc::new(self.load_buffer(
-                            &load_request,
-                            &metadata
-                        ).await?);
+                        let buffer = Arc::new(self.load_buffer(&load_request, &metadata).await?);
 
                         {
                             // update state and notify if loading
@@ -358,7 +356,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                     // await for the buffer to change
                     receiver.changed().await?;
                     if let Some(buffer) = &*receiver.borrow() {
-                        return Ok(buffer.clone())
+                        return Ok(buffer.clone());
                     } else {
                         // failed to load buffer, try again
                         continue;
@@ -382,7 +380,7 @@ impl<A: Allocator + 'static> AssetManager<A> {
                             if let asset::AssetState::Unloading(_) = &*state_write {
                                 *state_write = asset::AssetState::Loaded(buffer.clone());
                             }
-                            return Ok(buffer.clone())
+                            return Ok(buffer.clone());
                         }
                     }
                 }
@@ -390,9 +388,10 @@ impl<A: Allocator + 'static> AssetManager<A> {
         }
     }
 
-    async fn load_buffer(&self,
-                         load_request: &BufferRequest<A>,
-                         metadata: &asset::BufferMetaData<A>,
+    async fn load_buffer(
+        &self,
+        load_request: &BufferRequest<A>,
+        metadata: &asset::BufferMetaData<A>,
     ) -> Result<resource::Buffer<A>> {
         let mut allocator = self.allocator.clone();
 
@@ -418,26 +417,26 @@ impl<A: Allocator + 'static> AssetManager<A> {
                 buffer.write(dst_offset, &chunk)?;
                 continue;
             }
-            let mut chunk_buffer = resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
-                device: self.allocator.device(),
-                allocator: &mut allocator,
-                size: load_request.chunk_size as vk::DeviceSize,
-                memory_type: MemoryLocation::CpuToGpu,
-                usage_flags: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC,
-            })?;
+            let mut chunk_buffer =
+                resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: self.allocator.device(),
+                    allocator: &mut allocator,
+                    size: load_request.chunk_size as vk::DeviceSize,
+                    memory_type: MemoryLocation::CpuToGpu,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::TRANSFER_SRC,
+                })?;
             chunk_buffer.write(0, &chunk)?;
             self.transfer
-                .transfer_gpu(
-                    render::util::TransferRequest::Buffer(
-                        render::util::BufferTransferRequest {
-                            src_buffer: unsafe { *chunk_buffer.as_raw() },
-                            dst_buffer: unsafe { *buffer.as_raw() },
-                            src_offset: 0,
-                            dst_offset,
-                            length: chunk_buffer.get_size(),
-                        }
-                    )
-                )
+                .transfer_gpu(render::util::TransferRequest::Buffer(
+                    render::util::BufferTransferRequest {
+                        src_buffer: unsafe { *chunk_buffer.as_raw() },
+                        dst_buffer: unsafe { *buffer.as_raw() },
+                        src_offset: 0,
+                        dst_offset,
+                        length: chunk_buffer.get_size(),
+                    },
+                ))
                 .await?;
         }
         todo!()

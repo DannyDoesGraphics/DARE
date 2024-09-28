@@ -1,14 +1,14 @@
+use crate::asset::prelude::AssetDescriptor;
+use crate::prelude as dare;
+use anyhow::Error;
+use async_stream::stream;
+use dagal::ash::vk;
+use dagal::resource::traits::Resource;
+use futures::stream::BoxStream;
 use std::hash::Hasher;
 use std::ptr;
 use std::sync::Arc;
-use anyhow::Error;
-use async_stream::stream;
-use futures::stream::BoxStream;
 use tokio::sync::watch::Sender;
-use dagal::ash::vk;
-use dagal::resource::traits::Resource;
-use crate::asset::prelude::AssetDescriptor;
-use crate::prelude as dare;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sampler {}
@@ -66,7 +66,10 @@ impl dare::asset::AssetUnloaded for SamplerMetaData {
     type StreamInfo = SamplerLoadInfo;
     type LoadInfo = SamplerLoadInfo;
 
-    async fn stream(self, stream_info: Self::StreamInfo) -> anyhow::Result<BoxStream<'static, anyhow::Result<Self::Chunk>>> {
+    async fn stream(
+        self,
+        stream_info: Self::StreamInfo,
+    ) -> anyhow::Result<BoxStream<'static, anyhow::Result<Self::Chunk>>> {
         Ok(Box::pin(stream! {
                 let sampler_ci = vk::SamplerCreateInfo {
                 s_type: vk::StructureType::SAMPLER_CREATE_INFO,
@@ -100,7 +103,11 @@ impl dare::asset::AssetUnloaded for SamplerMetaData {
         }))
     }
 
-    async fn load(&self, load_info: Self::LoadInfo, sender: Sender<Option<Arc<Self::AssetLoaded>>>) -> anyhow::Result<Arc<Self::AssetLoaded>> {
+    async fn load(
+        &self,
+        load_info: Self::LoadInfo,
+        sender: Sender<Option<Arc<Self::AssetLoaded>>>,
+    ) -> anyhow::Result<Arc<Self::AssetLoaded>> {
         let sampler_ci = vk::SamplerCreateInfo {
             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
             p_next: ptr::null(),
@@ -122,17 +129,15 @@ impl dare::asset::AssetUnloaded for SamplerMetaData {
             unnormalized_coordinates: vk::Bool32::from(self.unnormalized_coordinates),
             _marker: Default::default(),
         };
-        let sampler = dagal::resource::Sampler::new(
-            dagal::resource::SamplerCreateInfo::FromCreateInfo {
+        let sampler =
+            dagal::resource::Sampler::new(dagal::resource::SamplerCreateInfo::FromCreateInfo {
                 device: load_info.device,
                 create_info: sampler_ci,
                 name: None,
-            }
-        ).and_then(|sampler| Ok(Arc::new(sampler)));
+            })
+            .and_then(|sampler| Ok(Arc::new(sampler)));
         match sampler {
-            Ok(sampler) => {
-                Ok(sampler)
-            }
+            Ok(sampler) => Ok(sampler),
             Err(e) => {
                 sender.send(None)?;
                 Err(e)

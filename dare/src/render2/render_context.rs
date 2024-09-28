@@ -1,3 +1,4 @@
+use crate::prelude as dare;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -11,7 +12,6 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::prelude as dare;
 
 pub struct RenderContextCreateInfo {
     pub(crate) rdh: dagal::raw_window_handle::RawDisplayHandle,
@@ -141,8 +141,7 @@ impl RenderContext {
         )?);
 
         // pq
-        let mut transfer_queues = queue_allocator
-            .retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
+        let mut transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
         let present_queue = transfer_queues.pop().unwrap();
         let transfer_queue = transfer_queues.pop().unwrap();
 
@@ -158,7 +157,7 @@ impl RenderContext {
             let transfer_command_pool = dagal::command::CommandPool::new(
                 device.clone(),
                 &transfer_queue,
-                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             )?;
             let transfer_command_pool = Arc::new(transfer_command_pool);
             dare::render::util::TransferPool::new(
@@ -182,7 +181,7 @@ impl RenderContext {
                     TypeId::of::<dare::asset::ImageView<GPUAllocatorImpl>>(),
                 ],
                 // hold for 10 * fif
-                ci.configuration.target_frames_in_flight * 10
+                ci.configuration.target_frames_in_flight * 10,
             )?
         };
 
