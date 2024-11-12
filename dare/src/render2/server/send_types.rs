@@ -29,6 +29,6 @@ pub struct RenderServerPacket {
 /// Defines deltas to update the render server with the new relations between different assets
 #[derive(Debug)]
 pub enum RenderServerAssetRelationDelta {
-    Entry(becs::Entity, dare::engine::components::Surface),
+    Entry(becs::Entity, dare::engine::Mesh),
     Remove(becs::Entity),
 }

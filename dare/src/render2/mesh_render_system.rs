@@ -19,7 +19,7 @@ pub fn mesh_render(
             dare::render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
     >,
-    surfaces: becs::Res<'_, dare::render::resource_relationship::Surfaces>,
+    meshes: becs::Res<'_, dare::render::resource_relationship::Meshes>,
     bindless: becs::Res<'_, dare::render::util::GPUResourceTable<GPUAllocatorImpl>>,
 ) {
     tokio::task::block_in_place(move || {
@@ -113,8 +113,8 @@ pub fn mesh_render(
                             );
                         }
 
-                        for surface in surfaces.0.values() {
-                            let surface = surface.clone().upgrade();
+                        for mesh in meshes.0.values() {
+                            let surface = mesh.clone().surface.upgrade();
                             if surface.is_none() {
                                 continue;
                             }
@@ -142,10 +142,11 @@ pub fn mesh_render(
                                         recording.handle(),
                                         *index_buffer.buffer.as_raw(),
                                         0,
-                                        vk::IndexType::UINT16,
+                                        vk::IndexType::UINT32,
                                     );
                                 let view =
-                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 10.0, -5.0));
+                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
+                                let model = mesh.transform.get_transform_matrix();
                                 let aspect_ratio = frame.draw_image.extent().width as f32
                                     / frame.draw_image.extent().height as f32;
                                 let mut projection = glam::Mat4::perspective_rh(
@@ -156,7 +157,7 @@ pub fn mesh_render(
                                 );
 
                                 projection.y_axis.y *= -1.0; // flip
-                                let mut view_proj = projection * view;
+                                let mut view_proj = projection * view * model;
                                 let push_constant = CPushConstant {
                                     transform: view_proj.to_cols_array(),
                                     vertex_buffer: vertex_buffer.address(),

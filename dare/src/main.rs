@@ -13,6 +13,14 @@ mod util;
 
 #[tokio::main]
 async fn main() {
+    std::panic::set_hook(Box::new(|info| {
+        use std::io::Write;
+        eprintln!("The program panicked: {}", info);
+        print!("Press Enter to exit...");
+        std::io::stdout().flush().expect("Failed to flush stdout");
+        let _ = std::io::stdin().read_line(&mut String::new());
+    }));
+
     let subscriber = FmtSubscriber::builder()
         .with_max_level(tracing::Level::TRACE)
         .with_file(true)

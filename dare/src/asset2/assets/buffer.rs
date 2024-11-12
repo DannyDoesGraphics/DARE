@@ -50,20 +50,24 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
     async fn stream<'a>(
         &self,
         stream_info: Self::StreamInfo<'a>,
-    ) -> anyhow::Result<futures_core::stream::BoxStream<'a, anyhow::Result<Self::Chunk>>> {
+    ) -> anyhow::Result<BoxStream<'a, anyhow::Result<Self::Chunk>>> {
+        // we cannot send more than one frame > our expect size
+        let chunk_size: usize = stream_info
+            .chunk_size
+            .min(self.format.size() * self.element_count);
         let mut stream_builder = asset::loaders::StrideStreamBuilder {
             offset: 0, // do not account for offset as we did that prior in file loading
-            element_size: self.format.size(),
-            element_stride: self.stride.unwrap_or(self.format.size()),
+            element_size: self.stored_format.size(),
+            element_stride: self.stride.unwrap_or(self.stored_format.size()),
             element_count: self.element_count,
-            frame_size: stream_info.chunk_size,
+            frame_size: chunk_size,
         };
         match &self.location {
             asset::MetaDataLocation::FilePath(path) => {
                 let stream = dare::asset2::loaders::FileStream::from_path(
                     path,
                     self.offset,
-                    stream_info.chunk_size,
+                    chunk_size,
                     self.length,
                 )
                 .await?
@@ -73,14 +77,12 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                     .boxed()
                     .map(|res| res.unwrap())
                     .boxed();
-                let stream = handle_cast_stream(
-                    stream,
-                    self.stored_format,
-                    self.format,
-                    stream_info.chunk_size,
-                )
-                .map(|v| anyhow::Ok(v))
-                .boxed();
+                let stream =
+                    handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
+                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                    .boxed()
+                    .map(|v| anyhow::Ok(v))
+                    .boxed();
                 Ok(stream)
             }
             asset::MetaDataLocation::Url(link) => {
@@ -91,14 +93,12 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                     .boxed();
                 stream_builder.offset = self.offset; // account for offset since url has no way to offset
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
-                let stream = handle_cast_stream(
-                    stream,
-                    self.stored_format,
-                    self.format,
-                    stream_info.chunk_size,
-                )
-                .map(|v| anyhow::Ok(v))
-                .boxed();
+                let stream =
+                    handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
+                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                    .boxed()
+                    .map(|v| anyhow::Ok(v))
+                    .boxed();
                 Ok(stream)
             }
             asset::MetaDataLocation::Memory(memory) => {
@@ -108,14 +108,12 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                     .into();
                 let stream = futures::stream::once(async move { anyhow::Ok(memory) }).boxed();
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
-                let stream = handle_cast_stream(
-                    stream,
-                    self.stored_format,
-                    self.format,
-                    stream_info.chunk_size,
-                )
-                .map(|v| anyhow::Ok(v))
-                .boxed();
+                let stream =
+                    handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
+                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                    .boxed()
+                    .map(|v| anyhow::Ok(v))
+                    .boxed();
                 Ok(stream)
             }
         }

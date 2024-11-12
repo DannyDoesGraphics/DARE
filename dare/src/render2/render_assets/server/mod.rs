@@ -27,7 +27,7 @@ pub fn render_asset_server_system(
         '_,
         super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
     >,
-    mut surfaces: becs::ResMut<dare::render::resource_relationship::Surfaces>,
+    mut meshes: becs::ResMut<dare::render::resource_relationship::Meshes>,
     ir_recv: becs::ResMut<'_, IrRecv>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     render_asset_server: becs::ResMut<'_, RenderAssetServer>,
@@ -118,8 +118,12 @@ pub fn render_asset_server_system(
     while let Ok(delta) = ir_recv.0.try_recv() {
         match delta {
             InnerRenderServerRequest::Delta(delta) => match delta {
-                RenderServerAssetRelationDelta::Entry(entity, surface) => {
-                    surfaces.0.entry(entity).or_insert(surface.downgrade());
+                RenderServerAssetRelationDelta::Entry(entity, mesh) => {
+                    let mesh = dare::engine::Mesh {
+                        surface: mesh.surface.downgrade(),
+                        transform: mesh.transform,
+                    };
+                    meshes.0.entry(entity).or_insert(mesh);
                 }
                 RenderServerAssetRelationDelta::Remove(_) => {}
             },

@@ -140,15 +140,15 @@ impl GLTFLoader {
                 .collect();
             while let Some((node, transform)) = stack.pop_front() {
                 // create mesh
-                if let Some(mesh) = node.mesh() {
-                    meshes.push((mesh.clone(), transform));
-                }
                 {
                     // update transform and update stack
                     let transform =
                         transform * glam::Mat4::from_cols_array_2d(&node.transform().matrix());
                     let mut children: VecDeque<(gltf::Node, glam::Mat4)> =
                         node.children().map(|node| (node, transform)).collect();
+                    if let Some(mesh) = node.mesh() {
+                        meshes.push((mesh.clone(), transform));
+                    }
                     stack.append(&mut children);
                 }
             }

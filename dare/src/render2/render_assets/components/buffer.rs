@@ -103,6 +103,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
                 Err(e) => {
                     // destroy buffer
                     //drop(destination);
+                    tracing::error!("Failed to transfer {:?}", metadata);
                     return Err(e);
                 }
             }

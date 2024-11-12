@@ -19,6 +19,8 @@ pub fn init_assets(
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Box/glTF/Box.gltf",
                 "C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Suzanne/glTF/Suzanne.gltf",
+                //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf",
+                //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Lantern/glTF/Lantern.gltf",
             ),
         )
         .unwrap();

@@ -100,11 +100,6 @@ impl<'a, T: AsRef<[u8]>> StrideStream<'a, T> {
             Some(Ok(self.processed.drain(0..end).collect::<Vec<u8>>()))
         }
     }
-
-    /// Check if stride has completed properly
-    pub fn stride_completed(&self) -> bool {
-        self.element_processed == self.element_count
-    }
 }
 
 impl<'a, T: AsRef<[u8]>> futures_core::Stream for StrideStream<'a, T> {
@@ -112,56 +107,61 @@ impl<'a, T: AsRef<[u8]>> futures_core::Stream for StrideStream<'a, T> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-
-        if this.element_processed >= this.element_count {
-            // No more elements expected
-            Poll::Ready(this.get_yielded_data())
-        } else {
-            // More elements expected
-            match this.data_stream.poll_next(cx) {
-                Poll::Ready(data) => {
-                    match data {
-                        None => {
-                            // No more data expected from data stream
-                            if this.buffer.len() >= this.element_size {
-                                this.process_buffer();
-                            }
-                            Poll::Ready(this.get_yielded_data())
+        // More elements expected
+        match this.data_stream.poll_next(cx) {
+            Poll::Ready(data) => {
+                match data {
+                    None => {
+                        // No more data expected from data stream
+                        this.process_buffer();
+                        if let Some(buf) = this.get_yielded_data() {
+                            Poll::Ready(Some(buf))
+                        } else if !this.processed.is_empty() {
+                            // dump remaining out
+                            Poll::Ready(Some(Ok(this.processed.clone())))
+                        } else {
+                            Poll::Ready(None)
                         }
-                        Some(data) => {
-                            // Data can be added
-                            match data {
-                                Ok(mut data) => {
-                                    // check offset and ret early
-                                    if this.bytes_recv + data.as_ref().len() < this.offset {
-                                        this.bytes_recv += data.as_ref().len();
-                                        cx.waker().wake_by_ref();
-                                        return Poll::Pending;
-                                    }
-                                    // Add new data and process it
-                                    this.buffer.extend_from_slice(
-                                        &data.as_ref()[this
-                                            .offset
-                                            .checked_sub(this.bytes_recv)
-                                            .unwrap_or(0)..],
-                                    );
+                    }
+                    Some(data) => {
+                        // Data can be added
+                        match data {
+                            Ok(mut data) => {
+                                // check offset and ret early
+                                if this.bytes_recv + data.as_ref().len() < this.offset {
                                     this.bytes_recv += data.as_ref().len();
-                                    this.process_buffer();
-                                    if this.processed.len() >= this.frame_size
-                                        || this.element_processed >= this.element_count
-                                    {
-                                        Poll::Ready(this.get_yielded_data())
-                                    } else {
-                                        cx.waker().wake_by_ref();
-                                        Poll::Pending
-                                    }
+                                    cx.waker().wake_by_ref();
+                                    return Poll::Pending;
                                 }
-                                Err(e) => panic!(),
+                                // Add new data and process it
+                                this.buffer.extend_from_slice(
+                                    &data.as_ref()
+                                        [this.offset.checked_sub(this.bytes_recv).unwrap_or(0)..],
+                                );
+                                this.bytes_recv += data.as_ref().len();
+                                this.process_buffer();
+                                if this.processed.len() >= this.frame_size
+                                    || this.element_processed >= this.element_count
+                                {
+                                    Poll::Ready(this.get_yielded_data())
+                                } else {
+                                    cx.waker().wake_by_ref();
+                                    Poll::Pending
+                                }
                             }
+                            Err(e) => Poll::Ready(Some(Err(e))),
                         }
                     }
                 }
-                Poll::Pending => Poll::Pending,
+            }
+            Poll::Pending => {
+                this.process_buffer();
+                if let Some(buf) = this.get_yielded_data() {
+                    Poll::Ready(Some(buf))
+                } else {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
             }
         }
     }

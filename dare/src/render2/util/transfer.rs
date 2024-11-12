@@ -44,7 +44,7 @@ pub enum TransferRequestCallback<A: Allocator> {
 
 pub struct TransferRequestInner<A: Allocator> {
     request: TransferRequest<A>,
-    callback: tokio::sync::oneshot::Sender<TransferRequestCallback<A>>,
+    callback: tokio::sync::oneshot::Sender<anyhow::Result<TransferRequestCallback<A>>>,
 }
 
 #[derive(Debug)]
@@ -123,7 +123,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
         &self,
         request: TransferRequest<A>,
     ) -> Result<TransferRequestCallback<A>> {
-        let (sender, receiver) = tokio::sync::oneshot::channel::<TransferRequestCallback<A>>();
+        let (sender, receiver) =
+            tokio::sync::oneshot::channel::<Result<TransferRequestCallback<A>>>();
         self.inner
             .sender
             .send(TransferRequestInner {
@@ -131,7 +132,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 callback: sender,
             })
             .await?;
-        Ok(receiver.await?)
+        receiver.await?
     }
 
     async fn process_upload_requests(
@@ -169,8 +170,34 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 })
                 .collect::<Vec<dagal::sync::Fence>>(),
         );
-
         while let Some(request) = receiver.recv().await {
+            // validate request is sane
+            if match &request.request {
+                TransferRequest::Buffer {
+                    src_buffer,
+                    dst_buffer,
+                    src_offset,
+                    dst_offset,
+                    length,
+                } => dst_buffer.get_size() < *dst_offset + *length,
+                TransferRequest::Image {
+                    src_buffer,
+                    src_offset,
+                    src_length,
+                    extent,
+                    dst_image,
+                    dst_offset,
+                    dst_length,
+                } => false,
+            } {
+                tracing::error!("Cannot transfer due to malformed request");
+                request
+                    .callback
+                    .send(Err(anyhow::anyhow!("Malformed request")))
+                    .unwrap();
+                continue;
+            }
+
             let semaphore = semaphore.clone();
             let device = device.clone();
             let queues = queues.clone();
@@ -188,7 +215,6 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 let (index, queue_guard) = pick_available_queues(&queues).await;
                 let fence = &fences[index];
                 // wait for fence to be cleared
-                fence.wait(u64::MAX)?;
                 fence.reset()?;
                 let command_buffer = command_pools[index]
                     .allocate(1)?
@@ -307,20 +333,22 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             src_buffer,
                             dst_buffer,
                             ..
-                        } => TransferRequestCallback::Buffer {
+                        } => Ok(TransferRequestCallback::Buffer {
                             src_buffer,
                             dst_buffer,
-                        },
+                        }),
                         TransferRequest::Image {
                             src_buffer,
                             dst_image,
                             ..
-                        } => TransferRequestCallback::Image {
+                        } => Ok(TransferRequestCallback::Image {
                             src_buffer,
                             dst_image,
-                        },
+                        }),
                     })
                     .unwrap();
+                drop(permits);
+                drop(queue_guard);
                 Ok::<(), anyhow::Error>(())
             });
         }

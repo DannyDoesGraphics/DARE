@@ -1,6 +1,6 @@
 pub mod cast_stream;
 pub mod file_stream;
-mod framer;
+pub mod framer;
 pub mod load_infos;
 pub mod stride_stream;
 mod tests;

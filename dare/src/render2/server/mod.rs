@@ -77,7 +77,7 @@ impl RenderServer {
                 world.insert_resource(render::render_assets::server::RenderAssetServer::new(
                     asset_server.clone(),
                 ));
-                world.insert_resource(render::resource_relationship::Surfaces::default());
+                world.insert_resource(render::resource_relationship::Meshes::default());
                 world.insert_resource(IrRecv(ir_recv));
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
                     render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
