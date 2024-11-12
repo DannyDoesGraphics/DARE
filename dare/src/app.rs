@@ -107,10 +107,7 @@ impl winit::application::ApplicationHandler for App {
                     }
                     // drop engine server first
                     drop(self.engine_server.take());
-                    tracing::trace!("Dropped engine server");
                     drop(rs);
-                    tracing::trace!("Dropped render server");
-                    tracing::warn!("Stopped?");
                     event_loop.exit();
                 }
             }

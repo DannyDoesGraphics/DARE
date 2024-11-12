@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 use std::ptr;
 use std::task::{Context, Poll};
@@ -12,10 +12,8 @@ use crate::traits::{AsRaw, Destructible};
 pub struct Fence {
     handle: vk::Fence,
     device: crate::device::LogicalDevice,
-    /// thanks phobos-rs
-    wait_thread_spawned: bool,
 }
-
+impl Unpin for Fence {}
 impl Fence {
     pub fn new(device: crate::device::LogicalDevice, flags: vk::FenceCreateFlags) -> Result<Self> {
         let handle = unsafe {
@@ -33,11 +31,7 @@ impl Fence {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkFence {:p}", handle);
 
-        Ok(Self {
-            handle,
-            device,
-            wait_thread_spawned: false,
-        })
+        Ok(Self { handle, device })
     }
 
     /// Gets underlying reference of the handle
@@ -97,6 +91,11 @@ impl Fence {
     pub fn get_fence_status(&self) -> Result<bool> {
         unsafe { Ok(self.device.get_handle().get_fence_status(self.handle)?) }
     }
+
+    /// Get a struct which can await on a fence
+    pub fn fence_await(&self) -> FenceWait {
+        FenceWait { fence: self }
+    }
 }
 
 impl Destructible for Fence {
@@ -117,49 +116,30 @@ impl Drop for Fence {
     }
 }
 
-impl Future for Fence {
+/// Defines a struct which awaits on a fence
+pub struct FenceWait<'a> {
+    pub fence: &'a Fence,
+}
+impl<'a> Future for FenceWait<'a> {
     type Output = Result<()>;
 
     /// A fence's future can be considered ready if:
     /// - The fence has been signaled
     /// - The fence timed out (u64::MAX)
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        return match self.get_fence_status() {
+        match self.fence.get_fence_status() {
             Ok(status) => match status {
                 true => Poll::Ready(Ok(())),
-                false => match self.wait_thread_spawned {
-                    true => Poll::Pending,
-                    false => {
-                        let waker = cx.waker().clone();
-                        self.wait_thread_spawned = true;
-                        let fence = self.handle;
-                        let device = self.device.clone();
-                        #[cfg(feature = "tokio")]
-                        tokio::spawn(async move {
-                            unsafe {
-                                device
-                                    .get_handle()
-                                    .wait_for_fences(&[fence], true, u64::MAX)
-                                    .unwrap();
-                            }
-                            waker.wake();
-                        });
-                        #[cfg(not(feature = "tokio"))]
-                        std::thread::spawn(move || {
-                            unsafe {
-                                device
-                                    .get_handle()
-                                    .wait_for_fences(&[fence], true, u64::MAX)
-                                    .unwrap();
-                            }
-                            waker.wake();
-                        });
-                        Poll::Pending
-                    }
-                },
+                false => {
+                    let waker = cx.waker().clone();
+                    let fence = self.fence.handle;
+                    let device = self.fence.device.clone();
+                    waker.wake_by_ref();
+                    Poll::Pending
+                }
             },
             Err(e) => Poll::Ready(Err(e)),
-        };
+        }
     }
 }
 
