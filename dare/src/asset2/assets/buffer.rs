@@ -177,6 +177,10 @@ mod test {
             length: data_size,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: data_size,
         };
 
@@ -224,6 +228,10 @@ mod test {
             length: data_size,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: data_size,
         };
 
@@ -274,6 +282,10 @@ mod test {
             length,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: length,
         };
 
@@ -338,6 +350,10 @@ mod test {
             length,
             stride: Some(stride),
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U32, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count,
         };
 
@@ -385,6 +401,10 @@ mod test {
             length: data_size,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: data_size,
         };
 
@@ -433,6 +453,10 @@ mod test {
             length: data_size,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: 0,
         };
 
@@ -480,6 +504,10 @@ mod test {
             length: data_size,
             stride: None,
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U8,
+                1,
+            ),
             element_count: data_size,
         };
 
@@ -559,6 +587,10 @@ mod test {
                 dare::render::util::ElementFormat::F32,
                 3, // Number of components in Vec3<f32>
             ),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::F32,
+                3, // Number of components in Vec3<f32>
+            ),
             element_count,
         };
 
@@ -620,6 +652,10 @@ mod test {
             length,
             stride: None, // No stride
             format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::F32,
+                2, // Vec2<f32>
+            ),
+            stored_format: dare::render::util::Format::new(
                 dare::render::util::ElementFormat::F32,
                 2, // Vec2<f32>
             ),
@@ -689,6 +725,10 @@ mod test {
             length,
             stride: Some(stride),
             format: dare::render::util::Format::new(dare::render::util::ElementFormat::U16, 1),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::U16,
+                1,
+            ),
             element_count,
         };
 
@@ -762,6 +802,10 @@ mod test {
                 dare::render::util::ElementFormat::F32,
                 16, // Mat4<f32> has 16 components
             ),
+            stored_format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::F32,
+                16, // Mat4<f32> has 16 components
+            ),
             element_count,
         };
 
@@ -826,6 +870,10 @@ mod test {
             length,
             stride: None, // No stride
             format: dare::render::util::Format::new(
+                dare::render::util::ElementFormat::F32,
+                3, // Vec3<f32>
+            ),
+            stored_format: dare::render::util::Format::new(
                 dare::render::util::ElementFormat::F32,
                 3, // Vec3<f32>
             ),
