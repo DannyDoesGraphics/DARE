@@ -145,7 +145,7 @@ pub fn mesh_render(
                                         vk::IndexType::UINT32,
                                     );
                                 let view =
-                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
+                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, -5.0, 0.0));
                                 let model = mesh.transform.get_transform_matrix();
                                 let aspect_ratio = frame.draw_image.extent().width as f32
                                     / frame.draw_image.extent().height as f32;
