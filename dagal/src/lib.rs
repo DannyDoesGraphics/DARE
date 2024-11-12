@@ -13,6 +13,7 @@ pub mod wsi;
 
 pub mod concurrency;
 pub mod descriptor;
+mod graph;
 pub mod pipelines;
 pub mod shader;
 pub mod traits;

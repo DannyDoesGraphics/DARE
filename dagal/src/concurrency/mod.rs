@@ -11,8 +11,26 @@ pub use winit;
 pub use ash;
 pub use raw_window_handle;
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(feature = "futures"),
+    not(feature = "async-std")
+))]
 pub(crate) type DEFAULT_LOCKABLE<T> = tokio::sync::Mutex<T>;
 
-#[cfg(not(feature = "tokio"))]
+#[cfg(all(
+    not(feature = "tokio"),
+    feature = "futures",
+    not(feature = "async-std")
+))]
+pub(crate) type DEFAULT_LOCKABLE<T> = futures::lock::Mutex<T>;
+
+#[cfg(all(
+    not(feature = "tokio"),
+    not(feature = "futures"),
+    feature = "async-std"
+))]
+pub(crate) type DEFAULT_LOCKABLE<T> = async_std::sync::Mutex<T>;
+
+#[cfg(not(feature = "concurrent"))]
 pub(crate) type DEFAULT_LOCKABLE<T> = std::sync::Mutex<T>;

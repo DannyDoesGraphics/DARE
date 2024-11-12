@@ -14,6 +14,9 @@ use crate::prelude as dagal;
 /// Quick easy abstraction over queues
 
 /// Represents a [`vk::Queue`] and it's indices
+///
+/// # Hashing
+/// When hashing, the hasher will only hash [`Self::index`] and [`Self::family_index`]
 #[derive(Debug)]
 pub struct Queue<
     M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,

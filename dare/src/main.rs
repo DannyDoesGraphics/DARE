@@ -3,7 +3,8 @@ use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
 
 mod app;
-mod asset;
+mod asset2;
+mod concurrent;
 mod engine;
 mod physics;
 mod prelude;

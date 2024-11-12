@@ -1,3 +1,4 @@
+use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
@@ -12,12 +13,13 @@ use std::sync::Arc;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
-    mut frame_count: becs::Res<'_, super::frame_number::FrameCount>,
+    mut frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
+    rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
 ) {
-    let frame_count = frame_count.0.clone();
-    let render_context = render_context.clone();
-    tokio::runtime::Handle::current().block_on(async move {
+    rt.clone().runtime.block_on(async move {
+        let frame_count = frame_count.0.clone();
+        let render_context = render_context.clone();
         let surface_guard = render_context
             .inner
             .window_context
@@ -38,12 +40,14 @@ pub fn present_system_begin(
             .lock()
             .await;
         let mut frame = &mut *frame_guard;
+        // wait until semaphore is ready
         unsafe {
             // wait for frame to finish rendering before rendering again
             frame.render_fence.wait(u64::MAX).unwrap();
             frame.render_fence.reset().unwrap();
+            // drop all resource handles
+            frame.resources.clear();
         }
-        // wait until semaphore is ready
         let swapchain_image_index = surface_context.swapchain.next_image_index(
             u64::MAX,
             Some(&frame.swapchain_semaphore),
@@ -69,7 +73,7 @@ pub fn present_system_begin(
         };
         frame.draw_image.transition(
             recording_cmd,
-            &frame.queue,
+            &render_context.inner.window_context.present_queue,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
@@ -98,6 +102,21 @@ pub fn present_system_begin(
                         ),
                     ],
                 );
+
+            // transition
+            // transition image states first
+            frame.draw_image.transition(
+                recording_cmd,
+                &render_context.inner.window_context.present_queue,
+                vk::ImageLayout::GENERAL,
+                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            );
+            frame.depth_image.transition(
+                recording_cmd,
+                &render_context.inner.window_context.present_queue,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+            );
         }
     });
 }
@@ -105,6 +124,7 @@ pub fn present_system_begin(
 pub fn present_system_end(
     mut frame_count: becs::Res<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
+    rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
 ) {
     let window_context = render_context.inner.window_context.clone();
     let frame_count = frame_count.0.clone();
@@ -112,7 +132,7 @@ pub fn present_system_end(
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
 
-    tokio::runtime::Handle::current().block_on(async move {
+    rt.runtime.block_on(async move {
         if window_context.surface_context.read().await.is_none() {
             return;
         }
@@ -136,7 +156,7 @@ pub fn present_system_end(
             frame.draw_image.transition(
                 cmd_recording,
                 &window_context.present_queue,
-                vk::ImageLayout::GENERAL,
+                vk::ImageLayout::UNDEFINED,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
             );
             swapchain_image.transition(
@@ -211,6 +231,7 @@ pub fn present_system_end(
                         Ok(_) => {}
                         Err(error) => match error {
                             vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                                println!("Old swapchain found");
                                 return;
                             }
                             e => panic!("Error in queue present {:?}", e),
@@ -220,7 +241,7 @@ pub fn present_system_end(
             }
         }
         // progress to next frame
-        frame_count.fetch_add(1, Ordering::Release);
+        frame_count.fetch_add(1, Ordering::AcqRel);
         #[cfg(feature = "tracing")]
         tracing::trace!("Finished frame {frame_number}");
     });

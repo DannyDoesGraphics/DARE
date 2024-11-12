@@ -1,15 +1,16 @@
+use crate::resource::traits::{Nameable, Resource};
+use crate::resource::ImageView;
+use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
-
-use crate::resource::traits::{Nameable, Resource};
-use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct Sampler {
     handle: vk::Sampler,
     device: crate::device::LogicalDevice,
 }
+unsafe impl Send for Sampler {}
 impl PartialEq for Sampler {
     fn eq(&self, other: &Self) -> bool {
         self.handle == other.handle

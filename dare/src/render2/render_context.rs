@@ -1,9 +1,11 @@
 use crate::prelude as dare;
+use crate::render2::c::CPushConstant;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
+use dagal::pipelines::PipelineBuilder;
 use dagal::traits::AsRaw;
 use dagal::winit;
 use std::ffi::{CStr, CString};
@@ -28,18 +30,29 @@ pub struct RenderContextConfiguration {
 
 #[derive(Debug)]
 pub struct RenderContextInner {
-    pub configuration: RenderContextConfiguration,
-    pub window_context: Arc<super::window_context::WindowContext>,
+    pub(super) render_thread: std::sync::RwLock<Option<tokio::task::AbortHandle>>,
+    pub(super) configuration: RenderContextConfiguration,
+    pub(super) transfer_pool: dare::render::util::TransferPool<GPUAllocatorImpl>,
+    pub(super) window_context: Arc<super::window_context::WindowContext>,
+    pub(super) graphics_pipeline: dagal::pipelines::GraphicsPipeline,
+    pub(super) graphics_layout: dagal::pipelines::PipelineLayout,
 
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-    pub device: dagal::device::LogicalDevice,
-    pub physical_device: dagal::device::PhysicalDevice,
-    pub instance: dagal::core::Instance,
+    pub(super) allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub(super) device: dagal::device::LogicalDevice,
+    pub(super) physical_device: dagal::device::PhysicalDevice,
+    pub(super) debug_messenger: Option<dagal::device::DebugMessenger>,
+    pub(super) instance: dagal::core::Instance,
 }
 
 impl Drop for RenderContextInner {
     fn drop(&mut self) {
-        while Arc::strong_count(&self.window_context) >= 2 {}
+        while self.device.strong_count() >= 1 {}
+        while let Some(abort_handle) = self.render_thread.write().unwrap().as_ref() {
+            //println!("Spin locking");
+            if abort_handle.is_finished() {
+                break;
+            }
+        }
         unsafe { self.device.get_handle().device_wait_idle().unwrap() }
         tracing::trace!("Dropped RenderContextInner");
     }
@@ -48,15 +61,15 @@ impl Drop for RenderContextInner {
 /// Describes the render context
 #[derive(Debug, Clone, becs::Resource)]
 pub struct RenderContext {
-    pub asset_manager: dare::asset::AssetManager<GPUAllocatorImpl>,
     pub inner: Arc<RenderContextInner>,
 }
 
 impl RenderContext {
     pub fn new(ci: RenderContextCreateInfo) -> Result<Self> {
         let instance = dagal::bootstrap::InstanceBuilder::new().set_vulkan_version((1, 3, 0));
-        #[cfg(debug_assertions)]
-        let instance = instance.add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr());
+        let instance = instance
+            .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())
+            .set_validation(true);
         // add required extensions
         let instance = dagal::ash_window::enumerate_required_extensions(ci.rdh)?
             .into_iter()
@@ -86,6 +99,11 @@ impl RenderContext {
                 .add_queue_allocation(dagal::bootstrap::QueueRequest {
                     family_flags: vk::QueueFlags::GRAPHICS,
                     count: 1,
+                    dedicated: true,
+                })
+                .add_queue_allocation(dagal::bootstrap::QueueRequest {
+                    family_flags: vk::QueueFlags::TRANSFER,
+                    count: 2,
                     dedicated: true,
                 })
                 .attach_feature_1_3(vk::PhysicalDeviceVulkan13Features {
@@ -142,8 +160,10 @@ impl RenderContext {
 
         // pq
         let mut transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
-        let present_queue = transfer_queues.pop().unwrap();
-        let transfer_queue = transfer_queues.pop().unwrap();
+        let mut present_queue = queue_allocator
+            .retrieve_queues(vk::QueueFlags::GRAPHICS, 1)?
+            .pop()
+            .unwrap();
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },
@@ -152,64 +172,77 @@ impl RenderContext {
             device.clone(),
             &mut allocator,
         )?;
-        /// 128mb transfers
+        /// 256kb transfers
         let transfer_pool = {
-            let transfer_command_pool = dagal::command::CommandPool::new(
-                device.clone(),
-                &transfer_queue,
-                vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-            )?;
-            let transfer_command_pool = Arc::new(transfer_command_pool);
             dare::render::util::TransferPool::new(
                 device.clone(),
-                vk::DeviceSize::from(128_000_u64),
-                allocator.clone(),
-                transfer_command_pool,
-                Arc::new(vec![transfer_queue]),
+                vk::DeviceSize::from(256_000_u64),
+                transfer_queues,
             )?
         };
 
-        let asset_manager = {
-            use std::any::TypeId;
-            dare::asset::AssetManager::new(
-                allocator.clone(),
-                transfer_pool.clone(),
-                gpu_rt,
-                vec![
-                    TypeId::of::<dare::asset::Buffer<GPUAllocatorImpl>>(),
-                    TypeId::of::<dare::asset::Image<GPUAllocatorImpl>>(),
-                    TypeId::of::<dare::asset::ImageView<GPUAllocatorImpl>>(),
-                ],
-                // hold for 10 * fif
-                ci.configuration.target_frames_in_flight * 10,
-            )?
-        };
+        let graphics_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+            .push_push_constant_struct::<CPushConstant>(vk::ShaderStageFlags::VERTEX)
+            .build(device.clone(), vk::PipelineLayoutCreateFlags::empty())?;
+        let graphics_pipeline = dagal::pipelines::GraphicsPipelineBuilder::default()
+            .replace_layout(unsafe { *graphics_pipeline_layout.as_raw() })
+            .set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .set_polygon_mode(vk::PolygonMode::FILL)
+            .set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE)
+            .set_multisampling_none()
+            .enable_blending_alpha_blend()
+            .enable_depth_test(vk::TRUE, vk::CompareOp::GREATER_OR_EQUAL)
+            .set_depth_format(vk::Format::D32_SFLOAT)
+            .set_color_attachment(vk::Format::R16G16B16A16_SFLOAT)
+            .replace_shader_from_spirv_file(
+                device.clone(),
+                std::path::PathBuf::from("./dare/shaders/compiled/solid.vert.spv"),
+                vk::ShaderStageFlags::VERTEX,
+            )
+            .unwrap()
+            .replace_shader_from_spirv_file(
+                device.clone(),
+                std::path::PathBuf::from("./dare/shaders/compiled/solid.frag.spv"),
+                vk::ShaderStageFlags::FRAGMENT,
+            )
+            .unwrap()
+            .build(device.clone())?;
+        let debug_messenger =
+            dagal::device::DebugMessenger::new(instance.get_entry(), instance.get_instance())?;
 
         Ok(Self {
             inner: Arc::new(RenderContextInner {
+                render_thread: Default::default(),
                 instance,
                 physical_device,
                 device,
                 allocator,
                 window_context: Arc::new(window_context),
                 configuration: ci.configuration,
+                transfer_pool,
+                graphics_pipeline,
+                graphics_layout: graphics_pipeline_layout,
+                debug_messenger: None,
             }),
-            asset_manager,
         })
     }
 
     pub async fn build_surface(&self, window: &winit::window::Window) -> Result<()> {
-        self.inner
-            .window_context
-            .build_surface(super::surface_context::SurfaceContextCreateInfo {
+        self.inner.window_context.build_surface(
+            super::surface_context::SurfaceContextCreateInfo {
                 instance: &self.inner.instance,
                 physical_device: &self.inner.physical_device,
                 allocator: self.inner.allocator.clone(),
                 window,
                 frames_in_flight: Some(self.inner.configuration.target_frames_in_flight),
-            })
-            .await?;
+            },
+        )?;
         Ok(())
+    }
+
+    /// Get a transfer pool copy
+    pub fn transfer_pool(&self) -> dare::render::util::TransferPool<GPUAllocatorImpl> {
+        self.inner.transfer_pool.clone()
     }
 
     pub fn strong_count(&self) -> usize {

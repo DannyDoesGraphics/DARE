@@ -52,11 +52,9 @@ impl<A: Hash, B: Hash> Hash for Either<A, B> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Either::Left(a) => {
-                0.hash(state);
                 a.hash(state);
             }
             Either::Right(b) => {
-                1.hash(state);
                 b.hash(state);
             }
         }
@@ -66,8 +64,8 @@ impl<A: Hash, B: Hash> Hash for Either<A, B> {
 impl<A: PartialEq, B: PartialEq> PartialEq for Either<A, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Either::Left(A), Either::Left(B)) => A == B,
-            (Either::Right(A), Either::Right(B)) => A == B,
+            (Either::Left(a), Either::Left(b)) => a == b,
+            (Either::Right(a), Either::Right(b)) => a == b,
             _ => false,
         }
     }

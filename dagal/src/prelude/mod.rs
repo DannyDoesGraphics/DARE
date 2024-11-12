@@ -2,7 +2,7 @@
 
 pub mod concurrency;
 pub mod device;
-mod mesh;
+pub mod mesh;
 pub mod util;
 
 #[cfg(feature = "gpu-allocator")]

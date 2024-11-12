@@ -1,3 +1,5 @@
+pub(crate) mod adt;
+mod concurrent_index_allocator;
 mod deferred_deletion;
 pub mod erased_storage;
 pub mod error;

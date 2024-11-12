@@ -6,7 +6,7 @@ use anyhow::Result;
 use ash::vk;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};
 
-use crate::allocators::Allocator;
+use crate::allocators::{Allocator, ArcAllocation};
 use crate::device::LogicalDevice;
 use crate::traits::Destructible;
 
@@ -127,3 +127,4 @@ impl super::Allocation for GPUAllocatorAllocation {
         self.name.as_str()
     }
 }
+impl Unpin for GPUAllocatorImpl {}

@@ -125,3 +125,4 @@ impl<A: Allocator> Clone for ArcAllocator<A> {
 unsafe impl<A: Allocator> Send for ArcAllocation<A> {}
 
 unsafe impl<A: Allocator> Sync for ArcAllocation<A> {}
+impl<A: Allocator> Unpin for ArcAllocation<A> {}

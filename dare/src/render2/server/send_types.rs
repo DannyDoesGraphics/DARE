@@ -1,4 +1,8 @@
+use crate::prelude as dare;
+use bevy_ecs::prelude as becs;
+use dagal::allocators::GPUAllocatorImpl;
 use dagal::winit;
+use std::any::Any;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -11,9 +15,20 @@ pub enum RenderServerNoCallbackRequest {
     /// Stops the server
     Stop,
 }
+#[derive(Debug)]
+pub enum InnerRenderServerRequest {
+    Delta(RenderServerAssetRelationDelta),
+}
 
 #[derive(Debug)]
 pub struct RenderServerPacket {
     pub(super) callback: Callback,
     pub(super) request: RenderServerNoCallbackRequest,
+}
+
+/// Defines deltas to update the render server with the new relations between different assets
+#[derive(Debug)]
+pub enum RenderServerAssetRelationDelta {
+    Entry(becs::Entity, dare::engine::components::Surface),
+    Remove(becs::Entity),
 }

@@ -1,10 +1,20 @@
 use bevy_ecs::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, Default, Component)]
+#[derive(Clone, Debug, PartialEq, Component)]
 pub struct Transform {
     pub scale: glam::Vec3,
     pub rotation: glam::Quat,
     pub translation: glam::Vec3,
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            scale: glam::Vec3::ZERO,
+            rotation: glam::Quat::IDENTITY,
+            translation: glam::Vec3::ZERO,
+        }
+    }
 }
 
 impl Transform {

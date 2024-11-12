@@ -1,7 +1,12 @@
-use std::sync::{Arc, RwLock, Weak};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Weak};
 use std::{mem, ptr};
+use tokio::sync::RwLock;
 
 use anyhow::Result;
+/// Bevy
+use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
@@ -26,15 +31,15 @@ pub enum GPUSlot<T> {
 }
 
 #[derive(Debug)]
-struct GPUResourceTableInner<A: Allocator = GPUAllocatorImpl> {
+struct GPUResourceTableInner<A: Allocator> {
     pool: descriptor::DescriptorPool,
     set_layout: descriptor::DescriptorSetLayout,
     descriptor_set: descriptor::DescriptorSet,
     address_buffer: resource::Buffer<A>,
 }
 
-#[derive(Debug, Clone)]
-pub struct GPUResourceTable<A: Allocator + 'static = GPUAllocatorImpl> {
+#[derive(Debug, Clone, becs::Resource)]
+pub struct GPUResourceTable<A: Allocator + 'static> {
     inner: Arc<RwLock<GPUResourceTableInner<A>>>,
 
     // Storage for the underlying resources
@@ -45,6 +50,8 @@ pub struct GPUResourceTable<A: Allocator + 'static = GPUAllocatorImpl> {
 
     device: dagal::device::LogicalDevice,
 }
+unsafe impl<A: Allocator + 'static> Send for GPUResourceTable<A> {}
+unsafe impl<A: Allocator + 'static> Sync for GPUResourceTable<A> {}
 
 const MAX_IMAGE_RESOURCES: u32 = 65536;
 const MAX_BUFFER_RESOURCES: u32 = 65536;
@@ -57,7 +64,7 @@ const SAMPLER_BINDING_INDEX: u32 = 0;
 
 pub enum ResourceInput<'a, T: Resource<'a>> {
     ResourceHandle(T),
-    ResourceArc(T),
+    ResourceArc(Arc<T>),
     ResourceWeak(Weak<T>),
     ResourceCIHandle(T::CreateInfo),
     ResourceCIArc(T::CreateInfo),
@@ -146,6 +153,7 @@ impl<A: Allocator> GPUResourceTable<A> {
         let bda_buffer: resource::Buffer<A> =
             resource::Buffer::new(resource::BufferCreateInfo::NewEmptyBuffer {
                 device: device.clone(),
+                name: Some(String::from("BDA Buffer")),
                 allocator,
                 size: ((MAX_BUFFER_RESOURCES as usize) * mem::size_of::<vk::DeviceSize>()) as u64,
                 memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
@@ -179,60 +187,42 @@ impl<A: Allocator> GPUResourceTable<A> {
     }
 
     /// Ensure all weak references are still valid, if not remove them
-    pub fn update(&mut self) -> Result<()> {
-        self.buffers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .filter_with(|buffer| match buffer {
-                RTSlot::Arc(arc) => arc.upgrade().is_some(),
-                _ => true,
-            });
-        self.images
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .filter_with(|buffer| match buffer {
-                RTSlot::Arc(arc) => arc.upgrade().is_some(),
-                _ => true,
-            });
+    pub async fn update(&self) -> Result<()> {
+        self.buffers.write().await.retain(|buffer| match buffer {
+            RTSlot::Arc(arc) => arc.upgrade().is_some(),
+            _ => true,
+        });
+        self.images.write().await.retain(|buffer| match buffer {
+            RTSlot::Arc(arc) => arc.upgrade().is_some(),
+            _ => true,
+        });
         self.image_views
             .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .filter_with(|buffer| match buffer {
+            .await
+            .retain(|buffer| match buffer {
                 RTSlot::Arc(arc) => arc.upgrade().is_some(),
                 _ => true,
             });
-        self.samplers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .filter_with(|buffer| match buffer {
-                RTSlot::Arc(arc) => arc.upgrade().is_some(),
-                _ => true,
-            });
+        self.samplers.write().await.retain(|buffer| match buffer {
+            RTSlot::Arc(arc) => arc.upgrade().is_some(),
+            _ => true,
+        });
 
         Ok(())
     }
 
     /// Get the underlying [`VkDescriptorSet`](vk::DescriptorSet) of the GPU resource table for
     /// the BDA buffer
-    pub fn with_descriptor_set<R, F: FnOnce(&descriptor::DescriptorSet) -> R>(
+    pub async fn with_descriptor_set<R, F: FnOnce(&descriptor::DescriptorSet) -> R>(
         &self,
         f: F,
     ) -> Result<R> {
-        let descriptor_set = &self
-            .inner
-            .read()
-            .map_err(|_| anyhow::Error::from(dagal::error::DagalError::NoShaderDeviceAddress))?
-            .descriptor_set;
+        let descriptor_set = &self.inner.read().await.descriptor_set;
         Ok(f(descriptor_set))
     }
 
-    pub fn get_descriptor_set(&self) -> Result<vk::DescriptorSet> {
-        Ok(self
-            .inner
-            .read()
-            .map_err(|_| anyhow::Error::from(dagal::error::DagalError::NoShaderDeviceAddress))?
-            .descriptor_set
-            .handle())
+    pub async fn get_descriptor_set(&self) -> vk::DescriptorSet {
+        self.inner.read().await.descriptor_set.handle()
     }
 
     /// Get the underlying [VkDevice](ash::Device)
@@ -240,43 +230,35 @@ impl<A: Allocator> GPUResourceTable<A> {
         &self.device
     }
 
-    pub fn get_descriptor_layout(&self) -> Result<vk::DescriptorSetLayout> {
-        Ok(unsafe {
-            *self
-                .inner
-                .read()
-                .map_err(|_| anyhow::Error::from(dagal::error::DagalError::NoShaderDeviceAddress))?
-                .set_layout
-                .as_raw()
-        })
+    pub async unsafe fn get_descriptor_layout(&self) -> vk::DescriptorSetLayout {
+        unsafe { *self.inner.read().await.set_layout.as_raw() }
     }
 
     /// Create a new image view
-    pub fn new_image_view(
-        &mut self,
-        image_view_ci: ResourceInput<resource::ImageView>,
+    pub async fn new_image_view<'a>(
+        &self,
+        image_view_ci: ResourceInput<'a, resource::ImageView>,
     ) -> Result<GPUSlot<resource::ImageView>> {
         match image_view_ci {
             ResourceInput::ResourceHandle(resource) => Ok({
                 let slot = self
                     .image_views
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Slot(resource));
                 GPUSlot::Slot(slot)
             }),
             ResourceInput::ResourceArc(resource) => Ok({
-                let arc = Arc::new(resource);
                 self.image_views
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
-                    .insert(RTSlot::Arc(Arc::downgrade(&arc)));
-                GPUSlot::Arc(arc)
+                    .await
+                    .insert(RTSlot::Arc(Arc::downgrade(&resource)));
+                GPUSlot::Arc(resource)
             }),
             ResourceInput::ResourceWeak(resource) => Ok({
                 self.image_views
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(resource.clone()));
                 GPUSlot::Weak(resource)
             }),
@@ -285,7 +267,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let slot = self
                     .image_views
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Slot(resource));
                 Ok(GPUSlot::Slot(container::Slot::new(
                     slot.id(),
@@ -296,24 +278,24 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let resource = Arc::new(resource::ImageView::new(ci)?);
                 self.image_views
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(Arc::downgrade(&resource)));
                 Ok(GPUSlot::Arc(resource))
             }
         }
     }
 
-    pub fn free_image_view(
-        &mut self,
+    pub async fn free_image_view(
+        &self,
         handle: container::Slot<resource::ImageView>,
     ) -> Result<RTSlot<resource::ImageView>> {
         self.image_views
             .write()
-            .map_err(|_| dagal::error::DagalError::PoisonError)?
+            .await
             .remove(unsafe { handle.transmute() })
     }
 
-    pub fn with_image_view<R, F: FnOnce(&RTSlot<resource::ImageView>) -> R>(
+    pub async fn with_image_view<R, F: FnOnce(&RTSlot<resource::ImageView>) -> R>(
         &self,
         handle: &container::Slot<resource::ImageView>,
         f: F,
@@ -321,51 +303,42 @@ impl<A: Allocator> GPUResourceTable<A> {
         Ok(self
             .image_views
             .write()
-            .map_err(|_| dagal::error::DagalError::PoisonError)?
+            .await
             .with_slot(unsafe { &handle.clone().transmute() }, f)?)
     }
 
     /// Get a new sampler
-    pub fn new_sampler(
-        &mut self,
-        sampler: ResourceInput<resource::Sampler>,
+    pub async fn new_sampler<'a>(
+        &self,
+        sampler: ResourceInput<'a, resource::Sampler>,
     ) -> Result<GPUSlot<resource::Sampler>> {
         let res: Result<(
             GPUSlot<resource::Sampler>,
             container::Slot<RTSlot<resource::Sampler>>,
         )> = match sampler {
             ResourceInput::ResourceHandle(resource) => {
-                let slot = self
-                    .samplers
-                    .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
-                    .insert(RTSlot::Slot(resource));
+                let slot = self.samplers.write().await.insert(RTSlot::Slot(resource));
                 Ok((GPUSlot::Slot(slot.clone()), slot))
             }
             ResourceInput::ResourceArc(resource) => {
-                let arc = Arc::new(resource);
                 let slot: container::Slot<RTSlot<resource::Sampler>> = self
                     .samplers
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
-                    .insert(RTSlot::Arc(Arc::downgrade(&arc)));
-                Ok((GPUSlot::Arc(arc), slot))
+                    .await
+                    .insert(RTSlot::Arc(Arc::downgrade(&resource)));
+                Ok((GPUSlot::Arc(resource), slot))
             }
             ResourceInput::ResourceWeak(resource) => {
                 let slot = self
                     .samplers
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(resource.clone()));
                 Ok((GPUSlot::Weak(resource), slot))
             }
             ResourceInput::ResourceCIHandle(ci) => unsafe {
                 let resource = resource::Sampler::new(ci)?;
-                let slot = self
-                    .samplers
-                    .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
-                    .insert(RTSlot::Slot(resource));
+                let slot = self.samplers.write().await.insert(RTSlot::Slot(resource));
                 Ok((GPUSlot::Slot(slot.clone()), slot))
             },
             ResourceInput::ResourceCIArc(ci) => {
@@ -373,7 +346,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let slot = self
                     .samplers
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(Arc::downgrade(&resource)));
                 Ok((GPUSlot::Arc(resource), slot))
             }
@@ -383,67 +356,48 @@ impl<A: Allocator> GPUResourceTable<A> {
         // SAFETY: this is so fucking cursed. we assume that the time of inserting literally just before
         // and now, that it is indeed safe to blindly ignore if an Arc ref is held or not
         let sampler: vk::Sampler = match &sampler_handle {
-            GPUSlot::Slot(slot) => self.with_sampler(slot, |s| match s {
-                RTSlot::Slot(slot) => unsafe { *slot.as_raw() },
-                RTSlot::Arc(weak) => unsafe { *weak.upgrade().unwrap().as_raw() },
-            })?,
+            GPUSlot::Slot(slot) => {
+                self.with_sampler(slot, |s| match s {
+                    RTSlot::Slot(slot) => unsafe { *slot.as_raw() },
+                    RTSlot::Arc(weak) => unsafe { *weak.upgrade().unwrap().as_raw() },
+                })
+                .await?
+            }
             GPUSlot::Arc(arc) => unsafe { *arc.as_raw() },
             GPUSlot::Weak(resource) => unsafe { *Weak::upgrade(resource).unwrap().as_raw() },
         };
-        let p_image_info = vk::DescriptorImageInfo {
-            sampler,
-            image_view: vk::ImageView::null(),
-            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        };
         unsafe {
-            self.with_descriptor_set(|descriptor_set| {
-                self.device.get_handle().update_descriptor_sets(
-                    &[vk::WriteDescriptorSet {
-                        s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-                        p_next: ptr::null(),
-                        dst_set: descriptor_set.handle(),
-                        dst_binding: SAMPLER_BINDING_INDEX,
-                        dst_array_element: inner_slot.id() as u32,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::SAMPLER,
-                        p_image_info: &p_image_info,
-                        p_buffer_info: ptr::null(),
-                        p_texel_buffer_view: ptr::null(),
-                        _marker: Default::default(),
-                    }],
-                    &[],
-                );
-            })?;
+            self.insert_sampler(
+                sampler,
+                None,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                inner_slot.id() as u32,
+            )
+            .await?;
         }
 
         Ok(sampler_handle)
     }
 
-    pub fn with_sampler<R, F: FnOnce(&RTSlot<resource::Sampler>) -> R>(
+    pub async fn with_sampler<R, F: FnOnce(&RTSlot<resource::Sampler>) -> R>(
         &self,
         sampler: &container::Slot<RTSlot<resource::Sampler>>,
         f: F,
     ) -> Result<R> {
-        self.samplers
-            .read()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot(sampler, f)
+        self.samplers.read().await.with_slot(sampler, f)
     }
 
     /// Free a list sampler from the gpu resource table
-    pub fn free_sampler(
+    pub async fn free_sampler(
         &mut self,
         sampler: container::Slot<RTSlot<resource::Sampler>>,
     ) -> Result<()> {
-        self.samplers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .remove(sampler)?;
+        self.samplers.write().await.remove(sampler)?;
         Ok(())
     }
 
-    pub fn new_image<'a>(
-        &mut self,
+    pub async fn new_image<'a>(
+        &self,
         image_ci: ResourceInput<'a, resource::Image<A>>,
         image_view: vk::ImageView,
         image_layout: vk::ImageLayout,
@@ -456,37 +410,28 @@ impl<A: Allocator> GPUResourceTable<A> {
             container::Slot<RTSlot<resource::Image<A>>>,
         )> = match image_ci {
             ResourceInput::ResourceHandle(image) => unsafe {
-                let slot = self
-                    .images
-                    .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
-                    .insert(RTSlot::Slot(image));
+                let slot = self.images.write().await.insert(RTSlot::Slot(image));
                 Ok((GPUSlot::Slot(slot.clone()), slot))
             },
             ResourceInput::ResourceArc(image) => unsafe {
-                let resource = Arc::new(image);
                 let slot = self
                     .images
                     .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
-                    .insert(RTSlot::Arc(Arc::downgrade(&resource)));
-                Ok((GPUSlot::Arc(resource), slot))
+                    .await
+                    .insert(RTSlot::Arc(Arc::downgrade(&image)));
+                Ok((GPUSlot::Arc(image), slot))
             },
             ResourceInput::ResourceWeak(resource) => {
                 let slot = self
                     .images
                     .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(resource.clone()));
                 Ok((GPUSlot::Weak(resource), slot))
             }
             ResourceInput::ResourceCIHandle(image_ci) => unsafe {
                 let image = resource::Image::new(image_ci)?;
-                let slot = self
-                    .images
-                    .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
-                    .insert(RTSlot::Slot(image));
+                let slot = self.images.write().await.insert(RTSlot::Slot(image));
                 Ok((GPUSlot::Slot(slot.clone()), slot))
             },
             ResourceInput::ResourceCIArc(handle) => unsafe {
@@ -495,35 +440,233 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let slot = self
                     .images
                     .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
+                    .await
                     .insert(RTSlot::Arc(Arc::downgrade(&resource)));
                 Ok((GPUSlot::Arc(resource), slot))
             },
         };
         let (image_handle, inner_slot) = res?;
-        let image_flags: vk::ImageUsageFlags = self
-            .images
-            .read()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot(&inner_slot, |image_slot| match image_slot {
-                RTSlot::Slot(slot) => slot.usage_flags(),
-                RTSlot::Arc(arc) => Weak::upgrade(arc).unwrap().usage_flags(),
-            })?;
+        let image_flags: vk::ImageUsageFlags =
+            self.images
+                .read()
+                .await
+                .with_slot(&inner_slot, |image_slot| match image_slot {
+                    RTSlot::Slot(slot) => slot.usage_flags(),
+                    RTSlot::Arc(arc) => Weak::upgrade(arc).unwrap().usage_flags(),
+                })?;
+        unsafe {
+            self.insert_image(
+                &vk::DescriptorImageInfo {
+                    sampler: vk::Sampler::null(),
+                    image_view,
+                    image_layout,
+                },
+                image_flags,
+                inner_slot.id() as u32,
+            )
+            .await?;
+        }
+        Ok(image_handle)
+    }
+
+    pub async fn free_image(
+        &mut self,
+        handle: container::Slot<RTSlot<resource::Image<A>>>,
+    ) -> Result<()> {
+        self.images.write().await.remove(handle)?;
+        Ok(())
+    }
+
+    /// Create a new buffer and put it into the bindless buffer
+    ///
+    /// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
+    pub async fn new_buffer<'a>(
+        &self,
+        buffer_input: ResourceInput<'a, resource::Buffer<A>>,
+    ) -> Result<GPUSlot<resource::Buffer<A>>>
+    where
+        A: 'a,
+    {
+        match buffer_input {
+            ResourceInput::ResourceHandle(buffer) => {
+                let buffer_address = buffer.address();
+                let handle = self.buffers.write().await.insert(RTSlot::Slot(buffer));
+                self.inner.write().await.address_buffer.write(
+                    (mem::size_of::<vk::DeviceMemory>() * handle.id()) as vk::DeviceSize,
+                    &[buffer_address],
+                )?;
+                Ok(GPUSlot::Slot(handle.clone()))
+            }
+            ResourceInput::ResourceArc(buffer) => {
+                self.buffers
+                    .write()
+                    .await
+                    .insert(RTSlot::Arc(Arc::downgrade(&buffer)));
+                Ok(GPUSlot::Arc(buffer))
+            }
+            ResourceInput::ResourceWeak(resource) => {
+                let slot = self
+                    .buffers
+                    .write()
+                    .await
+                    .insert(RTSlot::Arc(resource.clone()));
+                Ok(GPUSlot::Weak(resource))
+            }
+            ResourceInput::ResourceCIHandle(buffer_ci) => {
+                // Validate the usage flags
+                if let resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } = buffer_ci {
+                    if usage_flags & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                        != vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    {
+                        return Err(anyhow::Error::from(
+                            dagal::DagalError::NoShaderDeviceAddress,
+                        ));
+                    }
+                }
+
+                // Create the buffer
+                let buffer: resource::Buffer<A> = resource::Buffer::new(buffer_ci)?;
+
+                // Inline the logic from ResourceHandle
+                let buffer_address = buffer.address();
+                let handle = self.buffers.write().await.insert(RTSlot::Slot(buffer));
+                self.inner.write().await.address_buffer.write(
+                    (mem::size_of::<vk::DeviceMemory>() * handle.id()) as vk::DeviceSize,
+                    &[buffer_address],
+                )?;
+                Ok(GPUSlot::Slot(handle.clone()))
+            }
+            ResourceInput::ResourceCIArc(buffer_ci) => {
+                // Validate the usage flags
+                if let resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } = buffer_ci {
+                    if usage_flags & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                        != vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    {
+                        return Err(anyhow::Error::from(
+                            dagal::DagalError::NoShaderDeviceAddress,
+                        ));
+                    }
+                }
+
+                // Create the buffer inside an Arc
+                let buffer: Arc<resource::Buffer<A>> = Arc::new(resource::Buffer::new(buffer_ci)?);
+
+                // Inline the logic from ResourceArc
+                self.buffers
+                    .write()
+                    .await
+                    .insert(RTSlot::Arc(Arc::downgrade(&buffer)));
+                Ok(GPUSlot::Arc(buffer))
+            }
+        }
+    }
+
+    pub async fn free_buffer(
+        &self,
+        handle: container::Slot<RTSlot<resource::Buffer<A>>>,
+    ) -> Result<()> {
+        self.buffers.write().await.remove(handle)?;
+        Ok(())
+    }
+
+    /// Get buffer
+    pub async fn with_buffer<R, F: FnOnce(&RTSlot<resource::Buffer<A>>) -> R>(
+        &self,
+        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
+        f: F,
+    ) -> Result<R> {
+        self.buffers.read().await.with_slot(handle, f)
+    }
+
+    pub async fn with_buffer_mut<R, F: FnOnce(&mut RTSlot<resource::Buffer<A>>) -> R>(
+        &mut self,
+        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
+        f: F,
+    ) -> Result<R> {
+        self.buffers.write().await.with_slot_mut(handle, f)
+    }
+
+    /// Utility function to acquire device address
+    pub async fn get_bda(
+        &self,
+        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
+    ) -> Result<vk::DeviceAddress> {
+        self.with_buffer(handle, |buf| match buf {
+            RTSlot::Slot(buffer) => Ok(buffer.address()),
+            RTSlot::Arc(buffer) => buffer
+                .upgrade()
+                .ok_or(dagal::DagalError::NoStrongReferences.into())
+                .map(|buffer| buffer.address()),
+        })
+        .await?
+    }
+
+    /// Get even more images
+    pub async fn with_image<R, F: FnOnce(&RTSlot<resource::Image<A>>) -> R>(
+        &self,
+        handle: &container::Slot<RTSlot<resource::Image<A>>>,
+        f: F,
+    ) -> Result<R> {
+        self.images.read().await.with_slot(handle, f)
+    }
+}
+
+/// Only just need access to the bindless capabilities, but not the book keeping?
+impl<A: Allocator> GPUResourceTable<A> {
+    async unsafe fn insert_sampler(
+        &self,
+        sampler: vk::Sampler,
+        image_view: Option<&resource::ImageView>,
+        layout: vk::ImageLayout,
+        id: u32,
+    ) -> Result<()> {
+        let p_image_info = vk::DescriptorImageInfo {
+            sampler,
+            image_view: image_view
+                .and_then(|view| unsafe { Some(*view.as_raw()) })
+                .unwrap_or(vk::ImageView::null()),
+            image_layout: layout,
+        };
+        self.with_descriptor_set(|descriptor_set| {
+            self.device.get_handle().update_descriptor_sets(
+                &[vk::WriteDescriptorSet {
+                    s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+                    p_next: ptr::null(),
+                    dst_set: descriptor_set.handle(),
+                    dst_binding: SAMPLER_BINDING_INDEX,
+                    dst_array_element: id,
+                    descriptor_count: 1,
+                    descriptor_type: vk::DescriptorType::SAMPLER,
+                    p_image_info: &p_image_info,
+                    p_buffer_info: ptr::null(),
+                    p_texel_buffer_view: ptr::null(),
+                    _marker: Default::default(),
+                }],
+                &[],
+            );
+        })
+        .await?;
+
+        Ok(())
+    }
+
+    async unsafe fn insert_image(
+        &self,
+        p_image_info: &vk::DescriptorImageInfo,
+        image_flags: vk::ImageUsageFlags,
+        id: u32,
+    ) -> Result<()> {
         let mut write_infos: Vec<vk::WriteDescriptorSet> = Vec::new();
         if image_flags & vk::ImageUsageFlags::SAMPLED == vk::ImageUsageFlags::SAMPLED {
             write_infos.push(vk::WriteDescriptorSet {
                 s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
                 p_next: ptr::null(),
-                dst_set: self.get_descriptor_set()?,
+                dst_set: self.get_descriptor_set().await,
                 dst_binding: SAMPLED_IMAGE_BINDING_INDEX,
-                dst_array_element: inner_slot.id() as u32,
+                dst_array_element: id,
                 descriptor_count: 1,
                 descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                p_image_info: &vk::DescriptorImageInfo {
-                    sampler: vk::Sampler::null(),
-                    image_view,
-                    image_layout,
-                },
+                p_image_info,
                 p_buffer_info: ptr::null(),
                 p_texel_buffer_view: ptr::null(),
                 _marker: Default::default(),
@@ -533,16 +676,12 @@ impl<A: Allocator> GPUResourceTable<A> {
             write_infos.push(vk::WriteDescriptorSet {
                 s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
                 p_next: ptr::null(),
-                dst_set: self.get_descriptor_set()?,
+                dst_set: self.get_descriptor_set().await,
                 dst_binding: STORAGE_IMAGE_BINDING_INDEX,
-                dst_array_element: inner_slot.id() as u32,
+                dst_array_element: id,
                 descriptor_count: 1,
                 descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-                p_image_info: &vk::DescriptorImageInfo {
-                    sampler: vk::Sampler::null(),
-                    image_view,
-                    image_layout,
-                },
+                p_image_info,
                 p_buffer_info: ptr::null(),
                 p_texel_buffer_view: ptr::null(),
                 _marker: Default::default(),
@@ -553,191 +692,6 @@ impl<A: Allocator> GPUResourceTable<A> {
                 .get_handle()
                 .update_descriptor_sets(write_infos.as_slice(), &[]);
         }
-
-        Ok(image_handle)
-    }
-
-    pub fn free_image(
-        &mut self,
-        handle: container::Slot<RTSlot<resource::Image<A>>>,
-    ) -> Result<()> {
-        self.images
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .remove(handle)?;
         Ok(())
-    }
-
-    /// Create a new buffer and put it into the bindless buffer
-    ///
-    /// We expect every buffer created to have a SHADER_DEVICE_ADDRESS flag enabled
-    pub fn new_buffer<'a>(
-        &mut self,
-        buffer_input: ResourceInput<'a, resource::Buffer<A>>,
-    ) -> Result<GPUSlot<resource::Buffer<A>>>
-    where
-        A: 'a,
-    {
-        match buffer_input {
-            ResourceInput::ResourceHandle(buffer) => {
-                let buffer_address = buffer.address();
-                let handle = self
-                    .buffers
-                    .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
-                    .insert(RTSlot::Slot(buffer));
-                self.inner
-                    .write()
-                    .map_err(|_| anyhow::Error::from(dagal::DagalError::PoisonError))?
-                    .address_buffer
-                    .write(
-                        (mem::size_of::<vk::DeviceMemory>() * handle.id()) as vk::DeviceSize,
-                        &[buffer_address],
-                    )?;
-                Ok(GPUSlot::Slot(handle.clone()))
-            }
-            ResourceInput::ResourceArc(buffer) => {
-                let buffer = Arc::new(buffer);
-                self.buffers
-                    .write()
-                    .map_err(|_| dagal::DagalError::PoisonError)?
-                    .insert(RTSlot::Arc(Arc::downgrade(&buffer)));
-                Ok(GPUSlot::Arc(buffer))
-            }
-            ResourceInput::ResourceWeak(resource) => {
-                let slot = self
-                    .buffers
-                    .write()
-                    .map_err(|_| dagal::error::DagalError::PoisonError)?
-                    .insert(RTSlot::Arc(resource.clone()));
-                Ok(GPUSlot::Weak(resource))
-            }
-            ResourceInput::ResourceCIHandle(buffer_ci) => {
-                match buffer_ci {
-                    resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
-                        if usage_flags & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                            != vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                        {
-                            return Err(anyhow::Error::from(
-                                dagal::DagalError::NoShaderDeviceAddress,
-                            ));
-                        }
-                    }
-                }
-
-                let buffer: resource::Buffer<A> = resource::Buffer::new(buffer_ci)?;
-                self.new_buffer(ResourceInput::ResourceHandle(buffer))
-            }
-            ResourceInput::ResourceCIArc(buffer_ci) => {
-                match buffer_ci {
-                    resource::BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
-                        if usage_flags & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                            != vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                        {
-                            return Err(anyhow::Error::from(
-                                dagal::DagalError::NoShaderDeviceAddress,
-                            ));
-                        }
-                    }
-                }
-
-                let buffer: resource::Buffer<A> = resource::Buffer::new(buffer_ci)?;
-                self.new_buffer(ResourceInput::ResourceArc(buffer))
-            }
-        }
-    }
-
-    pub fn free_buffer(
-        &mut self,
-        handle: container::Slot<RTSlot<resource::Buffer<A>>>,
-    ) -> Result<()> {
-        self.buffers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .remove(handle)?;
-        Ok(())
-    }
-
-    /// Get buffer
-    pub fn with_buffer<R, F: FnOnce(&RTSlot<resource::Buffer<A>>) -> R>(
-        &self,
-        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
-        f: F,
-    ) -> Result<R> {
-        self.buffers
-            .read()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot(handle, f)
-    }
-
-    pub fn with_buffer_mut<R, F: FnOnce(&mut RTSlot<resource::Buffer<A>>) -> R>(
-        &mut self,
-        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
-        f: F,
-    ) -> Result<R> {
-        self.buffers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot_mut(handle, f)
-    }
-
-    /// Get typed buffer
-    pub fn with_typed_buffer<T: Sized, R, F: FnOnce(resource::TypedBufferView<T, A>) -> R>(
-        &mut self,
-        handle: &container::Slot<RTSlot<resource::TypedBufferView<T, A>>>,
-        f: F,
-    ) -> Result<R> {
-        self.buffers
-            .write()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot_mut(unsafe { handle.transmute_ref() }, move |buffer| {
-                let typed_buffer_result = match buffer {
-                    RTSlot::Slot(buffer) => resource::TypedBufferView::new(
-                        resource::TypedBufferCreateInfo::FromDagalBuffer { buffer },
-                    ),
-                    RTSlot::Arc(_) => {
-                        /*
-                        weak_slot
-                            .upgrade()
-                            .ok_or(dagal::DagalError::NoStrongReferences.into())
-                            .and_then(|buffer| {
-                                resource::TypedBufferView::new(
-                                    resource::TypedBufferCreateInfo::FromDagalBuffer { &*buffer },
-                                )
-                            })
-                         */
-                        unimplemented!()
-                    }
-                };
-
-                // Return the result of applying the function `f` to the typed buffer
-                typed_buffer_result.map(f)
-            })?
-    }
-
-    /// Utility function to acquire device address
-    pub fn get_bda(
-        &self,
-        handle: &container::Slot<RTSlot<resource::Buffer<A>>>,
-    ) -> Result<vk::DeviceAddress> {
-        self.with_buffer(handle, |buf| match buf {
-            RTSlot::Slot(buffer) => Ok(buffer.address()),
-            RTSlot::Arc(buffer) => buffer
-                .upgrade()
-                .ok_or(dagal::DagalError::NoStrongReferences.into())
-                .map(|buffer| buffer.address()),
-        })?
-    }
-
-    /// Get even more images
-    pub fn with_image<R, F: FnOnce(&RTSlot<resource::Image<A>>) -> R>(
-        &self,
-        handle: &container::Slot<RTSlot<resource::Image<A>>>,
-        f: F,
-    ) -> Result<R> {
-        self.images
-            .read()
-            .map_err(|_| dagal::DagalError::PoisonError)?
-            .with_slot(handle, f)
     }
 }

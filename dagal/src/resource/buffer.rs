@@ -23,6 +23,7 @@ pub struct Buffer<A: Allocator> {
     size: vk::DeviceSize,
     name: Option<String>,
 }
+unsafe impl<A: Allocator> Send for Buffer<A> {}
 
 impl<A: Allocator> PartialEq for Buffer<A> {
     fn eq(&self, other: &Self) -> bool {
@@ -41,6 +42,7 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
     /// Create a buffer with a new empty buffer with the requested size
     NewEmptyBuffer {
         device: crate::device::LogicalDevice,
+        name: Option<String>,
         allocator: &'a mut ArcAllocator<A>,
         size: vk::DeviceSize,
         memory_type: crate::allocators::MemoryLocation,
@@ -115,6 +117,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
         match create_info {
             BufferCreateInfo::NewEmptyBuffer {
                 device,
+                name,
                 allocator,
                 size,
                 memory_type,
@@ -174,15 +177,20 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
                         )
                     };
                 }
-
-                Ok(Self {
+                let mut buffer = Self {
                     handle,
-                    device,
+                    device: device.clone(),
                     allocation: Some(allocation),
                     address,
                     size,
                     name: None,
-                })
+                };
+
+                if let (Some(debug_utils), Some(name)) = (device.get_debug_utils(), name) {
+                    buffer.set_name(debug_utils, &*name)?;
+                };
+
+                Ok(buffer)
             }
         }
     }

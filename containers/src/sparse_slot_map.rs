@@ -97,7 +97,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
             })
     }
 
-    fn filter_with<F: Fn(&T) -> bool>(&mut self, predicate: F) {
+    fn retain<F: Fn(&T) -> bool>(&mut self, predicate: F) {
         for slot_union in self.data.iter_mut() {
             if let Some(data) = slot_union.data.as_ref() {
                 if !predicate(data) {

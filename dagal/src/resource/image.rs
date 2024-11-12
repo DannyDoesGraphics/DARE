@@ -4,6 +4,7 @@ use std::ptr;
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
+use crate::resource::Buffer;
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::prelude::VkResult;
@@ -25,6 +26,7 @@ pub struct Image<A: Allocator> {
     allocation: Option<ArcAllocation<A>>,
     image_managed: bool,
 }
+unsafe impl<A: Allocator> Send for Image<A> {}
 
 impl<A: Allocator> PartialEq for Image<A> {
     fn eq(&self, other: &Self) -> bool {

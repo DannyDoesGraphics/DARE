@@ -1,42 +1,98 @@
 pub mod send_types;
 
+use crate::prelude as dare;
 use crate::render2::prelude as render;
 use crate::render2::server::send_types::RenderServerPacket;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::IntoSystemConfigs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::ash::vk;
 use dagal::winit;
+use derivative::Derivative;
 use std::cmp::PartialEq;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+pub struct RenderServerInner {
+    thread: tokio::task::JoinHandle<()>,
+    ir_send: crossbeam_channel::Sender<render::InnerRenderServerRequest>,
+}
+impl Drop for RenderServerInner {
+    fn drop(&mut self) {
+        self.thread.abort();
+        while !self.thread.is_finished() {}
+        tracing::trace!("RENDER SERVER STOPPED (2)");
+    }
+}
+
+#[derive(Derivative, Clone)]
+#[derivative(Debug)]
 pub struct RenderServer {
+    /// stored assets
+    #[derivative(Debug = "ignore")]
+    asset_server: dare::asset2::server::AssetServer,
+    /// inner
+    inner: Arc<RenderServerInner>,
     /// A ref to render context
     render_context: render::contexts::RenderContext,
     /// Order a new window be created
     new_sender: tokio::sync::mpsc::Sender<RenderServerPacket>,
 }
+#[derive(becs::Resource)]
+pub struct IrRecv(pub(crate) crossbeam_channel::Receiver<render::InnerRenderServerRequest>);
+
+#[derive(becs::Resource, Clone)]
+pub struct IrSend(pub(crate) crossbeam_channel::Sender<render::InnerRenderServerRequest>);
 
 impl RenderServer {
     pub fn new(ci: super::render_context::RenderContextCreateInfo) -> Self {
         let (new_send, mut new_recv) = tokio::sync::mpsc::channel::<RenderServerPacket>(4);
+        let asset_server = dare::asset2::server::AssetServer::default();
         let render_context = super::render_context::RenderContext::new(ci).unwrap();
-
-        {
+        let (ir_send, ir_recv) = crossbeam_channel::unbounded::<render::InnerRenderServerRequest>();
+        let thread = {
             let render_context = render_context.clone();
+            let rt = dare::concurrent::BevyTokioRunTime::default();
+            let asset_server = asset_server.clone();
             // Render thread
             tokio::task::spawn_blocking(move || {
                 let mut world = becs::World::new();
+                {
+                    let mut allocator = render_context.inner.allocator.clone();
+                    world.insert_resource(
+                        render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
+                            render_context.inner.device.clone(),
+                            &mut allocator,
+                        )
+                        .unwrap(),
+                    );
+                }
                 world.insert_resource(render_context);
                 world.insert_resource(super::frame_number::FrameCount::default());
+                world.insert_resource(rt);
+                world.insert_resource(asset_server.clone());
+                world.insert_resource(render::render_assets::server::RenderAssetServer::new(
+                    asset_server.clone(),
+                ));
+                world.insert_resource(render::resource_relationship::Surfaces::default());
+                world.insert_resource(IrRecv(ir_recv));
+                world.insert_resource(render::render_assets::RenderAssetsStorage::<
+                    render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+                >::default());
                 let mut schedule = becs::Schedule::default();
+                schedule.add_systems(render::render_assets::server::render_asset_server_system);
+                // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
                 schedule.add_systems(
-                    super::present_system::present_system_end
+                    super::mesh_render_system::mesh_render
                         .after(super::present_system::present_system_begin),
+                );
+                schedule.add_systems(
+                    super::present_system::present_system_end
+                        .after(super::mesh_render_system::mesh_render),
                 );
                 let mut stop_flag = false;
                 while stop_flag == false {
@@ -44,11 +100,9 @@ impl RenderServer {
                         Ok(packet) => {
                             match packet.request {
                                 render::RenderServerNoCallbackRequest::Render => {
-                                    println!("Processing render");
                                     schedule.run(&mut world);
                                 }
                                 render::RenderServerNoCallbackRequest::Stop => {
-                                    println!("Processing stop");
                                     stop_flag = true;
                                 }
                             };
@@ -63,13 +117,27 @@ impl RenderServer {
                         },
                     }
                 }
+                tracing::trace!("Stopping render server");
+                // drop world
+                drop(world);
                 tracing::trace!("RENDER SERVER STOPPED");
-            });
-        }
+            })
+        };
+        *render_context.inner.render_thread.write().unwrap() = Some(thread.abort_handle());
         Self {
             new_sender: new_send,
             render_context,
+            asset_server,
+            inner: Arc::new(RenderServerInner { thread, ir_send }),
         }
+    }
+
+    pub fn send_inner(&self, request: render::InnerRenderServerRequest) {
+        self.inner.ir_send.send(request).unwrap();
+    }
+
+    pub fn get_inner_send(&self) -> IrSend {
+        IrSend(self.inner.ir_send.clone())
     }
 
     pub async fn send(
@@ -77,7 +145,6 @@ impl RenderServer {
         request: render::RenderServerNoCallbackRequest,
     ) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
-        println!("Requested {:?}", request);
         self.new_sender
             .send(RenderServerPacket {
                 callback: send_types::Callback(notify.clone()),
@@ -103,11 +170,9 @@ impl RenderServer {
         Ok(notify)
     }
 
-    pub async fn create_surface(&self, window: &winit::window::Window) -> Result<()> {
-        self.render_context
-            .inner
-            .window_context
-            .build_surface(render::create_infos::SurfaceContextCreateInfo {
+    pub fn create_surface(&self, window: &winit::window::Window) -> Result<()> {
+        self.render_context.inner.window_context.build_surface(
+            render::create_infos::SurfaceContextCreateInfo {
                 instance: &self.render_context.inner.instance,
                 physical_device: &self.render_context.inner.physical_device,
                 allocator: self.render_context.inner.allocator.clone(),
@@ -118,12 +183,16 @@ impl RenderServer {
                         .configuration
                         .target_frames_in_flight,
                 ),
-            })
-            .await?;
+            },
+        )?;
         Ok(())
     }
 
     pub fn strong_count(&self) -> usize {
         self.render_context.strong_count()
+    }
+
+    pub fn asset_server(&self) -> dare::asset2::server::AssetServer {
+        self.asset_server.clone()
     }
 }

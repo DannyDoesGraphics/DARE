@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Pointer};
+use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Flash map implementation of erased storage
@@ -55,11 +56,31 @@ impl FlashMapErasedStorage {
         &self.write_handle
     }
 
-    pub fn with<T: 'static, R, F: FnOnce(&T) -> R>(&self, f: F) -> Option<R> {
-        self.read_handle
-            .guard()
-            .get(&TypeId::of::<T>())
-            .and_then(|data| data.downcast_ref::<T>().map(f))
+    pub fn with<T: 'static, R, F>(&self, f: F) -> Option<R>
+    where
+        F: for<'b> FnOnce(&'b T) -> R,
+    {
+        let guard = self.read_handle.guard();
+        let data = guard.get(&TypeId::of::<T>())?;
+        let typed = data.downcast_ref::<T>()?;
+        Some(f(typed))
+    }
+
+    pub fn with_async<'a, T: 'static, R, F, Fut>(
+        &'a self,
+        f: F,
+    ) -> Option<impl Future<Output = R> + 'a>
+    where
+        for<'b> F: FnOnce(&'b T) -> Fut + 'a,
+        for<'b> Fut: Future<Output = R> + 'b,
+    {
+        let read_handle = self.read_handle.clone();
+        Some(async move {
+            let guard = self.read_handle.guard();
+            let data = guard.get(&TypeId::of::<T>()).unwrap();
+            let typed = data.downcast_ref::<T>().unwrap();
+            f(typed).await
+        })
     }
 }
 

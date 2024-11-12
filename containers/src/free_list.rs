@@ -26,7 +26,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
             self.data.push(None);
             Slot::new(self.data.len(), 0)
         });
-        *self.data.get_mut(next_free_slot.id()).unwrap() = Some(element);
+        self.data.push(Some(element));
         next_free_slot
     }
 
@@ -86,7 +86,8 @@ impl<T: 'static> Container<T> for FreeList<T> {
             })
     }
 
-    fn filter_with<F: Fn(&T) -> bool>(&mut self, predicate: F) {
+    /// Remove elements in the free list which do not meet the predicate
+    fn retain<F: Fn(&T) -> bool>(&mut self, predicate: F) {
         for data_slot in self.data.iter_mut() {
             if let Some(data) = data_slot {
                 if !predicate(data) {

@@ -1,25 +1,30 @@
+use crate::prelude as dare;
 use crate::render2::surface_context::SurfaceContext;
 use anyhow::Result;
-use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use std::cell::{Cell, RefCell};
+use dagal::traits::AsRaw;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
-use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
 pub struct Frame {
     // Image that is being drawn to is here
     pub draw_image: dagal::resource::Image<GPUAllocatorImpl>,
+    pub draw_image_view: dagal::resource::ImageView,
+    pub depth_image: dagal::resource::Image<GPUAllocatorImpl>,
+    pub depth_image_view: dagal::resource::ImageView,
     pub render_fence: dagal::sync::Fence,
     pub render_semaphore: dagal::sync::BinarySemaphore,
     pub swapchain_semaphore: dagal::sync::BinarySemaphore,
     pub queue: dagal::device::Queue,
     pub image_extent: vk::Extent2D,
+
+    /// any resources binded for the current frame
+    pub resources: HashSet<dare::asset2::AssetHandleUntyped>,
 
     // cmd buffers
     pub command_pool: dagal::command::CommandPool,
@@ -27,7 +32,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub async fn new(
+    pub fn new(
         surface_context: &SurfaceContext,
         present_queue: &dagal::device::Queue<tokio::sync::Mutex<vk::Queue>>,
         image_number: Option<usize>,
@@ -71,6 +76,79 @@ impl Frame {
                         .as_str(),
                 ),
             })?;
+        let draw_image_view = dagal::resource::ImageView::new(
+            dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+                device: surface_context.allocator.device(),
+                create_info: vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageViewCreateFlags::empty(),
+                    image: unsafe { *draw_image.as_raw() },
+                    view_type: vk::ImageViewType::TYPE_2D,
+                    format: draw_image.format(),
+                    components: Default::default(),
+                    subresource_range:
+                        dagal::resource::Image::<GPUAllocatorImpl>::image_subresource_range(
+                            vk::ImageAspectFlags::COLOR,
+                        ),
+                    _marker: Default::default(),
+                },
+            },
+        )?;
+        let depth_image =
+            dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+                device: surface_context.allocator.device(),
+                allocator: &mut allocator,
+                location: dagal::allocators::MemoryLocation::GpuOnly,
+                image_ci: vk::ImageCreateInfo {
+                    s_type: vk::StructureType::IMAGE_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageCreateFlags::empty(),
+                    image_type: vk::ImageType::TYPE_2D,
+                    format: vk::Format::D32_SFLOAT,
+                    extent: vk::Extent3D {
+                        width: surface_context.image_extent.width,
+                        height: surface_context.image_extent.height,
+                        depth: 1,
+                    },
+                    mip_levels: 1,
+                    array_layers: 1,
+                    samples: vk::SampleCountFlags::TYPE_1,
+                    tiling: vk::ImageTiling::OPTIMAL,
+                    usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                    sharing_mode: vk::SharingMode::EXCLUSIVE,
+                    queue_family_index_count: 1,
+                    p_queue_family_indices: &present_queue.get_family_index(),
+                    initial_layout: vk::ImageLayout::UNDEFINED,
+                    _marker: Default::default(),
+                },
+                name: Some(
+                    image_number
+                        .map_or(String::from("Swapchain depth image"), |image_number| {
+                            format!("Swapchain image {:?}", image_number)
+                        })
+                        .as_str(),
+                ),
+            })?;
+        let depth_image_view = dagal::resource::ImageView::new(
+            dagal::resource::ImageViewCreateInfo::FromCreateInfo {
+                device: surface_context.allocator.device(),
+                create_info: vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageViewCreateFlags::empty(),
+                    image: unsafe { *depth_image.as_raw() },
+                    view_type: vk::ImageViewType::TYPE_2D,
+                    format: depth_image.format(),
+                    components: Default::default(),
+                    subresource_range:
+                        dagal::resource::Image::<GPUAllocatorImpl>::image_subresource_range(
+                            vk::ImageAspectFlags::DEPTH,
+                        ),
+                    _marker: Default::default(),
+                },
+            },
+        )?;
         let render_semaphore = dagal::sync::BinarySemaphore::new(
             surface_context.allocator.device(),
             vk::SemaphoreCreateFlags::empty(),
@@ -93,12 +171,16 @@ impl Frame {
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
         Ok(Frame {
             draw_image,
+            draw_image_view,
+            depth_image,
+            depth_image_view,
             render_fence,
             render_semaphore,
             swapchain_semaphore,
             queue: present_queue.clone(),
             image_extent: surface_context.image_extent,
 
+            resources: HashSet::default(),
             command_pool,
             command_buffer,
         })

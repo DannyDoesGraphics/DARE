@@ -3,10 +3,10 @@ use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
 
 /// Creates a mesh
-#[derive(becs::Bundle)]
-pub struct Mesh<A: Allocator + 'static> {
+#[derive(becs::Bundle, Clone)]
+pub struct Mesh {
     /// Reference to the underlying surface
-    pub surface: dare::asset::SurfaceMetadata<A>,
+    pub surface: dare::engine::components::Surface,
     /// Expect a transform
     pub transform: dare::physics::components::Transform,
 }

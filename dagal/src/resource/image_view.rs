@@ -1,9 +1,10 @@
+use crate::allocators::Allocator;
+use crate::resource::traits::{Nameable, Resource};
+use crate::resource::Buffer;
+use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
-
-use crate::resource::traits::{Nameable, Resource};
-use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug)]
 pub struct ImageView {
@@ -11,6 +12,7 @@ pub struct ImageView {
     device: crate::device::LogicalDevice,
     name: Option<String>,
 }
+unsafe impl Send for ImageView {}
 
 impl PartialEq for ImageView {
     fn eq(&self, other: &Self) -> bool {

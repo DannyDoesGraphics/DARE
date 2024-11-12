@@ -5,6 +5,7 @@ pub use free_list_allocator::FreeList;
 pub use slot_map::*;
 
 pub mod align;
+mod format;
 pub mod free_list_allocator;
 pub mod queue_allocator;
 /// Utility functions commonly used

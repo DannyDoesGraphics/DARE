@@ -40,5 +40,5 @@ pub trait Container<T: 'static> {
     fn iter_mut<'b>(&'b mut self) -> impl Iterator<Item = SlotUnionMut<'b, T>>;
 
     /// Filters with a predicate function
-    fn filter_with<F: Fn(&T) -> bool>(&mut self, predicate: F);
+    fn retain<F: Fn(&T) -> bool>(&mut self, predicate: F);
 }
