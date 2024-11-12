@@ -23,7 +23,7 @@ impl AdjMatrix {
         // remove row
         self.matrix.remove(index);
         // update remaining rows
-        for mut row in self.matrix.iter_mut() {
+        for row in self.matrix.iter_mut() {
             row.remove(index);
         }
     }

@@ -4,7 +4,6 @@ use std::ptr;
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
-use crate::resource::Buffer;
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::prelude::VkResult;

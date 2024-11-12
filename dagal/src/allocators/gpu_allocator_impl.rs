@@ -6,7 +6,7 @@ use anyhow::Result;
 use ash::vk;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};
 
-use crate::allocators::{Allocator, ArcAllocation};
+use crate::allocators::Allocator;
 use crate::device::LogicalDevice;
 use crate::traits::Destructible;
 

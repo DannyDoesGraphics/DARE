@@ -1,5 +1,4 @@
 use crate::resource::traits::{Nameable, Resource};
-use crate::resource::ImageView;
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::vk;

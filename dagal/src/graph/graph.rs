@@ -1,5 +1,4 @@
 use crate::graph::adj_matrix::AdjMatrix;
-use crate::graph::vertices::VerticesHandle;
 use crate::graph::virtual_resource::VirtualResource;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU32;

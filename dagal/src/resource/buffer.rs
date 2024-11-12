@@ -187,7 +187,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
                 };
 
                 if let (Some(debug_utils), Some(name)) = (device.get_debug_utils(), name) {
-                    buffer.set_name(debug_utils, &*name)?;
+                    buffer.set_name(debug_utils, &name)?;
                 };
 
                 Ok(buffer)
