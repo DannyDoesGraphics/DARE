@@ -22,6 +22,7 @@ impl asset::AssetLoaded for BufferAsset {}
 
 #[derive(Debug, Hash, PartialEq, Clone)]
 pub struct BufferMetaData {
+    /// Location of where to find the data
     pub location: asset::MetaDataLocation,
     /// Offset from the buffer
     pub offset: usize,
@@ -29,8 +30,10 @@ pub struct BufferMetaData {
     pub length: usize,
     /// Stride, if [`None`] then assume stride is [`BufferMetaData::element_size`]
     pub stride: Option<usize>,
-    /// Format
+    /// Target Format
     pub format: dare::render::util::Format,
+    /// Stored format
+    pub stored_format: dare::render::util::Format,
     /// Number of elements
     pub element_count: usize,
 }

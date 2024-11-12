@@ -91,11 +91,15 @@ impl GLTFLoader {
                         dare::render::util::ElementFormat::U8,
                         1,
                     ),
+                    stored_format: dare::render::util::Format::new(
+                        dare::render::util::ElementFormat::U8,
+                        1,
+                    ),
                     element_count: 0,
                 })
             })
             .collect::<Vec<Result<asset::assets::BufferMetaData>>>();
-        let accessors_metadata = gltf
+        let accessors_metadata: Vec<dare::asset2::assets::BufferMetaData> = gltf
             .accessors()
             .map(|accessor| {
                 if accessor.sparse().is_some() {
@@ -109,33 +113,12 @@ impl GLTFLoader {
                         buffer_metadata.stride = view.stride();
                         buffer_metadata.offset = view.offset() + accessor.offset();
                         buffer_metadata.element_count = accessor.count();
-                        buffer_metadata.format = dare::render::util::Format::new(
+                        buffer_metadata.stored_format = dare::render::util::Format::new(
                             dare::render::util::ElementFormat::from(accessor.data_type()),
                             accessor.dimensions().multiplicity(),
                         );
-                        {
-                            let mut buffer_metadata = buffer_metadata.clone();
-                            buffer_metadata.format = dare::render::util::Format::new(
-                                dare::render::util::ElementFormat::U8,
-                                1,
-                            );
-                            let vec: Vec<u8> = (u8::MIN..=u8::MAX).collect();
-                            let len = vec.len();
-                            let length = size_of_val(&vec);
-                            buffer_metadata.location =
-                                asset::MetaDataLocation::Memory(Arc::from(vec));
-                            buffer_metadata.length = length;
-                            buffer_metadata.stride = Some(4);
-                            buffer_metadata.offset = 16;
-                            buffer_metadata.element_count = len;
-                            buffer_metadata.format = dare::render::util::Format::new(
-                                dare::render::util::ElementFormat::U8,
-                                3,
-                            );
-                            asset_server
-                                .entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone());
-                        }
-                        asset_server.entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone())
+                        //asset_server.entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone())
+                        buffer_metadata
                     } else {
                         panic!("No metadata found at {}", view.buffer().index())
                     }
@@ -143,7 +126,7 @@ impl GLTFLoader {
                     unimplemented!()
                 }
             })
-            .collect::<Vec<asset::AssetHandle<asset::assets::Buffer>>>();
+            .collect::<Vec<_>>();
         // make sure we pass the proper transform information
         let mut meshes: Vec<(gltf::Mesh, glam::Mat4)> = Vec::new();
         {
@@ -223,8 +206,18 @@ impl GLTFLoader {
                                     // # of indices
                                     surface_builder.index_count = accessor.count();
                                     surface_builder.first_index = 0;
-                                    surface_builder.index_buffer =
-                                        accessors_metadata.get(accessor.index()).cloned()
+                                    let handle: Option<
+                                        dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
+                                    > = accessors_metadata.get(accessor.index()).cloned().map(
+                                        |mut m| {
+                                            m.format = dare::render::util::Format::new(
+                                                dare::render::util::ElementFormat::U32,
+                                                1,
+                                            );
+                                            asset_server.entry(m)
+                                        },
+                                    );
+                                    surface_builder.index_buffer = handle;
                                 }
                             },
                             GltfSemantics::Accessor(semantic) => match primitive.get(semantic) {
@@ -240,17 +233,56 @@ impl GLTFLoader {
                                     use gltf::Semantic::*;
                                     match semantic {
                                         Positions => {
+                                            let handle: Option<
+                                                dare::asset2::AssetHandle<
+                                                    dare::asset2::assets::Buffer,
+                                                >,
+                                            > = accessors_metadata
+                                                .get(accessor.index())
+                                                .cloned()
+                                                .map(|mut m| {
+                                                    m.format = dare::render::util::Format::new(
+                                                        dare::render::util::ElementFormat::F32,
+                                                        3,
+                                                    );
+                                                    asset_server.entry(m)
+                                                });
                                             surface_builder.vertex_count = accessor.count();
-                                            surface_builder.vertex_buffer =
-                                                accessors_metadata.get(accessor.index()).cloned()
+                                            surface_builder.vertex_buffer = handle;
                                         }
                                         Normals => {
-                                            surface_builder.normal_buffer =
-                                                accessors_metadata.get(accessor.index()).cloned()
+                                            let handle: Option<
+                                                dare::asset2::AssetHandle<
+                                                    dare::asset2::assets::Buffer,
+                                                >,
+                                            > = accessors_metadata
+                                                .get(accessor.index())
+                                                .cloned()
+                                                .map(|mut m| {
+                                                    m.format = dare::render::util::Format::new(
+                                                        dare::render::util::ElementFormat::F32,
+                                                        3,
+                                                    );
+                                                    asset_server.entry(m)
+                                                });
+                                            surface_builder.normal_buffer = handle;
                                         }
                                         Tangents => {
-                                            surface_builder.tangent_buffer =
-                                                accessors_metadata.get(accessor.index()).cloned()
+                                            let handle: Option<
+                                                dare::asset2::AssetHandle<
+                                                    dare::asset2::assets::Buffer,
+                                                >,
+                                            > = accessors_metadata
+                                                .get(accessor.index())
+                                                .cloned()
+                                                .map(|mut m| {
+                                                    m.format = dare::render::util::Format::new(
+                                                        dare::render::util::ElementFormat::F32,
+                                                        3,
+                                                    );
+                                                    asset_server.entry(m)
+                                                });
+                                            surface_builder.tangent_buffer = handle;
                                         }
                                         Colors(_) => {}
                                         TexCoords(_) => {}
