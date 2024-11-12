@@ -39,7 +39,7 @@ pub struct RenderServer {
     /// A ref to render context
     render_context: render::contexts::RenderContext,
     /// Order a new window be created
-    new_sender: tokio::sync::mpsc::Sender<RenderServerPacket>,
+    new_sender: tokio::sync::mpsc::UnboundedSender<RenderServerPacket>,
 }
 #[derive(becs::Resource)]
 pub struct IrRecv(pub(crate) crossbeam_channel::Receiver<render::InnerRenderServerRequest>);
@@ -49,7 +49,7 @@ pub struct IrSend(pub(crate) crossbeam_channel::Sender<render::InnerRenderServer
 
 impl RenderServer {
     pub fn new(ci: super::render_context::RenderContextCreateInfo) -> Self {
-        let (new_send, mut new_recv) = tokio::sync::mpsc::channel::<RenderServerPacket>(4);
+        let (new_send, mut new_recv) = tokio::sync::mpsc::unbounded_channel::<RenderServerPacket>();
         let asset_server = dare::asset2::server::AssetServer::default();
         let render_context = super::render_context::RenderContext::new(ci).unwrap();
         let (ir_send, ir_recv) = crossbeam_channel::unbounded::<render::InnerRenderServerRequest>();
@@ -58,7 +58,7 @@ impl RenderServer {
             let rt = dare::concurrent::BevyTokioRunTime::default();
             let asset_server = asset_server.clone();
             // Render thread
-            tokio::task::spawn_blocking(move || {
+            tokio::task::spawn(async move {
                 let mut world = becs::World::new();
                 {
                     let mut allocator = render_context.inner.allocator.clone();
@@ -96,8 +96,8 @@ impl RenderServer {
                 );
                 let mut stop_flag = false;
                 while stop_flag == false {
-                    match new_recv.try_recv() {
-                        Ok(packet) => {
+                    match new_recv.recv().await {
+                        Some(packet) => {
                             match packet.request {
                                 render::RenderServerNoCallbackRequest::Render => {
                                     schedule.run(&mut world);
@@ -108,13 +108,7 @@ impl RenderServer {
                             };
                             packet.callback.0.notify_waiters();
                         }
-                        Err(e) => match e {
-                            TryRecvError::Disconnected => {
-                                stop_flag = true;
-                                break;
-                            }
-                            _ => {}
-                        },
+                        None => {}
                     }
                 }
                 tracing::trace!("Stopping render server");
@@ -145,12 +139,10 @@ impl RenderServer {
         request: render::RenderServerNoCallbackRequest,
     ) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.new_sender
-            .send(RenderServerPacket {
-                callback: send_types::Callback(notify.clone()),
-                request,
-            })
-            .await?;
+        self.new_sender.send(RenderServerPacket {
+            callback: send_types::Callback(notify.clone()),
+            request,
+        })?;
         Ok(notify)
     }
 
@@ -163,7 +155,7 @@ impl RenderServer {
             _ => {}
         }
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.new_sender.blocking_send(RenderServerPacket {
+        self.new_sender.send(RenderServerPacket {
             callback: send_types::Callback(notify.clone()),
             request,
         })?;

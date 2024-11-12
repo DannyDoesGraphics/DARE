@@ -1,3 +1,4 @@
+mod camera;
 /// Represent rendering entities
 pub mod material;
 pub mod mesh;
