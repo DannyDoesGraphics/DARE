@@ -1,9 +1,11 @@
 use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataStreamable;
 use crate::prelude as dare;
+use crate::render2::util::{handle_cast_stream, ElementFormat};
 use bytemuck::Pod;
 use derivative::Derivative;
 use futures::{FutureExt, StreamExt, TryStreamExt};
+use futures_core::stream::BoxStream;
 use std::sync::Arc;
 
 pub struct Buffer {}
@@ -39,17 +41,6 @@ pub struct BufferMetaData {
 }
 unsafe impl Send for BufferMetaData {}
 impl Unpin for BufferMetaData {}
-
-fn convert_and_cast<T, U>(slice: Vec<u8>) -> Vec<u8>
-where
-    T: Pod,
-    U: Pod,
-    T: Into<U>,
-{
-    let from_slice: Vec<T> = bytemuck::cast_slice(&slice).to_vec();
-    let to_slice: Vec<U> = from_slice.into_iter().map(|x| x.into()).collect();
-    bytemuck::cast_slice(&to_slice).to_vec()
-}
 impl Eq for BufferMetaData {}
 
 impl asset::loaders::MetaDataStreamable for BufferMetaData {
@@ -77,7 +68,19 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                 )
                 .await?
                 .map_err(|e| anyhow::Error::new(e));
-                let stream = stream_builder.build(stream.boxed()).boxed();
+                let stream = stream_builder
+                    .build(stream.boxed())
+                    .boxed()
+                    .map(|res| res.unwrap())
+                    .boxed();
+                let stream = handle_cast_stream(
+                    stream,
+                    self.stored_format,
+                    self.format,
+                    stream_info.chunk_size,
+                )
+                .map(|v| anyhow::Ok(v))
+                .boxed();
                 Ok(stream)
             }
             asset::MetaDataLocation::Url(link) => {
@@ -87,7 +90,16 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                     .map_err(|e| anyhow::Error::new(e))
                     .boxed();
                 stream_builder.offset = self.offset; // account for offset since url has no way to offset
-                Ok(stream_builder.build(stream).boxed())
+                let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
+                let stream = handle_cast_stream(
+                    stream,
+                    self.stored_format,
+                    self.format,
+                    stream_info.chunk_size,
+                )
+                .map(|v| anyhow::Ok(v))
+                .boxed();
+                Ok(stream)
             }
             asset::MetaDataLocation::Memory(memory) => {
                 tracing::warn!("Asset data stored in memory. This is extremely bad and will quickly consume a lot of memory in the system.");
@@ -95,7 +107,16 @@ impl asset::loaders::MetaDataStreamable for BufferMetaData {
                     .to_owned()
                     .into();
                 let stream = futures::stream::once(async move { anyhow::Ok(memory) }).boxed();
-                Ok(stream_builder.build(stream).boxed())
+                let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
+                let stream = handle_cast_stream(
+                    stream,
+                    self.stored_format,
+                    self.format,
+                    stream_info.chunk_size,
+                )
+                .map(|v| anyhow::Ok(v))
+                .boxed();
+                Ok(stream)
             }
         }
     }
@@ -349,11 +370,8 @@ mod test {
             offset: 0,
             length,
             stride: Some(stride),
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U32, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U32, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U32, 1),
             element_count,
         };
 

@@ -10,7 +10,7 @@ pub struct Framer<'a, T: Into<Vec<u8>>> {
     frame_size: usize,
     buffer: Vec<u8>,
 }
-
+impl<'a, T: Into<Vec<u8>>> Unpin for Framer<'a, T> {}
 impl<'a, T: Into<Vec<u8>>> Framer<'a, T> {
     pub fn new(stream: futures_core::stream::BoxStream<'a, T>, frame_size: usize) -> Self {
         Self {

@@ -24,6 +24,15 @@ impl<
         T: Into<Vec<u8>>,
         Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
         Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
+    > Unpin for CastStream<'a, T, Source, Destination>
+{
+}
+
+impl<
+        'a,
+        T: Into<Vec<u8>>,
+        Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
+        Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
     > CastStream<'a, T, Source, Destination>
 {
     pub fn new(
