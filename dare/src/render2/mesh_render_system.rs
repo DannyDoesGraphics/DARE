@@ -144,19 +144,19 @@ pub fn mesh_render(
                                         0,
                                         vk::IndexType::UINT16,
                                     );
-                                let model =
-                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, 0.0));
                                 let view =
-                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -5.0));
-                                let mut proj = glam::Mat4::perspective_rh(
-                                    70f32.to_radians(),
-                                    frame.image_extent.width as f32
-                                        / frame.image_extent.height as f32,
-                                    10000.0,
+                                    glam::Mat4::from_translation(glam::Vec3::new(0.0, 10.0, -5.0));
+                                let aspect_ratio = frame.draw_image.extent().width as f32
+                                    / frame.draw_image.extent().height as f32;
+                                let mut projection = glam::Mat4::perspective_rh(
+                                    70.0_f32.to_radians(),
+                                    aspect_ratio,
                                     0.1,
+                                    1000.0,
                                 );
-                                proj.y_axis.y *= -1.0; // flip
-                                let mut view_proj = proj * view * model;
+
+                                projection.y_axis.y *= -1.0; // flip
+                                let mut view_proj = projection * view;
                                 let push_constant = CPushConstant {
                                     transform: view_proj.to_cols_array(),
                                     vertex_buffer: vertex_buffer.address(),

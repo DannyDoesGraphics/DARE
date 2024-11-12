@@ -82,7 +82,7 @@ impl GLTFLoader {
                         }
                     }
                 };
-                Ok(asset::implementations::BufferMetaData {
+                Ok(asset::assets::BufferMetaData {
                     location,
                     offset: 0,
                     length: buffer.length(),
@@ -94,7 +94,7 @@ impl GLTFLoader {
                     element_count: 0,
                 })
             })
-            .collect::<Vec<Result<asset::implementations::BufferMetaData>>>();
+            .collect::<Vec<Result<asset::assets::BufferMetaData>>>();
         let accessors_metadata = gltf
             .accessors()
             .map(|accessor| {
@@ -132,12 +132,10 @@ impl GLTFLoader {
                                 dare::render::util::ElementFormat::U8,
                                 3,
                             );
-                            asset_server.entry::<dare::asset2::implementations::Buffer>(
-                                buffer_metadata.clone(),
-                            );
+                            asset_server
+                                .entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone());
                         }
-                        asset_server
-                            .entry::<dare::asset2::implementations::Buffer>(buffer_metadata.clone())
+                        asset_server.entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone())
                     } else {
                         panic!("No metadata found at {}", view.buffer().index())
                     }
@@ -145,7 +143,7 @@ impl GLTFLoader {
                     unimplemented!()
                 }
             })
-            .collect::<Vec<asset::AssetHandle<asset::implementations::Buffer>>>();
+            .collect::<Vec<asset::AssetHandle<asset::assets::Buffer>>>();
         // make sure we pass the proper transform information
         let mut meshes: Vec<(gltf::Mesh, glam::Mat4)> = Vec::new();
         {

@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 #[derive(Component)]
 pub struct RenderBuffer<A: Allocator + 'static> {
     pub buffer: dagal::resource::Buffer<A>,
-    pub handle: asset::AssetHandle<asset::implementations::Buffer>,
+    pub handle: asset::AssetHandle<asset::assets::Buffer>,
 }
 impl<A: Allocator + 'static> Deref for RenderBuffer<A> {
     type Target = dagal::resource::Buffer<A>;
@@ -34,7 +34,7 @@ impl<A: Allocator + 'static> DerefMut for RenderBuffer<A> {
 
 pub struct BufferPrepareInfo<A: Allocator + 'static> {
     pub allocator: ArcAllocator<A>,
-    pub handle: asset::AssetHandle<asset::implementations::Buffer>,
+    pub handle: asset::AssetHandle<asset::assets::Buffer>,
     pub transfer_pool: TransferPool<A>,
     pub usage_flags: vk::BufferUsageFlags,
     pub location: MemoryLocation,
@@ -42,7 +42,7 @@ pub struct BufferPrepareInfo<A: Allocator + 'static> {
 
 impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
     type Loaded = RenderBuffer<A>;
-    type Asset = asset::implementations::Buffer;
+    type Asset = asset::assets::Buffer;
     type PrepareInfo = BufferPrepareInfo<A>;
 
     fn prepare_asset(
@@ -70,7 +70,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
                 usage_flags: vk::BufferUsageFlags::TRANSFER_DST | prepare_info.usage_flags,
             })?;
         let stream = metadata
-            .stream(asset::implementations::BufferStreamInfo {
+            .stream(asset::assets::BufferStreamInfo {
                 chunk_size: load_info.chunk_size,
             })
             .await?;

@@ -1,4 +1,3 @@
-
 /// An opaque representation of a generic [`dagal::resource::traits::Resource`]
 #[derive(PartialEq, Eq, Debug, Hash)]
 pub struct VirtualResource {

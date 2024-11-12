@@ -6,11 +6,11 @@ pub struct SurfaceBuilder {
     pub vertex_count: usize,
     pub index_count: usize,
     pub first_index: usize,
-    pub index_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub vertex_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
+    pub index_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub vertex_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
 }
 
 impl SurfaceBuilder {
@@ -33,11 +33,11 @@ pub struct Surface {
     pub vertex_count: usize,
     pub index_count: usize,
     pub first_index: usize,
-    pub index_buffer: dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>,
-    pub vertex_buffer: dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>,
-    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
-    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::implementations::Buffer>>,
+    pub index_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
+    pub vertex_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
+    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
 }
 
 impl Surface {

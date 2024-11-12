@@ -16,8 +16,8 @@ pub fn init_assets(
             &asset_server,
             send.clone(),
             std::path::PathBuf::from(
-                "C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Box/glTF/Box.gltf",
-                //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
+                //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Box/glTF/Box.gltf",
+                "C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Suzanne/glTF/Suzanne.gltf",
             ),
         )

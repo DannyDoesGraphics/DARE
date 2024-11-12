@@ -102,7 +102,7 @@ impl RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>> {
     /// Get bda
     pub fn get_bda(
         &self,
-        asset_id: &asset::AssetId<dare::asset2::implementations::Buffer>,
+        asset_id: &asset::AssetId<dare::asset2::assets::Buffer>,
     ) -> Option<vk::DeviceSize> {
         self.dense_render_assets
             .assets

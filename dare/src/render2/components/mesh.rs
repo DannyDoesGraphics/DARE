@@ -5,6 +5,6 @@ use std::sync::Arc;
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct Mesh {
-    vertex_buffer: dare::asset2::AssetId<dare::asset2::implementations::Buffer>,
-    index_buffer: dare::asset2::AssetId<dare::asset2::implementations::Buffer>,
+    vertex_buffer: dare::asset2::AssetId<dare::asset2::assets::Buffer>,
+    index_buffer: dare::asset2::AssetId<dare::asset2::assets::Buffer>,
 }

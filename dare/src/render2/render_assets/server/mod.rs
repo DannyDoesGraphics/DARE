@@ -51,11 +51,11 @@ pub fn render_asset_server_system(
         for delta in render_server.asset_server.get_deltas() {
             match delta {
                 dare::asset2::server::AssetServerDelta::HandleLoaded(handle) => {
-                    if handle.is_type::<dare::asset2::implementations::Buffer>() {
+                    if handle.is_type::<dare::asset2::assets::Buffer>() {
                         let asset_server = render_server.asset_server.clone();
                         let render_context = render_context.clone();
                         let fut = rt.runtime.spawn(async move {
-                                if let Some(metadata) = asset_server.get_metadata::<dare::asset2::implementations::Buffer>(&handle) {
+                                if let Some(metadata) = asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle) {
                                     let mut allocator = render_context.inner.allocator.clone();
                                     let transfer_pool = render_context.transfer_pool();
                                     let staging_size = transfer_pool.staging_size() as usize;
@@ -65,7 +65,7 @@ pub fn render_asset_server_system(
                                         super::components::BufferPrepareInfo {
                                             allocator,
                                             handle: dare::asset2::AssetHandleUntyped::from(handle).into_typed_handle::<
-                                                crate::asset2::prelude::implementations::Buffer
+                                                crate::asset2::prelude::assets::Buffer
                                             >().unwrap(),
                                             transfer_pool,
                                             usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
@@ -75,7 +75,7 @@ pub fn render_asset_server_system(
                                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                                             location: MemoryLocation::GpuOnly,
                                         },
-                                        dare::asset2::implementations::BufferStreamInfo {
+                                        dare::asset2::assets::BufferStreamInfo {
                                             chunk_size: staging_size,
                                         }
                                     ).await)
