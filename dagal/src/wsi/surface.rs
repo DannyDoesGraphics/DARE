@@ -67,7 +67,7 @@ impl Surface {
     /// use dagal::traits::*;
     /// // The TestApp is purely use for us to properly acquire and clean a test window. However,
     /// // this can apply for any window which has the HasDisplayHandle + HasWindowHandle traits
-    /// // which in this case is winit, but could be any other window manager.
+    /// // which in this case is window, but could be any other window manager.
     /// let test_app = dagal::util::tests::TestApp::<winit::window::Window>::new();
     /// test_app.attach_function(|window: &winit::window::Window | {
     ///     let test_vulkan = dagal::util::tests::create_vulkan_and_device(

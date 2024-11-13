@@ -29,7 +29,7 @@ winit = { version = "0.30.0", optional = false }
 
 [features]
 default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "shaderc", "raii"]
-# Adds support for winit into dagal
+# Adds support for window into dagal
 winit = ["dep:winit"]
 # Adds support for gpu-allocator for the primary allocation
 gpu-allocator = ["dep:gpu-allocator"]

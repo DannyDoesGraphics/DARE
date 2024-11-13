@@ -25,7 +25,6 @@ impl HandleAllocator {
         self.recv_handle.try_recv().map_or(
             {
                 let index: u32 = self.next_index.fetch_add(1, atomic::Ordering::Relaxed);
-                println!("Done?");
                 asset::InternalHandle {
                     index,
                     generation: 0,

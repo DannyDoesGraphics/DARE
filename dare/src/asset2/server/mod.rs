@@ -105,7 +105,6 @@ impl AssetServer {
                     asset::AssetHandleUntyped::Strong(arc.clone()),
                 ))
                 .unwrap();
-            println!("In queue");
             Some(asset::AssetHandle::<T>::Strong(arc))
         } else {
             self.infos

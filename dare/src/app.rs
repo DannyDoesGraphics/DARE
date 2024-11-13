@@ -15,6 +15,7 @@ pub struct App {
     engine_server: Option<engine::server::engine_server::EngineServer>,
     render_server: Option<render::server::RenderServer>,
     configuration: render::create_infos::RenderContextConfiguration,
+    last_position: Option<glam::Vec2>,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -72,9 +73,7 @@ impl winit::application::ApplicationHandler for App {
         use winit::event::WindowEvent;
         match event {
             WindowEvent::RedrawRequested => {
-                if let (Some(rs), Some(es)) =
-                    (self.render_server.as_ref(), self.engine_server.as_ref())
-                {
+                if let Some(rs) = self.render_server.as_ref() {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async move {
                             let render = rs
@@ -82,7 +81,6 @@ impl winit::application::ApplicationHandler for App {
                                 .await
                                 .unwrap();
                             render.notified().await;
-                            es.tick().await.unwrap();
                         });
                     });
                     if let Some(window) = self.window.as_ref() {
@@ -120,11 +118,58 @@ impl winit::application::ApplicationHandler for App {
                     }
                 };
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(window) = self.window.as_ref() {
+                    let position = position.to_logical(window.scale_factor());
+                    let position = glam::Vec2::new(position.x, position.y);
+                    let dp: Option<glam::Vec2> = self
+                        .last_position
+                        .as_ref()
+                        .map(|last_position| Some(position - last_position))
+                        .flatten();
+                    self.last_position = Some(position);
+                    if let Some(dp) = dp {
+                        if let Some(rs) = self.render_server.as_ref() {
+                            rs.input_send()
+                                .send(dare::winit::input::Input::MouseDelta(dp))
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.last_position = None;
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let Some(rs) = self.render_server.as_ref() {
+                    rs.input_send()
+                        .send(dare::winit::input::Input::KeyEvent(event))
+                        .unwrap();
+                }
+            }
+            WindowEvent::MouseInput {
+                device_id,
+                state,
+                button,
+            } => {
+                if let Some(rs) = self.render_server.as_ref() {
+                    rs.input_send()
+                        .send(dare::winit::input::Input::MouseButton { button, state })
+                        .unwrap();
+                }
+            }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(es) = self.engine_server.as_ref() {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async move {
+                    es.tick().await.unwrap();
+                })
+            })
+        }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
         }
@@ -144,6 +189,7 @@ impl App {
             engine_server: None,
             render_server: None,
             configuration,
+            last_position: None,
         })
     }
 }

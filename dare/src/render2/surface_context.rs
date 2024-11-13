@@ -141,12 +141,18 @@ impl Drop for SurfaceContext {
         use std::ptr;
         let mut vk_fences: Vec<vk::Fence> = Vec::new();
         for frame in self.frames.iter() {
-            let render_fence = tokio::task::block_in_place(|| {
+            tokio::task::block_in_place(|| {
                 let rt_handle = tokio::runtime::Handle::current();
                 rt_handle.block_on(async {
                     let locked_frame = frame.lock().await;
-                    unsafe { *locked_frame.render_fence.as_raw() }
-                })
+                    if locked_frame
+                        .render_fence
+                        .get_fence_status()
+                        .unwrap_or(false)
+                    {
+                        vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
+                    }
+                });
             });
         }
         if !vk_fences.is_empty() {
@@ -154,7 +160,7 @@ impl Drop for SurfaceContext {
                 self.allocator
                     .device()
                     .get_handle()
-                    .wait_for_fences(&vk_fences, true, u64::MAX)
+                    .wait_for_fences(&vk_fences, true, 10)
                     .unwrap()
             }
         }

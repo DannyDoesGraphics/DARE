@@ -10,6 +10,7 @@ mod physics;
 mod prelude;
 mod render2;
 mod util;
+mod window;
 
 #[tokio::main]
 async fn main() {
@@ -28,8 +29,8 @@ async fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     /*
-    let event_loop = winit::event_loop::EventLoop::new().unwrap();
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let event_loop = window::event_loop::EventLoop::new().unwrap();
+    event_loop.set_control_flow(window::event_loop::ControlFlow::Poll);
     let mut app = App::default();
     event_loop.run_app(&mut app).unwrap();
 

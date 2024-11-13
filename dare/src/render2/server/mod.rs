@@ -17,6 +17,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 #[derive(Debug)]
 pub struct RenderServerInner {
+    input_send: dare::util::event::EventSender<dare::winit::input::Input>,
     thread: tokio::task::JoinHandle<()>,
     ir_send: crossbeam_channel::Sender<render::InnerRenderServerRequest>,
 }
@@ -48,18 +49,24 @@ pub struct IrRecv(pub(crate) crossbeam_channel::Receiver<render::InnerRenderServ
 pub struct IrSend(pub(crate) crossbeam_channel::Sender<render::InnerRenderServerRequest>);
 
 impl RenderServer {
+    pub fn input_send(&self) -> &dare::util::event::EventSender<dare::winit::input::Input> {
+        &self.inner.input_send
+    }
+
     pub fn new(ci: super::render_context::RenderContextCreateInfo) -> Self {
         let (new_send, mut new_recv) = tokio::sync::mpsc::unbounded_channel::<RenderServerPacket>();
         let asset_server = dare::asset2::server::AssetServer::default();
         let render_context = super::render_context::RenderContext::new(ci).unwrap();
         let (ir_send, ir_recv) = crossbeam_channel::unbounded::<render::InnerRenderServerRequest>();
+        let mut world = dare::util::world::World::new();
+        let input_send = world.add_event::<dare::winit::input::Input>();
         let thread = {
             let render_context = render_context.clone();
             let rt = dare::concurrent::BevyTokioRunTime::default();
             let asset_server = asset_server.clone();
+
             // Render thread
             tokio::task::spawn(async move {
-                let mut world = becs::World::new();
                 {
                     let mut allocator = render_context.inner.allocator.clone();
                     world.insert_resource(
@@ -77,23 +84,20 @@ impl RenderServer {
                 world.insert_resource(render::render_assets::server::RenderAssetServer::new(
                     asset_server.clone(),
                 ));
+                world.insert_resource(render::components::camera::Camera::default());
                 world.insert_resource(render::resource_relationship::Meshes::default());
                 world.insert_resource(IrRecv(ir_recv));
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
                     render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
                 >::default());
+                world.insert_resource(super::systems::delta_time::DeltaTime::default());
+
                 let mut schedule = becs::Schedule::default();
+                schedule.add_systems(super::systems::delta_time::delta_time_update);
+                schedule.add_systems(super::components::camera::camera_system);
                 schedule.add_systems(render::render_assets::server::render_asset_server_system);
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
-                schedule.add_systems(
-                    super::mesh_render_system::mesh_render
-                        .after(super::present_system::present_system_begin),
-                );
-                schedule.add_systems(
-                    super::present_system::present_system_end
-                        .after(super::mesh_render_system::mesh_render),
-                );
                 let mut stop_flag = false;
                 while stop_flag == false {
                     match new_recv.recv().await {
@@ -122,7 +126,11 @@ impl RenderServer {
             new_sender: new_send,
             render_context,
             asset_server,
-            inner: Arc::new(RenderServerInner { thread, ir_send }),
+            inner: Arc::new(RenderServerInner {
+                thread,
+                ir_send,
+                input_send,
+            }),
         }
     }
 

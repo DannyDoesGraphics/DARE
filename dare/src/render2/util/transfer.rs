@@ -73,6 +73,15 @@ impl<A: Allocator> Drop for TransferPoolInner<A> {
     }
 }
 
+struct TransferProcessor<A: Allocator> {
+    semaphore: Arc<tokio::sync::Semaphore>,
+    device: dagal::device::LogicalDevice,
+    queues: Arc<[dagal::device::Queue]>,
+    fences: Arc<[dagal::sync::Fence]>,
+    command_pools: Arc<[dagal::command::CommandPool]>,
+    request: TransferRequestInner<A>,
+}
+
 async fn pick_available_queues(
     queues: &[dagal::device::Queue],
 ) -> (usize, tokio::sync::MutexGuard<'_, Queue>) {
@@ -186,8 +195,14 @@ impl<A: Allocator + 'static> TransferPool<A> {
             tokio::select! {
                 _ = shut_recv.notified() => {
                     for task in tasks.iter() {
-                        task.abort();
-                        while task.is_finished() {}
+                        if task.is_finished() {
+                            task.abort();
+                            while task.is_finished() {}
+                        }
+                    }
+                    // wait for all fences to complete
+                    for fence in fences.iter() {
+                        fence.wait(u64::MAX)?
                     }
                     drop(command_pools);
                     drop(fences);
@@ -227,7 +242,14 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     let queues = queues.clone();
                     let command_pools = command_pools.clone();
                     let fences = fences.clone();
-                    let task = tokio::spawn(Self::process_single_transfer(semaphore, device, queues, fences.clone(), command_pools.clone(), request));
+                    let task = tokio::spawn(Self::process_single_transfer(TransferProcessor {
+                        semaphore,
+                        device,
+                        queues,
+                        fences,
+                        command_pools,
+                        request
+                    }));
                     tasks.push(task);
                 }
             }
@@ -236,27 +258,21 @@ impl<A: Allocator + 'static> TransferPool<A> {
         Ok(())
     }
 
-    async fn process_single_transfer(
-        semaphore: Arc<tokio::sync::Semaphore>,
-        device: dagal::device::LogicalDevice,
-        queues: Arc<[dagal::device::Queue]>,
-        fences: Arc<[dagal::sync::Fence]>,
-        command_pools: Arc<[dagal::command::CommandPool]>,
-        request: TransferRequestInner<A>,
-    ) -> Result<()> {
+    async fn process_single_transfer(processor: TransferProcessor<A>) -> Result<()> {
         // Acquire necessary semaphore permits and select an available queue
-        let permits = semaphore
-            .acquire_many(match &request.request {
+        let permits = processor
+            .semaphore
+            .acquire_many(match &processor.request.request {
                 TransferRequest::Buffer { length, .. } => *length,
                 TransferRequest::Image { dst_length, .. } => *dst_length,
             } as u32)
             .await?;
-        let (index, queue_guard) = pick_available_queues(&queues).await;
-        let fence: &dagal::sync::Fence = &fences[index];
+        let (index, queue_guard) = pick_available_queues(&processor.queues).await;
+        let fence: &dagal::sync::Fence = &processor.fences[index];
         // wait for fence to be cleared
         fence.fence_await().await?;
         fence.reset()?;
-        let command_buffer = command_pools[index]
+        let command_buffer = processor.command_pools[index]
             .allocate(1)?
             .pop()
             .unwrap()
@@ -265,7 +281,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
         {
             unsafe {
                 // Handle images and buffer unique transfers
-                match &request.request {
+                match &processor.request.request {
                     TransferRequest::Buffer {
                         src_buffer,
                         dst_buffer,
@@ -273,7 +289,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         dst_offset,
                         length,
                     } => {
-                        device.get_handle().cmd_copy_buffer2(
+                        processor.device.get_handle().cmd_copy_buffer2(
                             command_buffer.handle(),
                             &vk::CopyBufferInfo2 {
                                 s_type: vk::StructureType::COPY_BUFFER_INFO_2,
@@ -312,7 +328,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         dst_offset,
                         dst_length,
                     } => {
-                        device.get_handle().cmd_copy_buffer_to_image2(
+                        processor.device.get_handle().cmd_copy_buffer_to_image2(
                             command_buffer.handle(),
                             &vk::CopyBufferToImageInfo2 {
                                 s_type: vk::StructureType::COPY_BUFFER_TO_IMAGE_INFO_2,
@@ -367,9 +383,10 @@ impl<A: Allocator + 'static> TransferPool<A> {
             }
         }
         fence.fence_await().await?;
-        request
+        processor
+            .request
             .callback
-            .send(match request.request {
+            .send(match processor.request.request {
                 TransferRequest::Buffer {
                     src_buffer,
                     dst_buffer,
