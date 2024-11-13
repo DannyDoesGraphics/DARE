@@ -1,12 +1,12 @@
 /// Defines an adjacency matrix
 #[derive(Debug, PartialEq, Eq, Hash, Default)]
-pub(crate) struct AdjMatrix {
-    pub(crate) matrix: Vec<Vec<bool>>,
+pub(crate) struct AdjMatrix<T: Default + Clone> {
+    pub(crate) matrix: Vec<Vec<T>>,
 }
-unsafe impl Send for AdjMatrix {}
-impl Unpin for AdjMatrix {}
+unsafe impl<T: Default + Clone> Send for AdjMatrix<T> {}
+impl<T: Default + Clone> Unpin for AdjMatrix<T> {}
 
-impl AdjMatrix {
+impl<T: Default + Clone> AdjMatrix<T> {
     /// Push a vertex into the back of the adjacency matrix
     pub fn push_vertex(&mut self) {
         let row_length: usize = self.matrix.len() + 1;
@@ -14,8 +14,8 @@ impl AdjMatrix {
         let _ = self
             .matrix
             .iter_mut()
-            .map(|row| row.resize(row_length, false));
-        self.matrix.push(vec![false; row_length]);
+            .map(|row| row.resize(row_length, T::default()));
+        self.matrix.push(vec![T::default(); row_length]);
     }
 
     /// Removes a vertex in the adjacency matrix

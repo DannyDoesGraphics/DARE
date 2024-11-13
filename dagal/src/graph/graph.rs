@@ -9,7 +9,7 @@ pub struct Graph {
     /// Next index for the vertex
     next_index: AtomicU32,
     /// Adjacency matrix
-    adj_matrix: AdjMatrix,
+    adj_matrix: AdjMatrix<super::task_graph_edge::Edge>,
     /// vertices
     vertices: Vec<VirtualResource>,
     /// resources mappings
