@@ -172,4 +172,16 @@ impl AssetServer {
             })
             .flatten()
     }
+
+    /// Update state forcefully
+    pub unsafe fn update_state(
+        &self,
+        handle: &asset::AssetIdUntyped,
+        state: asset::AssetState,
+    ) -> Option<()> {
+        self.infos.states.get_mut(&handle).map(|mut info| {
+            info.asset_state = state;
+        })?;
+        Some(())
+    }
 }

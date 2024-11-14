@@ -6,7 +6,7 @@ use bevy_ecs::prelude as becs;
 use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures::{StreamExt, TryFutureExt};
 use std::sync::Arc;
 
 /// Responsible for receiving and tracking with the main asset server
@@ -54,6 +54,7 @@ pub fn render_asset_server_system(
                     if handle.is_type::<dare::asset2::assets::Buffer>() {
                         let asset_server = render_server.asset_server.clone();
                         let render_context = render_context.clone();
+                        let err_handle = handle.clone();
                         let fut = rt.runtime.spawn(async move {
                                 if let Some(metadata) = asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle) {
                                     let mut allocator = render_context.inner.allocator.clone();
@@ -78,12 +79,14 @@ pub fn render_asset_server_system(
                                         dare::asset2::assets::BufferStreamInfo {
                                             chunk_size: staging_size,
                                         }
-                                    ).await)
+                                    ).await.map_err(move |e| {
+                                        (e, err_handle)
+                                    }))
                                 } else {
                                     None
                                 }
                             });
-                        futures.push(fut);
+                        futures.push(fut.map_err(move |e| (e, err_handle)));
                     }
                 }
                 dare::asset2::server::AssetServerDelta::HandleUnloaded(_) => {
@@ -92,23 +95,45 @@ pub fn render_asset_server_system(
             }
         }
         // Process each future in the unordered set as it completes
-
+        let render_asset_server = render_asset_server.clone();
         rt.runtime.spawn(async move {
             while let Some(result) = futures.next().await {
                 match result {
                     Ok(Some(Ok(asset))) => {
                         // Handle the loaded asset here, such as adding it to storage
-                        buffer_server.insert(asset.handle.id(), asset);
+                        let handle = asset.handle.clone();
+                        buffer_server.insert(asset.handle.clone().id(), asset);
+                        unsafe {
+                            render_asset_server
+                                .asset_server
+                                .update_state(
+                                    &handle.into_untyped_handle(),
+                                    dare::asset2::AssetState::Loaded,
+                                )
+                                .unwrap()
+                        }
                     }
                     Ok(None) => {
                         // Handle the case where metadata was unavailable
                     }
-                    Ok(Some(Err(e))) => {
+                    Ok(Some(Err((e, handle)))) => {
                         tracing::error!("Error during streaming: {}", e);
+                        unsafe {
+                            render_asset_server
+                                .asset_server
+                                .update_state(&handle, dare::asset2::AssetState::Failed)
+                                .unwrap()
+                        }
                     }
-                    Err(e) => {
+                    Err((e, handle)) => {
                         // Log or handle any errors that occurred during the task execution
                         tracing::error!("Failed to load asset: {}", e);
+                        unsafe {
+                            render_asset_server
+                                .asset_server
+                                .update_state(&handle, dare::asset2::AssetState::Failed)
+                                .unwrap()
+                        }
                     }
                 }
             }
