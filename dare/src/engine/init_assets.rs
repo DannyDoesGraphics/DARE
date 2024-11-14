@@ -18,7 +18,8 @@ pub fn init_assets(
             std::path::PathBuf::from(
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Box/glTF/Box.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-                "C:/Users/Danny/Documents/main1_sponza/main1_sponza/NewSponza_Main_glTF_003.gltf",
+                //"C:/Users/Danny/Documents/main1_sponza/main1_sponza/NewSponza_Main_glTF_003.gltf",
+                "C:/Users/Danny/Documents/bistro_5_2_exterior_and_interior.glb",
                 //"C:/Users/Danny/Documents/Assets/junk_shop/Blender.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Suzanne/glTF/Suzanne.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf",

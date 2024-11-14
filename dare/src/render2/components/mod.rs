@@ -1,3 +1,4 @@
+pub mod bounding_box;
 pub mod camera;
 /// Represent rendering entities
 pub mod material;

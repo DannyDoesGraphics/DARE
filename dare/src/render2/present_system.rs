@@ -1,6 +1,7 @@
 use crate::prelude as dare;
 use crate::prelude::render;
 use bevy_ecs::prelude as becs;
+use bevy_ecs::prelude::Query;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::CommandBuffer;
@@ -24,7 +25,15 @@ pub fn present_system_begin(
             render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
     >,
-    meshes: becs::Res<'_, render::resource_relationship::Meshes>,
+    meshes: becs::Query<
+        '_,
+        '_,
+        (
+            &dare::engine::components::Surface,
+            &dare::physics::components::Transform,
+            &dare::render::components::bounding_box::BoundingBox,
+        ),
+    >,
     bindless: becs::Res<'_, render::util::GPUResourceTable<GPUAllocatorImpl>>,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {

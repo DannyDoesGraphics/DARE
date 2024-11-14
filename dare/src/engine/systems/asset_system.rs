@@ -9,20 +9,24 @@ pub fn asset_system(
     query: becs::Query<
         (
             &dare::engine::components::Surface,
+            &dare::engine::components::name::Name,
+            &dare::render::components::bounding_box::BoundingBox,
             &dare::physics::components::Transform,
             becs::Entity,
         ),
         becs::Added<dare::engine::components::Surface>,
     >,
 ) {
-    for (surface, transform, entity) in query.iter() {
+    for (surface, name, bounding_box, transform, entity) in query.iter() {
         send.0
             .send(InnerRenderServerRequest::Delta(
                 RenderServerAssetRelationDelta::Entry(
                     entity,
-                    dare::engine::Mesh {
+                    dare::engine::components::Mesh {
                         surface: surface.clone(),
                         transform: transform.clone(),
+                        name: name.clone(),
+                        bounding_box: bounding_box.clone(),
                     },
                 ),
             ))

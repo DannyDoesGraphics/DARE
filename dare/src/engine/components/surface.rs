@@ -5,7 +5,6 @@ use bevy_ecs::prelude as becs;
 pub struct SurfaceBuilder {
     pub vertex_count: usize,
     pub index_count: usize,
-    pub first_index: usize,
     pub index_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
     pub vertex_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
     pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
@@ -18,7 +17,6 @@ impl SurfaceBuilder {
         Surface {
             vertex_count: self.vertex_count,
             index_count: self.index_count,
-            first_index: self.first_index,
             index_buffer: self.index_buffer.unwrap(),
             vertex_buffer: self.vertex_buffer.unwrap(),
             normal_buffer: self.normal_buffer,
@@ -32,7 +30,6 @@ impl SurfaceBuilder {
 pub struct Surface {
     pub vertex_count: usize,
     pub index_count: usize,
-    pub first_index: usize,
     pub index_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
     pub vertex_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
     pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
@@ -46,7 +43,6 @@ impl Surface {
         Self {
             vertex_count: self.vertex_count,
             index_count: self.index_count,
-            first_index: self.first_index,
             index_buffer: self.index_buffer.downgrade(),
             vertex_buffer: self.vertex_buffer.downgrade(),
             normal_buffer: self.normal_buffer.map(|b| b.downgrade()),
@@ -60,7 +56,6 @@ impl Surface {
         Some(Self {
             vertex_count: self.vertex_count,
             index_count: self.index_count,
-            first_index: self.first_index,
             index_buffer: self.index_buffer.upgrade()?,
             vertex_buffer: self.vertex_buffer.upgrade()?,
             normal_buffer: match self.normal_buffer {

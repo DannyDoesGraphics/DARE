@@ -67,6 +67,7 @@ impl<A: Allocator> Destructible for Buffer<A> {
 #[cfg(feature = "raii")]
 impl<A: Allocator> Drop for Buffer<A> {
     fn drop(&mut self) {
+        println!("{:?}", self.name);
         self.destroy();
     }
 }
@@ -183,7 +184,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
                     allocation: Some(allocation),
                     address,
                     size,
-                    name: None,
+                    name: name.clone(),
                 };
 
                 if let (Some(debug_utils), Some(name)) = (device.get_debug_utils(), name) {

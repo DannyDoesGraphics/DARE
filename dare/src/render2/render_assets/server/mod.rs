@@ -119,11 +119,15 @@ pub fn render_asset_server_system(
         match delta {
             InnerRenderServerRequest::Delta(delta) => match delta {
                 RenderServerAssetRelationDelta::Entry(entity, mesh) => {
-                    let mesh = dare::engine::Mesh {
+                    let mesh = dare::engine::components::Mesh {
                         surface: mesh.surface.downgrade(),
+                        bounding_box: mesh.bounding_box.clone(),
+                        name: mesh.name.clone(),
                         transform: mesh.transform,
                     };
-                    meshes.0.entry(entity).or_insert(mesh);
+                    let entity_id = commands.spawn(mesh.clone());
+                    let entity_id = entity_id.id();
+                    meshes.0.entry(entity).or_insert(entity_id);
                 }
                 RenderServerAssetRelationDelta::Remove(_) => {}
             },

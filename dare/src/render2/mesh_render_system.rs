@@ -6,6 +6,7 @@ use crate::render2::render_assets::RenderAssetsStorage;
 use crate::render2::resource_relationship::Meshes;
 use bevy_ecs::change_detection::Res;
 use bevy_ecs::prelude as becs;
+use bevy_ecs::prelude::Query;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
@@ -20,7 +21,15 @@ pub async fn mesh_render(
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     buffers: Res<'_, RenderAssetsStorage<RenderBuffer<GPUAllocatorImpl>>>,
-    meshes: Res<'_, Meshes>,
+    meshes_query: Query<
+        '_,
+        '_,
+        (
+            &dare::engine::components::Surface,
+            &dare::physics::components::Transform,
+            &dare::render::components::bounding_box::BoundingBox,
+        ),
+    >,
     bindless: Res<'_, GPUResourceTable<GPUAllocatorImpl>>,
 ) {
     #[cfg(feature = "tracing")]
@@ -88,8 +97,8 @@ pub async fn mesh_render(
                     );
                 }
 
-                for mesh in meshes.0.values() {
-                    let surface = mesh.clone().surface.upgrade();
+                for (surface, transform, bounding_box) in meshes_query.iter() {
+                    let surface = surface.clone().upgrade();
                     if surface.is_none() {
                         continue;
                     }
@@ -99,6 +108,18 @@ pub async fn mesh_render(
                     {
                         continue;
                     }
+                    // calculate visibility
+                    let model = transform.get_transform_matrix();
+                    let camera_view = camera.get_view_matrix();
+                    let camera_proj = camera.get_projection(
+                        frame.image_extent.width as f32 / frame.image_extent.height as f32,
+                    );
+                    let camera_view_proj = camera_proj * camera_view;
+
+                    if !bounding_box.visible_in_frustum(model, camera_view_proj) {
+                        continue;
+                    }
+
                     frame
                         .resources
                         .insert(surface.vertex_buffer.clone().into_untyped_handle());
@@ -119,13 +140,8 @@ pub async fn mesh_render(
                                 0,
                                 vk::IndexType::UINT32,
                             );
-                        let model = mesh.transform.get_transform_matrix();
-                        let camera_view = camera.get_view_matrix();
-                        let camera_proj = camera.get_projection(
-                            frame.image_extent.width as f32 / frame.image_extent.height as f32,
-                        );
 
-                        let view_proj = camera_proj * camera_view * model;
+                        let view_proj = camera_view_proj * model;
                         let push_constant = CPushConstant {
                             transform: view_proj.to_cols_array(),
                             vertex_buffer: vertex_buffer.address(),

@@ -153,10 +153,12 @@ impl GLTFLoader {
                 }
             }
         }
-        let meshes: Vec<engine::Mesh> = meshes
+        let mut mesh_count: usize = 0;
+        let meshes: Vec<engine::components::Mesh> = meshes
             .into_iter()
             .flat_map(|(mesh, transform)| {
                 let mut surfaces = Vec::new();
+                let mut primitive_count: usize = 0;
                 for primitive in mesh.primitives() {
                     // retrieve all required prims
                     //commands.spawn();
@@ -168,6 +170,8 @@ impl GLTFLoader {
                             _ => None,
                         })
                         .collect();
+                    let mut bounding_box: Option<dare::render::components::bounding_box::BoundingBox> =
+                        None;
                     // Maps from uv index to uv position
                     let mut uv_mappings: Vec<(u32, u32)> = {
                         let mut index = 0u32;
@@ -205,7 +209,6 @@ impl GLTFLoader {
                                 Some(accessor) => {
                                     // # of indices
                                     surface_builder.index_count = accessor.count();
-                                    surface_builder.first_index = 0;
                                     let handle: Option<
                                         dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
                                     > = accessors_metadata.get(accessor.index()).cloned().map(
@@ -249,6 +252,25 @@ impl GLTFLoader {
                                                 });
                                             surface_builder.vertex_count = accessor.count();
                                             surface_builder.vertex_buffer = handle;
+                                            if let (Some(min), Some(max)) = (
+                                                accessor.min().map(|v| v.as_array().cloned()).flatten(),
+                                                accessor.max().map(|v| v.as_array().cloned()).flatten(),
+                                            ) {
+                                                let min = glam::Vec3::new(
+                                                    min[0].as_f64().unwrap() as f32,
+                                                    min[1].as_f64().unwrap() as f32,
+                                                    min[2].as_f64().unwrap() as f32,
+                                                );
+                                                let max = glam::Vec3::new(
+                                                    max[0].as_f64().unwrap() as f32,
+                                                    max[1].as_f64().unwrap() as f32,
+                                                    max[2].as_f64().unwrap() as f32,
+                                                );
+                                                bounding_box = Some(dare::render::components::bounding_box::BoundingBox {
+                                                    min,
+                                                    max,
+                                                })
+                                            }
                                         }
                                         Normals => {
                                             let handle: Option<
@@ -306,19 +328,31 @@ impl GLTFLoader {
                     let surface = surface_builder.build();
                     // decompose
                     let (scale, rotation, translation) = transform.to_scale_rotation_translation();
-                    surfaces.push(engine::Mesh {
+                    let mesh_name = mesh
+                        .name()
+                        .map(|name| name.to_string())
+                        .unwrap_or(format!("Mesh {mesh_count}"));
+                    let primitive_name = format!("{mesh_name} primitive {primitive_count}");
+                    surfaces.push(engine::components::Mesh {
                         surface,
+                        bounding_box: bounding_box.unwrap_or(dare::render::components::bounding_box::BoundingBox::new(
+                            glam::Vec3::from(primitive.bounding_box().min),
+                            glam::Vec3::from(primitive.bounding_box().max),
+                        )),
+                        name: engine::components::Name(primitive_name),
                         transform: dare::physics::components::Transform {
                             scale,
                             rotation,
                             translation,
                         },
                     });
+                    primitive_count += 1;
                 }
+                mesh_count += 1;
                 Ok(surfaces)
             })
             .flatten()
-            .collect::<Vec<engine::Mesh>>();
+            .collect::<Vec<engine::components::Mesh>>();
 
         commands.spawn_batch(meshes.clone().into_iter());
         Ok(())
