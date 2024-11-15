@@ -19,8 +19,11 @@ pub fn init_assets(
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Box/glTF/Box.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
                 //"C:/Users/Danny/Documents/main1_sponza/main1_sponza/NewSponza_Main_glTF_003.gltf",
-                "C:/Users/Danny/Documents/bistro_5_2_exterior_and_interior.glb",
+                "C:/Users/Danny/Documents/bistro/5_2/bistro_5_2.gltf",
+                //"C:/Users/danny/Downloads/deccer-cubes-main/deccer-cubes-main/SM_Deccer_Cubes.gltf",
                 //"C:/Users/Danny/Documents/Assets/junk_shop/Blender.gltf",
+                //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Sponza/glTF/Sponza.gltf"
+                //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Suzanne/glTF/Suzanne.gltf"
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Suzanne/glTF/Suzanne.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Lantern/glTF/Lantern.gltf",

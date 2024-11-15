@@ -5,13 +5,13 @@ use std::task::{Context, Poll};
 /// A framer's entire job is to guarantee stream yields are within [`Self::frame_size`] or less
 ///
 /// This is cancellation safe so long as the input stream is as well
-pub struct Framer<'a, T: Into<Vec<u8>>> {
+pub struct Framer<'a, T: AsRef<[u8]>> {
     stream: futures_core::stream::BoxStream<'a, T>,
     frame_size: usize,
     buffer: Vec<u8>,
 }
-impl<'a, T: Into<Vec<u8>>> Unpin for Framer<'a, T> {}
-impl<'a, T: Into<Vec<u8>>> Framer<'a, T> {
+impl<'a, T: AsRef<[u8]>> Unpin for Framer<'a, T> {}
+impl<'a, T: AsRef<[u8]>> Framer<'a, T> {
     pub fn new(stream: futures_core::stream::BoxStream<'a, T>, frame_size: usize) -> Self {
         Self {
             stream,
@@ -20,16 +20,20 @@ impl<'a, T: Into<Vec<u8>>> Framer<'a, T> {
         }
     }
 
-    fn get_next_frame(self: &mut Self) -> Option<Vec<u8>> {
-        if self.buffer.len() >= self.frame_size {
-            Some(self.buffer.drain(0..self.frame_size).collect())
+    fn get_next_frame(&mut self, accept_all: bool) -> Option<Vec<u8>> {
+        let d = if self.buffer.len() >= self.frame_size {
+            Some(self.buffer.drain(0..self.frame_size).collect::<Vec<u8>>())
+        }  else if accept_all && self.buffer.len() <= self.frame_size {
+            Some(self.buffer.drain(0..self.frame_size.min(self.buffer.len())).collect::<Vec<u8>>())
         } else {
             None
-        }
+        };
+        d.as_ref().map(|v| assert!(self.frame_size >= v.len()));
+        d
     }
 }
 
-impl<'a, T: Into<Vec<u8>>> futures_core::stream::Stream for Framer<'a, T> {
+impl<'a, T: AsRef<[u8]>> futures_core::stream::Stream for Framer<'a, T> {
     type Item = Vec<u8>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -39,24 +43,20 @@ impl<'a, T: Into<Vec<u8>>> futures_core::stream::Stream for Framer<'a, T> {
             // no frames should be made for size zero
             return Poll::Ready(None);
         }
-
         match this.stream.poll_next_unpin(cx) {
-            Poll::Pending => match this.get_next_frame() {
+            Poll::Pending => match this.get_next_frame(false) {
                 Some(frame) => Poll::Ready(Some(frame.to_vec())),
-                None => match this.get_next_frame() {
-                    Some(frame) => Poll::Ready(Some(frame)),
-                    None => {
+                None => {
                         // keep polling for more
                         cx.waker().wake_by_ref();
                         Poll::Pending
-                    }
                 },
             },
             Poll::Ready(data) => match data {
                 Some(data) => {
-                    let mut data: Vec<u8> = data.into();
+                    let mut data: Vec<u8> = data.as_ref().to_vec();
                     this.buffer.append(&mut data);
-                    match this.get_next_frame() {
+                    match this.get_next_frame(false) {
                         None => {
                             cx.waker().wake_by_ref();
                             Poll::Pending
@@ -64,11 +64,11 @@ impl<'a, T: Into<Vec<u8>>> futures_core::stream::Stream for Framer<'a, T> {
                         Some(frame) => Poll::Ready(Some(frame)),
                     }
                 }
-                None => match this.get_next_frame() {
+                None => match this.get_next_frame(false) {
                     Some(frame) => Poll::Ready(Some(frame)),
                     None => {
                         if !this.buffer.is_empty() {
-                            Poll::Ready(Some(this.buffer.drain(..).collect()))
+                            Poll::Ready(this.get_next_frame(true))
                         } else {
                             Poll::Ready(None)
                         }

@@ -7,6 +7,7 @@ use crate::render2::resource_relationship::Meshes;
 use bevy_ecs::change_detection::Res;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
+use tokio::task;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
@@ -106,6 +107,18 @@ pub async fn mesh_render(
                     if buffers.get(&surface.vertex_buffer.id()).is_none()
                         || buffers.get(&surface.index_buffer.id()).is_none()
                     {
+                        // try to load them in
+                        task::spawn(async move {
+
+                        });
+                        if frame_number % 8192 == 0 {
+                            if buffers.get(&surface.vertex_buffer.id()).is_none() {
+                                println!("Failed: {:?}", surface.vertex_buffer.id());
+                            }
+                            if buffers.get(&surface.vertex_buffer.id()).is_none() {
+                                println!("Failed: {:?}", surface.index_buffer.id());
+                            }
+                        }
                         continue;
                     }
                     // calculate visibility

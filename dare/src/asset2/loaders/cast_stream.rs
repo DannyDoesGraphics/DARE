@@ -8,7 +8,7 @@ use std::task::{Context, Poll};
 
 pub struct CastStream<
     'a,
-    T: Into<Vec<u8>>,
+    T: AsRef<[u8]>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
     Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
 > {
@@ -21,7 +21,7 @@ pub struct CastStream<
 
 impl<
         'a,
-        T: Into<Vec<u8>>,
+        T: AsRef<[u8]>,
         Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
         Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
     > Unpin for CastStream<'a, T, Source, Destination>
@@ -30,7 +30,7 @@ impl<
 
 impl<
         'a,
-        T: Into<Vec<u8>>,
+        T: AsRef<[u8]>,
         Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
         Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
     > CastStream<'a, T, Source, Destination>
@@ -55,7 +55,7 @@ impl<
 
 impl<
         'a,
-        T: Into<Vec<u8>>,
+        T: AsRef<[u8]>,
         Source: ToPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
         Destination: ToPrimitive + FromPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
     > futures_core::Stream for CastStream<'a, T, Source, Destination>

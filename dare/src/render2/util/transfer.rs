@@ -6,10 +6,11 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
+use futures::stream::FuturesUnordered;
 use tokio::sync::RwLock;
 
 #[derive(Debug)]
@@ -53,7 +54,7 @@ pub struct TransferRequestInner<A: Allocator> {
 pub struct TransferPoolInner<A: Allocator> {
     thread: tokio::task::JoinHandle<()>,
     shutdown: Arc<tokio::sync::Notify>,
-    sender: tokio::sync::mpsc::Sender<TransferRequestInner<A>>,
+    sender: tokio::sync::mpsc::UnboundedSender<TransferRequestInner<A>>,
     gpu_staging_size: vk::DeviceSize,
     cpu_staging_size: vk::DeviceSize,
     cpu_staging_semaphores: tokio::sync::Semaphore,
@@ -102,24 +103,20 @@ async fn pick_available_queues(
 impl<A: Allocator + 'static> TransferPool<A> {
     pub fn new(
         device: dagal::device::LogicalDevice,
-        cpu_staging_size: vk::DeviceSize,
         gpu_staging_size: vk::DeviceSize,
+        cpu_staging_size: vk::DeviceSize,
         queues: Vec<dagal::device::Queue>,
     ) -> Result<Self> {
-        let (sender, receiver) = tokio::sync::mpsc::channel::<TransferRequestInner<A>>(32);
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel::<TransferRequestInner<A>>();
 
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(cpu_staging_size as usize));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(gpu_staging_size as usize));
         let queues = Arc::from(queues.into_boxed_slice());
         let shutdown = Arc::new(tokio::sync::Notify::new());
         let thread = {
             let semaphore = semaphore.clone();
             let device = device.clone();
             let shutdown = shutdown.clone();
-            tokio::spawn(async move {
-                Self::process_upload_requests(semaphore, receiver, device, queues, shutdown)
-                    .await
-                    .unwrap();
-            })
+            tokio::spawn(Self::process_upload_requests(semaphore, receiver, device, queues, shutdown))
         };
         let sf = Self {
             device: device.clone(),
@@ -180,22 +177,21 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 request,
                 callback: sender,
             })
-            .await?;
+            ?;
         receiver.await?
     }
 
     async fn process_upload_requests(
         semaphore: Arc<tokio::sync::Semaphore>,
-        mut receiver: tokio::sync::mpsc::Receiver<TransferRequestInner<A>>,
+        mut receiver: tokio::sync::mpsc::UnboundedReceiver<TransferRequestInner<A>>,
         device: dagal::device::LogicalDevice,
         queues: Arc<[dagal::device::Queue]>,
         mut shut_recv: Arc<tokio::sync::Notify>,
-    ) -> Result<()> {
+    ) {
+        let gpu_staging_size = semaphore.available_permits();
         for queue in queues.iter() {
             if queue.get_queue_flags() & vk::QueueFlags::TRANSFER != vk::QueueFlags::TRANSFER {
-                return Err(anyhow::anyhow!(
-                    "Expected a queue with TRANSFER, got bit flag OTHER"
-                ));
+                panic!("Got wrong queue flags");
             }
         }
         let command_pools: Arc<[dagal::command::CommandPool]> = Arc::from(
@@ -220,7 +216,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 })
                 .collect::<Vec<dagal::sync::Fence>>(),
         );
-        let mut tasks: Vec<tokio::task::JoinHandle<Result<()>>> = Vec::new();
+        let mut tasks: FuturesUnordered<tokio::task::JoinHandle<Result<()>>> = FuturesUnordered::new();
 
         loop {
             tokio::select! {
@@ -233,7 +229,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     }
                     // wait for all fences to complete
                     for fence in fences.iter() {
-                        fence.wait(u64::MAX)?
+                        fence.wait(u64::MAX).unwrap()
                     }
                     drop(command_pools);
                     drop(fences);
@@ -241,6 +237,34 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     break;
                 }
                 Some(request) = receiver.recv() => {
+                    if match &request.request {
+                        TransferRequest::Buffer {
+                            length,
+                            ..
+                        } => *length > gpu_staging_size as u64,
+                        TransferRequest::Image {
+                            src_length,
+                            ..
+                        } => *src_length > gpu_staging_size as u64,
+                    } {
+                        let dst_length = match &request.request {
+                            TransferRequest::Buffer {
+                                length,
+                                ..
+                            } => *length,
+                            TransferRequest::Image {
+                                src_length,
+                                ..
+                            } => *src_length,
+                        };
+                        tracing::error!("Exceeds {dst_length} > {gpu_staging_size}");
+                        request
+                            .callback
+                            .send(Err(anyhow::anyhow!("Size exceeds GPU staging size")))
+                            .unwrap();
+                        continue;
+                    }
+
                     // validate request is sane
                     if match &request.request {
                         TransferRequest::Buffer {
@@ -285,158 +309,166 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 }
             }
         }
-        tracing::trace!("Closing transfer");
-        Ok(())
     }
 
     async fn process_single_transfer(processor: TransferProcessor<A>) -> Result<()> {
+        let dst_length = match &processor.request.request {
+            TransferRequest::Buffer { length, .. } => *length,
+            TransferRequest::Image { dst_length, .. } => *dst_length,
+        } as u32;
         // Acquire necessary semaphore permits and select an available queue
         let permits = processor
             .semaphore
-            .acquire_many(match &processor.request.request {
-                TransferRequest::Buffer { length, .. } => *length,
-                TransferRequest::Image { dst_length, .. } => *dst_length,
-            } as u32)
+            .acquire_many(dst_length)
             .await?;
         let (index, queue_guard) = pick_available_queues(&processor.queues).await;
         let fence: &dagal::sync::Fence = &processor.fences[index];
         // wait for fence to be cleared
         fence.fence_await().await?;
-        fence.reset()?;
-        let command_buffer = processor.command_pools[index]
-            .allocate(1)?
-            .pop()
-            .unwrap()
-            .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-            .unwrap();
-        {
-            unsafe {
-                // Handle images and buffer unique transfers
-                match &processor.request.request {
-                    TransferRequest::Buffer {
-                        src_buffer,
-                        dst_buffer,
-                        src_offset,
-                        dst_offset,
-                        length,
-                    } => {
-                        processor.device.get_handle().cmd_copy_buffer2(
-                            command_buffer.handle(),
-                            &vk::CopyBufferInfo2 {
-                                s_type: vk::StructureType::COPY_BUFFER_INFO_2,
-                                p_next: ptr::null(),
-                                src_buffer: unsafe { *src_buffer.as_raw() },
-                                dst_buffer: unsafe { *dst_buffer.as_raw() },
-                                region_count: 1,
-                                p_regions: &vk::BufferCopy2 {
-                                    s_type: vk::StructureType::BUFFER_COPY_2,
+        fence.reset().unwrap();
+        let res = {
+            let command_buffer = processor.command_pools[index]
+                .allocate(1)?
+                .pop()
+                .unwrap()
+                .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+                .unwrap();
+            {
+                unsafe {
+                    // Handle images and buffer unique transfers
+                    match &processor.request.request {
+                        TransferRequest::Buffer {
+                            src_buffer,
+                            dst_buffer,
+                            src_offset,
+                            dst_offset,
+                            length,
+                        } => {
+                            processor.device.get_handle().cmd_copy_buffer2(
+                                command_buffer.handle(),
+                                &vk::CopyBufferInfo2 {
+                                    s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                     p_next: ptr::null(),
-                                    src_offset: *src_offset,
-                                    dst_offset: *dst_offset,
-                                    size: *length,
+                                    src_buffer: unsafe { *src_buffer.as_raw() },
+                                    dst_buffer: unsafe { *dst_buffer.as_raw() },
+                                    region_count: 1,
+                                    p_regions: &vk::BufferCopy2 {
+                                        s_type: vk::StructureType::BUFFER_COPY_2,
+                                        p_next: ptr::null(),
+                                        src_offset: *src_offset,
+                                        dst_offset: *dst_offset,
+                                        size: *length,
+                                        _marker: Default::default(),
+                                    },
                                     _marker: Default::default(),
                                 },
-                                _marker: Default::default(),
-                            },
-                        );
-                        unsafe {
-                            println!(
-                                "Staging of: {:?} -> [{}, {}) to [{}, {})",
-                                *src_buffer.as_raw(),
-                                *src_offset,
-                                *src_offset + *length,
-                                *dst_offset,
-                                *dst_offset + *length,
+                            );
+                        }
+                        TransferRequest::Image {
+                            src_buffer,
+                            src_offset,
+                            src_length,
+                            extent,
+                            dst_image,
+                            dst_offset,
+                            dst_length,
+                        } => {
+                            processor.device.get_handle().cmd_copy_buffer_to_image2(
+                                command_buffer.handle(),
+                                &vk::CopyBufferToImageInfo2 {
+                                    s_type: vk::StructureType::COPY_BUFFER_TO_IMAGE_INFO_2,
+                                    p_next: ptr::null(),
+                                    src_buffer: unsafe { *src_buffer.as_raw() },
+                                    dst_image: unsafe { *dst_image.as_raw() },
+                                    dst_image_layout: vk::ImageLayout::UNDEFINED,
+                                    region_count: 1,
+                                    p_regions: &vk::BufferImageCopy2 {
+                                        s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
+                                        p_next: ptr::null(),
+                                        buffer_offset: *src_offset,
+                                        buffer_row_length: 0,
+                                        buffer_image_height: 0,
+                                        image_subresource: vk::ImageSubresourceLayers {
+                                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                                            mip_level: 0,
+                                            base_array_layer: 0,
+                                            layer_count: 1,
+                                        },
+                                        image_offset: *dst_offset,
+                                        image_extent: *extent,
+                                        _marker: Default::default(),
+                                    },
+                                    _marker: Default::default(),
+                                },
                             );
                         }
                     }
-                    TransferRequest::Image {
-                        src_buffer,
-                        src_offset,
-                        src_length,
-                        extent,
-                        dst_image,
-                        dst_offset,
-                        dst_length,
-                    } => {
-                        processor.device.get_handle().cmd_copy_buffer_to_image2(
-                            command_buffer.handle(),
-                            &vk::CopyBufferToImageInfo2 {
-                                s_type: vk::StructureType::COPY_BUFFER_TO_IMAGE_INFO_2,
+                }
+                let command_buffer = command_buffer.end()?;
+                let cmd_buffer_info = command_buffer.submit_info();
+                {
+                    command_buffer
+                        .submit(
+                            *queue_guard,
+                            &[vk::SubmitInfo2 {
+                                s_type: vk::StructureType::SUBMIT_INFO_2,
                                 p_next: ptr::null(),
-                                src_buffer: unsafe { *src_buffer.as_raw() },
-                                dst_image: unsafe { *dst_image.as_raw() },
-                                dst_image_layout: vk::ImageLayout::UNDEFINED,
-                                region_count: 1,
-                                p_regions: &vk::BufferImageCopy2 {
-                                    s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
-                                    p_next: ptr::null(),
-                                    buffer_offset: *src_offset,
-                                    buffer_row_length: 0,
-                                    buffer_image_height: 0,
-                                    image_subresource: vk::ImageSubresourceLayers {
-                                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                                        mip_level: 0,
-                                        base_array_layer: 0,
-                                        layer_count: 1,
-                                    },
-                                    image_offset: *dst_offset,
-                                    image_extent: *extent,
-                                    _marker: Default::default(),
-                                },
+                                flags: vk::SubmitFlags::empty(),
+                                wait_semaphore_info_count: 0,
+                                p_wait_semaphore_infos: ptr::null(),
+                                command_buffer_info_count: 1,
+                                p_command_buffer_infos: &cmd_buffer_info,
+                                signal_semaphore_info_count: 0,
+                                p_signal_semaphore_infos: ptr::null(),
                                 _marker: Default::default(),
-                            },
-                        );
-                    }
+                            }],
+                            fence.handle(),
+                        )
+                        .map_err(|e| {
+                            tracing::error!("Failed to submit transfer command: {:?}", e);
+                            e
+                        }).unwrap();
                 }
             }
-            let command_buffer = command_buffer.end()?;
-            let cmd_buffer_info = command_buffer.submit_info();
-            {
-                command_buffer
-                    .submit(
-                        *queue_guard,
-                        &[vk::SubmitInfo2 {
-                            s_type: vk::StructureType::SUBMIT_INFO_2,
-                            p_next: ptr::null(),
-                            flags: vk::SubmitFlags::empty(),
-                            wait_semaphore_info_count: 0,
-                            p_wait_semaphore_infos: ptr::null(),
-                            command_buffer_info_count: 1,
-                            p_command_buffer_infos: &cmd_buffer_info,
-                            signal_semaphore_info_count: 0,
-                            p_signal_semaphore_infos: ptr::null(),
-                            _marker: Default::default(),
-                        }],
-                        fence.handle(),
-                    )
-                    .unwrap();
+            fence.fence_await().await?;
+            drop(queue_guard);
+            let num_permits = permits.num_permits();
+            processor.semaphore.add_permits(num_permits);
+            drop(permits);
+            processor
+                .request
+                .callback
+                .send(match processor.request.request {
+                    TransferRequest::Buffer {
+                        src_buffer,
+                        dst_buffer,
+                        ..
+                    } => Ok(TransferRequestCallback::Buffer {
+                        src_buffer,
+                        dst_buffer,
+                    }),
+                    TransferRequest::Image {
+                        src_buffer,
+                        dst_image,
+                        ..
+                    } => Ok(TransferRequestCallback::Image {
+                        src_buffer,
+                        dst_image,
+                    }),
+                })
+                .map_err(|e| {
+                    tracing::error!("Failed to send transfer callback: {:?}", e);
+                    e
+                }).unwrap();
+            anyhow::Ok(())
+        };
+        match res {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::error!("Failed to complete transfer: {:?}", e);
+                fence.reset().unwrap();
             }
         }
-        fence.fence_await().await?;
-        processor
-            .request
-            .callback
-            .send(match processor.request.request {
-                TransferRequest::Buffer {
-                    src_buffer,
-                    dst_buffer,
-                    ..
-                } => Ok(TransferRequestCallback::Buffer {
-                    src_buffer,
-                    dst_buffer,
-                }),
-                TransferRequest::Image {
-                    src_buffer,
-                    dst_image,
-                    ..
-                } => Ok(TransferRequestCallback::Image {
-                    src_buffer,
-                    dst_image,
-                }),
-            })
-            .unwrap();
-        drop(permits);
         Ok(())
     }
 

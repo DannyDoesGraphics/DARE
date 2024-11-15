@@ -1,2 +1,2 @@
-pub mod asset_system;
-pub use asset_system::*;
+pub mod engine_asset_system_updater;
+pub use engine_asset_system_updater::*;

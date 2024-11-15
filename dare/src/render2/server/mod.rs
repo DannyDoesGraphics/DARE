@@ -95,7 +95,8 @@ impl RenderServer {
                 let mut schedule = becs::Schedule::default();
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
-                schedule.add_systems(render::render_assets::server::render_asset_server_system);
+                schedule.add_systems(super::render_assets::server::load_assets_to_gpu_in_world);
+                schedule.add_systems(render::render_assets::server::process_asset_relations_incoming_system);
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
                 let mut stop_flag = false;

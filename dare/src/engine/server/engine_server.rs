@@ -24,12 +24,12 @@ impl EngineServer {
         let mut init_schedule = becs::Schedule::default();
         init_schedule.add_systems(super::super::init_assets::init_assets);
         init_schedule.add_systems(
-            super::super::systems::asset_system.after(super::super::init_assets::init_assets),
+            super::super::systems::engine_asset_sync_system.after(super::super::init_assets::init_assets),
         );
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();
-        scheduler.add_systems(super::super::systems::asset_system);
+        scheduler.add_systems(super::super::systems::engine_asset_sync_system);
 
         let (send, mut recv) = tokio::sync::mpsc::channel::<()>(32);
         let thread = rt.runtime.spawn_blocking(move || {

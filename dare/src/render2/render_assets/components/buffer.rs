@@ -60,6 +60,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
     where
         A: 'a,
     {
+        let frame_size: usize = load_info.chunk_size.min(prepare_info.transfer_pool.gpu_staging_size() as usize);
         let destination =
             dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 name: Some(String::from("BufferAsset")),
@@ -80,31 +81,24 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
                 device: prepare_info.allocator.get_device().clone(),
                 name: Some(String::from("Staging Buffer")),
                 allocator: &mut prepare_info.allocator,
-                size: load_info.chunk_size as vk::DeviceSize,
+                size: frame_size as vk::DeviceSize,
                 memory_type: MemoryLocation::CpuToGpu,
                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
                     | vk::BufferUsageFlags::TRANSFER_DST,
             })?;
         let mut stream =
             gpu_buffer_stream(staging_buffer, destination, transfer_pool, stream).boxed();
-
         while let Some(res) = stream.next().await {
             match res {
-                Ok(Some((staging, dest))) => {
+                Some((staging, dest)) => {
                     drop(staging);
                     return Ok(Self {
                         buffer: dest,
                         handle: prepare_info.handle,
                     });
                 }
-                Ok(None) => {
+                None => {
                     // still processing
-                }
-                Err(e) => {
-                    // destroy buffer
-                    //drop(destination);
-                    tracing::error!("Failed to transfer {:?}", metadata);
-                    return Err(e);
                 }
             }
         }
