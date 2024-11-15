@@ -69,7 +69,7 @@ impl RenderContext {
         let instance = dagal::bootstrap::InstanceBuilder::new().set_vulkan_version((1, 3, 0));
         let instance = instance
             .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())
-            .set_validation(true);
+            .set_validation(cfg!(feature = "tracing"));
         // add required extensions
         let instance = dagal::ash_window::enumerate_required_extensions(ci.rdh)?
             .into_iter()
@@ -94,7 +94,7 @@ impl RenderContext {
             })
             .select(&instance)?;
         // Make logical device
-        let (device, queues) =
+        let device_builder =
             dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
                 .add_queue_allocation(dagal::bootstrap::QueueRequest {
                     family_flags: vk::QueueFlags::GRAPHICS,
@@ -134,8 +134,10 @@ impl RenderContext {
                 .attach_feature_1_0(vk::PhysicalDeviceFeatures {
                     shader_int64: vk::TRUE,
                     ..Default::default()
-                })
-                .build(&instance)?;
+                });
+        let device_builder = device_builder.debug_utils(true);
+
+        let (device, queues) = device_builder.build(&instance)?;
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(queues);
         let physical_device: dagal::device::PhysicalDevice = physical_device.into();
         // Create allocator

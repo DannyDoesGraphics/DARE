@@ -26,7 +26,7 @@ impl SurfaceBuilder {
     }
 }
 
-#[derive(becs::Component, Debug, Clone)]
+#[derive(becs::Component, Debug, Clone, PartialEq, Hash)]
 pub struct Surface {
     pub vertex_count: usize,
     pub index_count: usize,

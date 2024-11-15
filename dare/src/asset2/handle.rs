@@ -29,6 +29,14 @@ pub enum AssetHandle<T: asset::Asset> {
         id: asset::AssetId<T>,
     },
 }
+impl<T: asset::Asset> Hash for AssetHandle<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            AssetHandle::Strong(arc) => arc.id.hash(state),
+            AssetHandle::Weak { id, .. } => id.hash(state),
+        }
+    }
+}
 impl<T: asset::Asset> Debug for AssetHandle<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

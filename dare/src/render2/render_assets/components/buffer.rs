@@ -38,6 +38,7 @@ pub struct BufferPrepareInfo<A: Allocator + 'static> {
     pub transfer_pool: TransferPool<A>,
     pub usage_flags: vk::BufferUsageFlags,
     pub location: MemoryLocation,
+    pub name: Option<String>,
 }
 
 impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
@@ -65,7 +66,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
             .min(prepare_info.transfer_pool.gpu_staging_size() as usize);
         let destination =
             dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                name: Some(String::from("BufferAsset")),
+                name: prepare_info.name,
                 device: prepare_info.allocator.device().clone(),
                 allocator: &mut prepare_info.allocator,
                 size: (metadata.element_count * metadata.format.size()) as vk::DeviceSize,

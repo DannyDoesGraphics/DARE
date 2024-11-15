@@ -7,6 +7,7 @@ use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use futures::stream::FuturesUnordered;
 use futures::{StreamExt, TryFutureExt};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// Responsible for receiving and tracking with the main asset server
@@ -21,10 +22,21 @@ impl RenderAssetServer {
     }
 }
 
+const BUFFER_NAMES: [&'static str; 5] = [
+    "Vertex Buffer",
+    "Index Buffer",
+    "Normal Buffer",
+    "UV buffer",
+    "Tangent buffer",
+];
+
 pub fn load_assets_to_gpu_in_world(
     render_context: becs::Res<dare::render::contexts::RenderContext>,
     query: becs::Query<
-        &dare::engine::components::Surface,
+        (
+            &dare::engine::components::Surface,
+            Option<&dare::engine::components::Name>,
+        ),
         becs::Added<dare::engine::components::Surface>,
     >,
     mut buffers: becs::ResMut<
@@ -36,7 +48,7 @@ pub fn load_assets_to_gpu_in_world(
 ) {
     let mut futures = FuturesUnordered::new();
     let render_asset_server = render_asset_server.asset_server.clone();
-    for surface in query.iter() {
+    for (surface, name) in query.iter() {
         let buffers = [
             Some(surface.vertex_buffer.clone().into_untyped_handle()),
             Some(surface.index_buffer.clone().into_untyped_handle()),
@@ -53,7 +65,7 @@ pub fn load_assets_to_gpu_in_world(
                 .as_ref()
                 .map(|tangent_buffer| tangent_buffer.clone().into_untyped_handle()),
         ];
-        for handle in buffers.into_iter() {
+        for (index, handle) in buffers.into_iter().enumerate() {
             if let Some(handle) = handle {
                 if let Some(metadata) =
                     render_asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle)
@@ -62,6 +74,17 @@ pub fn load_assets_to_gpu_in_world(
                     if handle_state == Some(dare::asset2::AssetState::Unloaded) {
                         let err_handle = handle.clone();
                         let render_context = render_context.clone();
+                        let name: Option<String> = BUFFER_NAMES.get(index).map(|v| {
+                            format!(
+                                "{} {}",
+                                name.map(|name| name.0.as_str()).unwrap_or({
+                                    let mut hasher = std::hash::DefaultHasher::default();
+                                    surface.hash(&mut hasher);
+                                    hasher.finish().to_string().as_str()
+                                }),
+                                v
+                            )
+                        });
                         let fut = rt.runtime.spawn(async move {
                             let mut allocator = render_context.inner.allocator.clone();
                             let transfer_pool = render_context.transfer_pool();
@@ -80,6 +103,7 @@ pub fn load_assets_to_gpu_in_world(
                                         | vk::BufferUsageFlags::TRANSFER_SRC
                                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                                     location: MemoryLocation::GpuOnly,
+                                    name,
                                 },
                                 dare::asset2::assets::BufferStreamInfo {
                                     chunk_size: staging_size,
