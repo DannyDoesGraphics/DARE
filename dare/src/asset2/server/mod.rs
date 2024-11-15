@@ -185,12 +185,7 @@ impl AssetServer {
         Some(())
     }
 
-    pub fn get_state(
-        &self,
-        handle: &asset::AssetIdUntyped,
-    ) -> Option<asset::AssetState> {
-        self.infos.states.get(&handle).map(|info| {
-            info.asset_state
-        })
+    pub fn get_state(&self, handle: &asset::AssetIdUntyped) -> Option<asset::AssetState> {
+        self.infos.states.get(&handle).map(|info| info.asset_state)
     }
 }

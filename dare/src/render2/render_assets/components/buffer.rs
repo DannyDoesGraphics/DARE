@@ -60,7 +60,9 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
     where
         A: 'a,
     {
-        let frame_size: usize = load_info.chunk_size.min(prepare_info.transfer_pool.gpu_staging_size() as usize);
+        let frame_size: usize = load_info
+            .chunk_size
+            .min(prepare_info.transfer_pool.gpu_staging_size() as usize);
         let destination =
             dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 name: Some(String::from("BufferAsset")),

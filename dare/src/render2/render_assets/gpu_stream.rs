@@ -11,16 +11,12 @@ pub fn gpu_buffer_stream<'a, T, A>(
     dst_buffer: dagal::resource::Buffer<A>,
     transfer_pool: dare::render::util::TransferPool<A>,
     stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
-) -> impl Stream<
-    Item = Option<(dagal::resource::Buffer<A>, dagal::resource::Buffer<A>)>,
->
-       + 'a
-       + Send
+) -> impl Stream<Item = Option<(dagal::resource::Buffer<A>, dagal::resource::Buffer<A>)>> + 'a + Send
 where
     T: AsRef<[u8]> + Send + 'a,
     A: Allocator + 'static,
 {
-    assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size() );
+    assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size());
     stream! {
         let mut initial_progress = 0;
         let mut staging_buffer = Some(staging_buffer);

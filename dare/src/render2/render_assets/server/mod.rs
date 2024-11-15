@@ -25,7 +25,7 @@ pub fn load_assets_to_gpu_in_world(
     render_context: becs::Res<dare::render::contexts::RenderContext>,
     query: becs::Query<
         &dare::engine::components::Surface,
-        becs::Added<dare::engine::components::Surface>
+        becs::Added<dare::engine::components::Surface>,
     >,
     mut buffers: becs::ResMut<
         '_,
@@ -40,15 +40,30 @@ pub fn load_assets_to_gpu_in_world(
         let buffers = [
             Some(surface.vertex_buffer.clone().into_untyped_handle()),
             Some(surface.index_buffer.clone().into_untyped_handle()),
-            surface.normal_buffer.as_ref().map(|normal_buffer| normal_buffer.clone().into_untyped_handle()),
-            surface.uv_buffer.as_ref().map(|uv_buffer| uv_buffer.clone().into_untyped_handle()),
-            surface.tangent_buffer.as_ref().map(|tangent_buffer| tangent_buffer.clone().into_untyped_handle()),
+            surface
+                .normal_buffer
+                .as_ref()
+                .map(|normal_buffer| normal_buffer.clone().into_untyped_handle()),
+            surface
+                .uv_buffer
+                .as_ref()
+                .map(|uv_buffer| uv_buffer.clone().into_untyped_handle()),
+            surface
+                .tangent_buffer
+                .as_ref()
+                .map(|tangent_buffer| tangent_buffer.clone().into_untyped_handle()),
         ];
-        println!("Trying to load index: {:?}, vertex: {:?}", surface.index_buffer.clone().into_untyped_handle(), surface.vertex_buffer.clone().into_untyped_handle());
+        println!(
+            "Trying to load index: {:?}, vertex: {:?}",
+            surface.index_buffer.clone().into_untyped_handle(),
+            surface.vertex_buffer.clone().into_untyped_handle()
+        );
         for handle in buffers.into_iter() {
             if let Some(handle) = handle {
-                if let Some(metadata) = render_asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle) {
-                    let handle_state =  render_asset_server.get_state(&handle);
+                if let Some(metadata) =
+                    render_asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle)
+                {
+                    let handle_state = render_asset_server.get_state(&handle);
                     if handle_state == Some(dare::asset2::AssetState::Unloaded) {
                         let err_handle = handle.clone();
                         let render_context = render_context.clone();
@@ -143,8 +158,14 @@ pub fn process_asset_relations_incoming_system(
             InnerRenderServerRequest::Delta(delta) => match delta {
                 RenderServerAssetRelationDelta::Entry(entity, mesh) => {
                     if !meshes.0.contains_key(&entity) {
-                        println!("Request to link with index: {:?}", mesh.surface.index_buffer.clone().into_untyped_handle());
-                        println!("Request to link with vertex: {:?}", mesh.surface.vertex_buffer.clone().into_untyped_handle());
+                        println!(
+                            "Request to link with index: {:?}",
+                            mesh.surface.index_buffer.clone().into_untyped_handle()
+                        );
+                        println!(
+                            "Request to link with vertex: {:?}",
+                            mesh.surface.vertex_buffer.clone().into_untyped_handle()
+                        );
 
                         let mesh = dare::engine::components::Mesh {
                             surface: mesh.surface.downgrade(),

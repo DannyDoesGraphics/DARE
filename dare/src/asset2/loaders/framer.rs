@@ -23,8 +23,12 @@ impl<'a, T: AsRef<[u8]>> Framer<'a, T> {
     fn get_next_frame(&mut self, accept_all: bool) -> Option<Vec<u8>> {
         let d = if self.buffer.len() >= self.frame_size {
             Some(self.buffer.drain(0..self.frame_size).collect::<Vec<u8>>())
-        }  else if accept_all && self.buffer.len() <= self.frame_size {
-            Some(self.buffer.drain(0..self.frame_size.min(self.buffer.len())).collect::<Vec<u8>>())
+        } else if accept_all && self.buffer.len() <= self.frame_size {
+            Some(
+                self.buffer
+                    .drain(0..self.frame_size.min(self.buffer.len()))
+                    .collect::<Vec<u8>>(),
+            )
         } else {
             None
         };
@@ -47,10 +51,10 @@ impl<'a, T: AsRef<[u8]>> futures_core::stream::Stream for Framer<'a, T> {
             Poll::Pending => match this.get_next_frame(false) {
                 Some(frame) => Poll::Ready(Some(frame.to_vec())),
                 None => {
-                        // keep polling for more
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                },
+                    // keep polling for more
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
             },
             Poll::Ready(data) => match data {
                 Some(data) => {

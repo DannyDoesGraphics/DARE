@@ -7,7 +7,6 @@ use crate::render2::resource_relationship::Meshes;
 use bevy_ecs::change_detection::Res;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use tokio::task;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
@@ -15,6 +14,7 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::command::CommandBufferState;
 use dagal::pipelines::Pipeline;
 use dagal::traits::AsRaw;
+use tokio::task;
 
 pub async fn mesh_render(
     frame_number: usize,
@@ -108,9 +108,7 @@ pub async fn mesh_render(
                         || buffers.get(&surface.index_buffer.id()).is_none()
                     {
                         // try to load them in
-                        task::spawn(async move {
-
-                        });
+                        task::spawn(async move {});
                         if frame_number % 8192 == 0 {
                             if buffers.get(&surface.vertex_buffer.id()).is_none() {
                                 println!("Failed: {:?}", surface.vertex_buffer.id());

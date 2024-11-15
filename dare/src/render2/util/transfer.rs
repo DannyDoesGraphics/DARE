@@ -6,11 +6,11 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
+use futures::stream::FuturesUnordered;
 use futures::{FutureExt, TryFutureExt};
 use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::stream::FuturesUnordered;
 use tokio::sync::RwLock;
 
 #[derive(Debug)]
@@ -116,7 +116,9 @@ impl<A: Allocator + 'static> TransferPool<A> {
             let semaphore = semaphore.clone();
             let device = device.clone();
             let shutdown = shutdown.clone();
-            tokio::spawn(Self::process_upload_requests(semaphore, receiver, device, queues, shutdown))
+            tokio::spawn(Self::process_upload_requests(
+                semaphore, receiver, device, queues, shutdown,
+            ))
         };
         let sf = Self {
             device: device.clone(),
@@ -171,13 +173,10 @@ impl<A: Allocator + 'static> TransferPool<A> {
     ) -> Result<TransferRequestCallback<A>> {
         let (sender, receiver) =
             tokio::sync::oneshot::channel::<Result<TransferRequestCallback<A>>>();
-        self.inner
-            .sender
-            .send(TransferRequestInner {
-                request,
-                callback: sender,
-            })
-            ?;
+        self.inner.sender.send(TransferRequestInner {
+            request,
+            callback: sender,
+        })?;
         receiver.await?
     }
 
@@ -216,7 +215,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 })
                 .collect::<Vec<dagal::sync::Fence>>(),
         );
-        let mut tasks: FuturesUnordered<tokio::task::JoinHandle<Result<()>>> = FuturesUnordered::new();
+        let mut tasks: FuturesUnordered<tokio::task::JoinHandle<Result<()>>> =
+            FuturesUnordered::new();
 
         loop {
             tokio::select! {
@@ -317,10 +317,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
             TransferRequest::Image { dst_length, .. } => *dst_length,
         } as u32;
         // Acquire necessary semaphore permits and select an available queue
-        let permits = processor
-            .semaphore
-            .acquire_many(dst_length)
-            .await?;
+        let permits = processor.semaphore.acquire_many(dst_length).await?;
         let (index, queue_guard) = pick_available_queues(&processor.queues).await;
         let fence: &dagal::sync::Fence = &processor.fences[index];
         // wait for fence to be cleared
@@ -427,7 +424,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         .map_err(|e| {
                             tracing::error!("Failed to submit transfer command: {:?}", e);
                             e
-                        }).unwrap();
+                        })
+                        .unwrap();
                 }
             }
             fence.fence_await().await?;
@@ -459,7 +457,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 .map_err(|e| {
                     tracing::error!("Failed to send transfer callback: {:?}", e);
                     e
-                }).unwrap();
+                })
+                .unwrap();
             anyhow::Ok(())
         };
         match res {
