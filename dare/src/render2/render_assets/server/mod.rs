@@ -53,11 +53,6 @@ pub fn load_assets_to_gpu_in_world(
                 .as_ref()
                 .map(|tangent_buffer| tangent_buffer.clone().into_untyped_handle()),
         ];
-        println!(
-            "Trying to load index: {:?}, vertex: {:?}",
-            surface.index_buffer.clone().into_untyped_handle(),
-            surface.vertex_buffer.clone().into_untyped_handle()
-        );
         for handle in buffers.into_iter() {
             if let Some(handle) = handle {
                 if let Some(metadata) =
@@ -158,15 +153,6 @@ pub fn process_asset_relations_incoming_system(
             InnerRenderServerRequest::Delta(delta) => match delta {
                 RenderServerAssetRelationDelta::Entry(entity, mesh) => {
                     if !meshes.0.contains_key(&entity) {
-                        println!(
-                            "Request to link with index: {:?}",
-                            mesh.surface.index_buffer.clone().into_untyped_handle()
-                        );
-                        println!(
-                            "Request to link with vertex: {:?}",
-                            mesh.surface.vertex_buffer.clone().into_untyped_handle()
-                        );
-
                         let mesh = dare::engine::components::Mesh {
                             surface: mesh.surface.downgrade(),
                             bounding_box: mesh.bounding_box.clone(),
