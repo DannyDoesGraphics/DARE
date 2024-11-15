@@ -8,20 +8,20 @@ use std::ops::Deref;
 /// requirements
 /// Describes a buffer which can grow dynamically, but shrinks rarely
 pub struct GrowableBuffer<A: Allocator> {
-    handle: std::cell::Cell<dagal::resource::Buffer<A>>,
+    handle: Option<dagal::resource::Buffer<A>>,
 }
 impl<A: Allocator> Deref for GrowableBuffer<A> {
     type Target = dagal::resource::Buffer<A>;
 
     fn deref(&self) -> &Self::Target {
-        &self.handle
+        self.handle.as_ref().unwrap()
     }
 }
 
 impl<A: Allocator> GrowableBuffer<A> {
     pub fn new(handle: dagal::resource::Buffer<A>) -> Self {
         Self {
-            handle: std::cell::Cell::new(handle),
+            handle: Some(handle),
         }
     }
 
