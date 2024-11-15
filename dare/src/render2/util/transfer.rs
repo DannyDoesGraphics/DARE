@@ -54,12 +54,14 @@ pub struct TransferPoolInner<A: Allocator> {
     thread: tokio::task::JoinHandle<()>,
     shutdown: Arc<tokio::sync::Notify>,
     sender: tokio::sync::mpsc::Sender<TransferRequestInner<A>>,
+    gpu_staging_size: vk::DeviceSize,
+    cpu_staging_size: vk::DeviceSize,
+    cpu_staging_semaphores: tokio::sync::Semaphore,
 }
 /// Allows for quick transfers
 #[derive(Debug, Clone)]
 pub struct TransferPool<A: Allocator> {
     device: dagal::device::LogicalDevice,
-    staging_size: vk::DeviceSize,
     inner: Arc<TransferPoolInner<A>>,
     semaphore: Arc<tokio::sync::Semaphore>,
 }
@@ -100,12 +102,13 @@ async fn pick_available_queues(
 impl<A: Allocator + 'static> TransferPool<A> {
     pub fn new(
         device: dagal::device::LogicalDevice,
-        size: vk::DeviceSize,
+        cpu_staging_size: vk::DeviceSize,
+        gpu_staging_size: vk::DeviceSize,
         queues: Vec<dagal::device::Queue>,
     ) -> Result<Self> {
         let (sender, receiver) = tokio::sync::mpsc::channel::<TransferRequestInner<A>>(32);
 
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(size as usize));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(cpu_staging_size as usize));
         let queues = Arc::from(queues.into_boxed_slice());
         let shutdown = Arc::new(tokio::sync::Notify::new());
         let thread = {
@@ -123,17 +126,45 @@ impl<A: Allocator + 'static> TransferPool<A> {
             inner: Arc::new(TransferPoolInner {
                 thread,
                 sender,
+                gpu_staging_size,
                 shutdown,
+                cpu_staging_semaphores: tokio::sync::Semaphore::new(cpu_staging_size as usize),
+                cpu_staging_size,
             }),
             semaphore,
-            staging_size: size,
         };
 
         Ok(sf)
     }
 
-    pub fn staging_size(&self) -> vk::DeviceSize {
-        self.staging_size
+    pub fn gpu_staging_size(&self) -> vk::DeviceSize {
+        self.inner.gpu_staging_size
+    }
+
+    pub fn cpu_staging_size(&self) -> vk::DeviceSize {
+        self.inner.cpu_staging_size
+    }
+
+    pub fn cpu_available_semaphore(&self) -> vk::DeviceSize {
+        self.inner.cpu_staging_semaphores.available_permits() as vk::DeviceSize
+    }
+
+    pub fn cpu_acquire_semaphores(&self, semaphores: u32) -> Option<tokio::sync::SemaphorePermit> {
+        self.inner
+            .cpu_staging_semaphores
+            .try_acquire_many(semaphores)
+            .ok()
+    }
+
+    pub async fn cpu_acquire_semaphores_await(
+        &self,
+        semaphores: u32,
+    ) -> anyhow::Result<tokio::sync::SemaphorePermit> {
+        Ok(self
+            .inner
+            .cpu_staging_semaphores
+            .acquire_many(semaphores)
+            .await?)
     }
 
     /// Submit a transfer request to be transferred onto the gpu

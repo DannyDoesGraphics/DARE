@@ -962,10 +962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dare_asset"
-version = "0.1.0"
-
-[[package]]
 name = "dare_containers"
 version = "0.1.0"
 dependencies = [

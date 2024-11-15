@@ -4,7 +4,7 @@ members = [
     "dare",
     "macros",
     "containers",
-    "dare_asset", ]
+]
 
 resolver = "2"
 

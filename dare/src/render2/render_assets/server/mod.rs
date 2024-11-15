@@ -59,7 +59,7 @@ pub fn render_asset_server_system(
                                 if let Some(metadata) = asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle) {
                                     let mut allocator = render_context.inner.allocator.clone();
                                     let transfer_pool = render_context.transfer_pool();
-                                    let staging_size = transfer_pool.staging_size() as usize;
+                                    let staging_size = transfer_pool.gpu_staging_size() as usize;
 
                                     Some(super::components::RenderBuffer::load_asset(
                                         metadata,

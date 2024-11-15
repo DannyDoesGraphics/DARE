@@ -177,6 +177,7 @@ impl RenderContext {
             dare::render::util::TransferPool::new(
                 device.clone(),
                 vk::DeviceSize::from(256_000_u64),
+                vk::DeviceSize::from(1_128_000_u64),
                 transfer_queues,
             )?
         };
