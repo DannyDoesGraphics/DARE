@@ -20,10 +20,11 @@ pub struct RenderServerInner {
     input_send: dare::util::event::EventSender<dare::winit::input::Input>,
     thread: tokio::task::JoinHandle<()>,
     ir_send: crossbeam_channel::Sender<render::InnerRenderServerRequest>,
+    /// Order a new window be created
+    new_sender: tokio::sync::mpsc::UnboundedSender<RenderServerPacket>,
 }
 impl Drop for RenderServerInner {
     fn drop(&mut self) {
-        self.thread.abort();
         while !self.thread.is_finished() {}
         tracing::trace!("RENDER SERVER STOPPED (2)");
     }
@@ -39,8 +40,6 @@ pub struct RenderServer {
     inner: Arc<RenderServerInner>,
     /// A ref to render context
     render_context: render::contexts::RenderContext,
-    /// Order a new window be created
-    new_sender: tokio::sync::mpsc::UnboundedSender<RenderServerPacket>,
 }
 #[derive(becs::Resource)]
 pub struct IrRecv(pub(crate) crossbeam_channel::Receiver<render::InnerRenderServerRequest>);
@@ -76,6 +75,21 @@ impl RenderServer {
                         )
                         .unwrap(),
                     );
+                    world.insert_resource(super::resources::mesh_buffer::MeshBuffer {
+                        uploaded_hash: 0,
+                        growable_buffer: render::util::GrowableBuffer::new(
+                            dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                                device: render_context.inner.device.clone(),
+                                name: Some(String::from("Mesh buffer")),
+                                allocator: &mut allocator,
+                                size: (size_of::<render::c::CSurface>() * 128) as vk::DeviceSize,
+                                memory_type: dagal::allocators::MemoryLocation::GpuOnly,
+                                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
+                            }
+                        ).unwrap(),
+                        mesh_container: dare_containers::prelude::slot_map::SlotMap::default(),
+                        external_id_mapping: Default::default(),
+                    });
                 }
                 world.insert_resource(render_context);
                 world.insert_resource(super::frame_number::FrameCount::default());
@@ -85,17 +99,14 @@ impl RenderServer {
                     asset_server.clone(),
                 ));
                 world.insert_resource(render::components::camera::Camera::default());
-                world.insert_resource(render::resource_relationship::Meshes::default());
                 world.insert_resource(IrRecv(ir_recv));
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
                     render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
                 >::default());
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
-
                 let mut schedule = becs::Schedule::default();
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
-                schedule.add_systems(super::render_assets::server::load_assets_to_gpu_in_world);
                 schedule.add_systems(
                     render::render_assets::server::process_asset_relations_incoming_system,
                 );
@@ -110,6 +121,9 @@ impl RenderServer {
                                     schedule.run(&mut world);
                                 }
                                 render::RenderServerNoCallbackRequest::Stop => {
+                                    let mut shutdown_schedule = becs::Schedule::default();
+                                    shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
+                                    shutdown_schedule.run(&mut world);
                                     stop_flag = true;
                                 }
                             };
@@ -126,10 +140,10 @@ impl RenderServer {
         };
         *render_context.inner.render_thread.write().unwrap() = Some(thread.abort_handle());
         Self {
-            new_sender: new_send,
             render_context,
             asset_server,
             inner: Arc::new(RenderServerInner {
+                new_sender: new_send,
                 thread,
                 ir_send,
                 input_send,
@@ -150,7 +164,7 @@ impl RenderServer {
         request: render::RenderServerNoCallbackRequest,
     ) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.new_sender.send(RenderServerPacket {
+        self.inner.new_sender.send(RenderServerPacket {
             callback: send_types::Callback(notify.clone()),
             request,
         })?;
@@ -166,7 +180,7 @@ impl RenderServer {
             _ => {}
         }
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.new_sender.send(RenderServerPacket {
+        self.inner.new_sender.send(RenderServerPacket {
             callback: send_types::Callback(notify.clone()),
             request,
         })?;

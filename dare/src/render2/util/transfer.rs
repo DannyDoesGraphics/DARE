@@ -12,6 +12,7 @@ use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+use crate::util::either::Either;
 
 #[derive(Debug)]
 pub enum TransferRequest<A: Allocator> {
@@ -34,6 +35,26 @@ pub enum TransferRequest<A: Allocator> {
 }
 
 #[derive(Debug)]
+pub enum TransferRequestRaw {
+    Buffer {
+        src_buffer: vk::Buffer,
+        dst_buffer: vk::Buffer,
+        src_offset: vk::DeviceSize,
+        dst_offset: vk::DeviceSize,
+        length: vk::DeviceSize,
+    },
+    Image {
+        src_buffer: vk::Buffer,
+        src_offset: vk::DeviceSize,
+        src_length: vk::DeviceSize,
+        extent: vk::Extent3D,
+        dst_image: vk::Image,
+        dst_offset: vk::Offset3D,
+        dst_length: vk::DeviceSize,
+    },
+}
+
+#[derive(Debug)]
 pub enum TransferRequestCallback<A: Allocator> {
     Buffer {
         src_buffer: resource::Buffer<A>,
@@ -45,9 +66,19 @@ pub enum TransferRequestCallback<A: Allocator> {
     },
 }
 
-pub struct TransferRequestInner<A: Allocator> {
+struct TransferRequestInnerSafe<A: Allocator> {
     request: TransferRequest<A>,
-    callback: tokio::sync::oneshot::Sender<anyhow::Result<TransferRequestCallback<A>>>,
+    callback: tokio::sync::oneshot::Sender<Result<TransferRequestCallback<A>>>,
+}
+
+struct TransferRequestInnerRaw {
+    request: TransferRequestRaw,
+    callback: tokio::sync::oneshot::Sender<Result<()>>,
+}
+
+enum TransferRequestInner<A: Allocator> {
+    TransferRequest(TransferRequestInnerSafe<A>),
+    TransferRequestRaw(TransferRequestInnerRaw),
 }
 
 #[derive(Debug)]
@@ -76,13 +107,12 @@ impl<A: Allocator> Drop for TransferPoolInner<A> {
     }
 }
 
-struct TransferProcessor<A: Allocator> {
+struct TransferProcessor {
     semaphore: Arc<tokio::sync::Semaphore>,
     device: dagal::device::LogicalDevice,
     queues: Arc<[dagal::device::Queue]>,
     fences: Arc<[dagal::sync::Fence]>,
     command_pools: Arc<[dagal::command::CommandPool]>,
-    request: TransferRequestInner<A>,
 }
 
 async fn pick_available_queues(
@@ -173,10 +203,24 @@ impl<A: Allocator + 'static> TransferPool<A> {
     ) -> Result<TransferRequestCallback<A>> {
         let (sender, receiver) =
             tokio::sync::oneshot::channel::<Result<TransferRequestCallback<A>>>();
-        self.inner.sender.send(TransferRequestInner {
+        self.inner.sender.send(TransferRequestInner::TransferRequest(TransferRequestInnerSafe {
             request,
             callback: sender,
-        })?;
+        }))?;
+        receiver.await?
+    }
+
+    /// Submit a transfer request to be transferred onto the gpu
+    pub async unsafe fn transfer_gpu_raw(
+        &self,
+        request: TransferRequestRaw,
+    ) -> Result<()> {
+        let (sender, receiver) =
+            tokio::sync::oneshot::channel::<Result<()>>();
+        self.inner.sender.send(TransferRequestInner::TransferRequestRaw(TransferRequestInnerRaw {
+            request,
+            callback: sender,
+        }))?;
         receiver.await?
     }
 
@@ -236,59 +280,52 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     drop(queues);
                     break;
                 }
+
                 Some(request) = receiver.recv() => {
-                    if match &request.request {
-                        TransferRequest::Buffer {
-                            length,
-                            ..
-                        } => *length > gpu_staging_size as u64,
-                        TransferRequest::Image {
-                            src_length,
-                            ..
-                        } => *src_length > gpu_staging_size as u64,
-                    } {
-                        let dst_length = match &request.request {
+                    let dst_length: u64 = match &request {
+                        TransferRequestInner::TransferRequest(request) => match &request.request {
                             TransferRequest::Buffer {
                                 length,
                                 ..
-                            } => *length,
+                            } => *length as u64,
                             TransferRequest::Image {
                                 src_length,
                                 ..
-                            } => *src_length,
-                        };
+                            } => *src_length as u64,
+                        },
+                        TransferRequestInner::TransferRequestRaw(request) => match &request.request {
+                            TransferRequestRaw::Buffer { length, .. } => *length,
+                            TransferRequestRaw::Image { src_length, .. } => *src_length,
+                        }
+                    };
+                    if dst_length > gpu_staging_size as u64 {
                         tracing::error!("Exceeds {dst_length} > {gpu_staging_size}");
-                        request
-                            .callback
-                            .send(Err(anyhow::anyhow!("Size exceeds GPU staging size")))
-                            .unwrap();
+                        match request {
+                            TransferRequestInner::TransferRequest(request) => request.callback.send(Err(anyhow::anyhow!("Size exceeds GPU staging size"))).unwrap(),
+                            TransferRequestInner::TransferRequestRaw(request) => request.callback.send(Err(anyhow::anyhow!("Size exceeds GPU staging size"))).unwrap(),
+                        }
                         continue;
                     }
 
                     // validate request is sane
-                    if match &request.request {
-                        TransferRequest::Buffer {
-                            src_buffer,
-                            dst_buffer,
-                            src_offset,
-                            dst_offset,
-                            length,
-                        } => dst_buffer.get_size() < *dst_offset + *length,
-                        TransferRequest::Image {
-                            src_buffer,
-                            src_offset,
-                            src_length,
-                            extent,
-                            dst_image,
-                            dst_offset,
-                            dst_length,
-                        } => false,
+                    if match &request {
+                        TransferRequestInner::TransferRequest(request) => match &request.request {
+                            TransferRequest::Buffer {
+                                src_buffer,
+                                dst_buffer,
+                                src_offset,
+                                dst_offset,
+                                length,
+                            } => dst_buffer.get_size() < *dst_offset + *length,
+                            _ => false,
+                        }
+                        TransferRequestInner::TransferRequestRaw(request) => true,
                     } {
                         tracing::error!("Cannot transfer due to malformed request");
-                        request
-                            .callback
-                            .send(Err(anyhow::anyhow!("Malformed request")))
-                            .unwrap();
+                        match request {
+                            TransferRequestInner::TransferRequest(request) => request.callback.send(Err(anyhow::anyhow!("Malformed request"))).unwrap(),
+                            TransferRequestInner::TransferRequestRaw(request) => request.callback.send(Err(anyhow::anyhow!("Malformed request"))).unwrap(),
+                        }
                         continue;
                     }
 
@@ -297,27 +334,43 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     let queues = queues.clone();
                     let command_pools = command_pools.clone();
                     let fences = fences.clone();
-                    let task = tokio::spawn(Self::process_single_transfer(TransferProcessor {
-                        semaphore,
-                        device,
-                        queues,
-                        fences,
-                        command_pools,
-                        request
-                    }));
-                    tasks.push(task);
+                    let processor = TransferProcessor {
+                                semaphore,
+                                device,
+                                queues,
+                                fences,
+                                command_pools,
+                            };
+                    match request {
+                        TransferRequestInner::TransferRequest(request) => {
+                            let task = tokio::spawn(Self::process_single_transfer(processor, request));
+                            tasks.push(task);
+                        }
+                        TransferRequestInner::TransferRequestRaw(request) => unsafe {
+                            let callback = request.callback;
+                            let task = tokio::spawn(async move {
+                                let r = Self::process_single_transfer_raw(processor, request.request).await;
+                                callback.send(match r {
+                                    Ok(_) => anyhow::Ok(()),
+                                    Err(_) => Err(anyhow::anyhow!("Failed raw transfer")),
+                                }).unwrap();
+                                anyhow::Ok(())
+                            });
+                            tasks.push(task);
+                        }
+                    }
                 }
             }
         }
     }
 
-    async fn process_single_transfer(processor: TransferProcessor<A>) -> Result<()> {
-        let dst_length = match &processor.request.request {
-            TransferRequest::Buffer { length, .. } => *length,
-            TransferRequest::Image { dst_length, .. } => *dst_length,
+    async unsafe fn process_single_transfer_raw(processor: TransferProcessor, request: TransferRequestRaw) -> Result<()> {
+        let src_length = match &request {
+            TransferRequestRaw::Buffer { length, .. } => *length,
+            TransferRequestRaw::Image { src_length, .. } => *src_length,
         } as u32;
         // Acquire necessary semaphore permits and select an available queue
-        let permits = processor.semaphore.acquire_many(dst_length).await?;
+        let permits = processor.semaphore.acquire_many(src_length).await?;
         let (index, queue_guard) = pick_available_queues(&processor.queues).await;
         let fence: &dagal::sync::Fence = &processor.fences[index];
         // wait for fence to be cleared
@@ -333,8 +386,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
             {
                 unsafe {
                     // Handle images and buffer unique transfers
-                    match &processor.request.request {
-                        TransferRequest::Buffer {
+                    match &request {
+                        TransferRequestRaw::Buffer {
                             src_buffer,
                             dst_buffer,
                             src_offset,
@@ -346,8 +399,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                 &vk::CopyBufferInfo2 {
                                     s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                     p_next: ptr::null(),
-                                    src_buffer: unsafe { *src_buffer.as_raw() },
-                                    dst_buffer: unsafe { *dst_buffer.as_raw() },
+                                    src_buffer: *src_buffer,
+                                    dst_buffer:  *dst_buffer,
                                     region_count: 1,
                                     p_regions: &vk::BufferCopy2 {
                                         s_type: vk::StructureType::BUFFER_COPY_2,
@@ -361,7 +414,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                 },
                             );
                         }
-                        TransferRequest::Image {
+                        TransferRequestRaw::Image {
                             src_buffer,
                             src_offset,
                             src_length,
@@ -375,8 +428,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                 &vk::CopyBufferToImageInfo2 {
                                     s_type: vk::StructureType::COPY_BUFFER_TO_IMAGE_INFO_2,
                                     p_next: ptr::null(),
-                                    src_buffer: unsafe { *src_buffer.as_raw() },
-                                    dst_image: unsafe { *dst_image.as_raw() },
+                                    src_buffer: *src_buffer,
+                                    dst_image: *dst_image,
                                     dst_image_layout: vk::ImageLayout::UNDEFINED,
                                     region_count: 1,
                                     p_regions: &vk::BufferImageCopy2 {
@@ -433,10 +486,49 @@ impl<A: Allocator + 'static> TransferPool<A> {
             let num_permits = permits.num_permits();
             processor.semaphore.add_permits(num_permits);
             drop(permits);
-            processor
-                .request
+            anyhow::Ok(())
+        };
+        match res {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::error!("Failed to complete transfer: {:?}", e);
+                fence.reset().unwrap();
+            }
+        }
+        Ok(())
+    }
+
+    async fn process_single_transfer(processor: TransferProcessor, request: TransferRequestInnerSafe<A>) -> Result<()> {
+            unsafe {
+                Self::process_single_transfer_raw(
+                    processor,
+                    match &request.request {
+                        TransferRequest::Buffer { src_buffer, dst_buffer, src_offset, dst_offset, length } => {
+                            TransferRequestRaw::Buffer {
+                                src_buffer: *src_buffer.as_raw(),
+                                dst_buffer: *dst_buffer.as_raw(),
+                                src_offset: *src_offset,
+                                dst_offset: *dst_offset,
+                                length: *length,
+                            }
+                        }
+                        TransferRequest::Image { src_buffer, src_offset, src_length, extent, dst_image, dst_offset, dst_length } => {
+                            TransferRequestRaw::Image {
+                                src_buffer: *src_buffer.as_raw(),
+                                src_offset: *src_offset,
+                                src_length: *src_length,
+                                extent: *extent,
+                                dst_image: *dst_image.as_raw(),
+                                dst_offset: *dst_offset,
+                                dst_length: *dst_length,
+                            }
+                        }
+                    }
+                )
+            }.await?;
+            request
                 .callback
-                .send(match processor.request.request {
+                .send(match request.request {
                     TransferRequest::Buffer {
                         src_buffer,
                         dst_buffer,
@@ -459,15 +551,6 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     e
                 })
                 .unwrap();
-            anyhow::Ok(())
-        };
-        match res {
-            Ok(_) => {}
-            Err(e) => {
-                tracing::error!("Failed to complete transfer: {:?}", e);
-                fence.reset().unwrap();
-            }
-        }
         Ok(())
     }
 

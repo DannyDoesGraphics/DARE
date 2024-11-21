@@ -9,6 +9,7 @@ use futures::stream::FuturesUnordered;
 use futures::{StreamExt, TryFutureExt};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use dare::engine::components::Name;
 
 /// Responsible for receiving and tracking with the main asset server
 #[derive(becs::Resource, Clone)]
@@ -31,24 +32,15 @@ const BUFFER_NAMES: [&'static str; 5] = [
 ];
 
 pub fn load_assets_to_gpu_in_world(
-    render_context: becs::Res<dare::render::contexts::RenderContext>,
-    query: becs::Query<
-        (
-            &dare::engine::components::Surface,
-            Option<&dare::engine::components::Name>,
-        ),
-        becs::Added<dare::engine::components::Surface>,
-    >,
-    mut buffers: becs::ResMut<
-        '_,
-        super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
-    >,
-    render_asset_server: becs::ResMut<'_, RenderAssetServer>,
-    rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
+    render_context: &dare::render::contexts::RenderContext,
+    surfaces: &[(dare::engine::components::Surface, Option<Name>)],
+    mut buffers: &mut super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
+    render_asset_server: &mut RenderAssetServer,
+    rt: &dare::concurrent::BevyTokioRunTime,
 ) {
     let mut futures = FuturesUnordered::new();
     let render_asset_server = render_asset_server.asset_server.clone();
-    for (surface, name) in query.iter() {
+    for (surface, name) in surfaces.iter() {
         let buffers = [
             Some(surface.vertex_buffer.clone().into_untyped_handle()),
             Some(surface.index_buffer.clone().into_untyped_handle()),
@@ -77,7 +69,7 @@ pub fn load_assets_to_gpu_in_world(
                         let name: Option<String> = BUFFER_NAMES.get(index).map(|v| {
                             format!(
                                 "{} {}",
-                                name.map(|name| name.0.as_str()).unwrap_or({
+                                name.as_ref().map(|name| name.0.as_str()).unwrap_or({
                                     let mut hasher = std::hash::DefaultHasher::default();
                                     surface.hash(&mut hasher);
                                     hasher.finish().to_string().as_str()
@@ -163,29 +155,32 @@ pub fn load_assets_to_gpu_in_world(
 
 /// Process incoming packets from engine server indicating the relations between each asset
 pub fn process_asset_relations_incoming_system(
-    mut commands: becs::Commands,
+    render_context: becs::Res<'_, dare::render::contexts::RenderContext>,
     mut buffers: becs::ResMut<
         '_,
         super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
     >,
-    mut meshes: becs::ResMut<dare::render::resource_relationship::Meshes>,
+    mut render_asset_server: becs::ResMut<'_, RenderAssetServer>,
+    mut meshes: becs::ResMut<dare::render::resources::MeshBuffer<GPUAllocatorImpl>>,
+    rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     ir_recv: becs::ResMut<'_, IrRecv>,
 ) {
+    let mut added_surfaces: Vec<(dare::engine::components::Surface, Option<Name>)> = Vec::new();
     // handle any subsequent asset linking requests
     while let Ok(delta) = ir_recv.0.try_recv() {
         match delta {
             InnerRenderServerRequest::Delta(delta) => match delta {
                 RenderServerAssetRelationDelta::Entry(entity, mesh) => {
-                    if !meshes.0.contains_key(&entity) {
+                    if !meshes.external_id_mapping.contains_key(&entity) {
+                        added_surfaces.push((mesh.surface.clone(), Some(mesh.name.clone())));
                         let mesh = dare::engine::components::Mesh {
                             surface: mesh.surface.downgrade(),
                             bounding_box: mesh.bounding_box.clone(),
                             name: mesh.name.clone(),
                             transform: mesh.transform,
                         };
-                        let entity_id = commands.spawn(mesh.clone());
-                        let entity_id = entity_id.id();
-                        meshes.0.insert(entity, entity_id);
+                        let handle = meshes.mesh_container.insert(mesh).unwrap();
+                        meshes.external_id_mapping.insert(entity, handle);
                     }
                 }
                 RenderServerAssetRelationDelta::Remove(_) => {}
@@ -193,5 +188,12 @@ pub fn process_asset_relations_incoming_system(
         }
     }
     // process of what is in queue
+    load_assets_to_gpu_in_world(
+        &render_context,
+        &added_surfaces,
+        &mut buffers,
+        &mut render_asset_server,
+        &rt,
+    );
     buffers.process();
 }

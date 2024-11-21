@@ -37,6 +37,7 @@ pub struct RenderContextInner {
     pub(super) graphics_pipeline: dagal::pipelines::GraphicsPipeline,
     pub(super) graphics_layout: dagal::pipelines::PipelineLayout,
 
+    pub(super) immediate_submit: dare::render::util::ImmediateSubmit,
     pub(super) allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub(super) device: dagal::device::LogicalDevice,
     pub(super) physical_device: dagal::device::PhysicalDevice,
@@ -88,53 +89,52 @@ impl RenderContext {
                 dedicated: true,
             })
             .add_required_queue(dagal::bootstrap::QueueRequest {
-                family_flags: vk::QueueFlags::GRAPHICS,
-                count: 1,
+                family_flags: vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER,
+                count: 2,
                 dedicated: true,
             })
             .select(&instance)?;
         // Make logical device
-        let device_builder =
-            dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
-                .add_queue_allocation(dagal::bootstrap::QueueRequest {
-                    family_flags: vk::QueueFlags::GRAPHICS,
-                    count: 1,
-                    dedicated: true,
-                })
-                .add_queue_allocation(dagal::bootstrap::QueueRequest {
-                    family_flags: vk::QueueFlags::TRANSFER,
-                    count: 2,
-                    dedicated: true,
-                })
-                .attach_feature_1_3(vk::PhysicalDeviceVulkan13Features {
-                    dynamic_rendering: vk::TRUE,
-                    synchronization2: vk::TRUE,
-                    ..Default::default()
-                })
-                .attach_feature_1_2(vk::PhysicalDeviceVulkan12Features {
-                    buffer_device_address: vk::TRUE,
-                    descriptor_indexing: vk::TRUE,
-                    descriptor_binding_partially_bound: vk::TRUE,
-                    descriptor_binding_update_unused_while_pending: vk::TRUE,
-                    descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
-                    descriptor_binding_storage_image_update_after_bind: vk::TRUE,
-                    descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
-                    shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
-                    shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
-                    shader_storage_image_array_non_uniform_indexing: vk::TRUE,
-                    runtime_descriptor_array: vk::TRUE,
-                    scalar_block_layout: vk::TRUE,
-                    ..Default::default()
-                })
-                .attach_feature_1_1(vk::PhysicalDeviceVulkan11Features {
-                    variable_pointers: vk::TRUE,
-                    variable_pointers_storage_buffer: vk::TRUE,
-                    ..Default::default()
-                })
-                .attach_feature_1_0(vk::PhysicalDeviceFeatures {
-                    shader_int64: vk::TRUE,
-                    ..Default::default()
-                });
+        let device_builder = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device.clone())
+            .add_queue_allocation(dagal::bootstrap::QueueRequest {
+                family_flags: vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER,
+                count: 2,
+                dedicated: true,
+            })
+            .add_queue_allocation(dagal::bootstrap::QueueRequest {
+                family_flags: vk::QueueFlags::TRANSFER,
+                count: 2,
+                dedicated: true,
+            })
+            .attach_feature_1_3(vk::PhysicalDeviceVulkan13Features {
+                dynamic_rendering: vk::TRUE,
+                synchronization2: vk::TRUE,
+                ..Default::default()
+            })
+            .attach_feature_1_2(vk::PhysicalDeviceVulkan12Features {
+                buffer_device_address: vk::TRUE,
+                descriptor_indexing: vk::TRUE,
+                descriptor_binding_partially_bound: vk::TRUE,
+                descriptor_binding_update_unused_while_pending: vk::TRUE,
+                descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+                descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+                shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+                shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                runtime_descriptor_array: vk::TRUE,
+                scalar_block_layout: vk::TRUE,
+                ..Default::default()
+            })
+            .attach_feature_1_1(vk::PhysicalDeviceVulkan11Features {
+                variable_pointers: vk::TRUE,
+                variable_pointers_storage_buffer: vk::TRUE,
+                ..Default::default()
+            })
+            .attach_feature_1_0(vk::PhysicalDeviceFeatures {
+                shader_int64: vk::TRUE,
+                ..Default::default()
+            });
         let device_builder = device_builder.debug_utils(true);
 
         let (device, queues) = device_builder.build(&instance)?;
@@ -161,11 +161,15 @@ impl RenderContext {
         )?);
 
         // pq
-        let mut transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
-        let mut present_queue = queue_allocator
-            .retrieve_queues(vk::QueueFlags::GRAPHICS, 1)?
-            .pop()
-            .unwrap();
+        let transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
+        let mut graphics_queue = queue_allocator
+            .retrieve_queues(vk::QueueFlags::GRAPHICS, 2)?;
+        let mut present_queue = graphics_queue.pop().unwrap();
+        let immediate_queue = graphics_queue.pop().unwrap();
+        let immediate_submit = dare::render::util::ImmediateSubmit::new(
+            device.clone(),
+            immediate_queue
+        )?;
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },
@@ -226,6 +230,7 @@ impl RenderContext {
                 graphics_pipeline,
                 graphics_layout: graphics_pipeline_layout,
                 debug_messenger: None,
+                immediate_submit,
             }),
         })
     }

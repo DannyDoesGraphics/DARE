@@ -2,8 +2,7 @@ use crate::prelude as dare;
 use crate::prelude::render::components::RenderBuffer;
 use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
-use crate::render2::render_assets::RenderAssetsStorage;
-use crate::render2::resource_relationship::Meshes;
+use crate::render2::render_assets::{RenderAssetServer, RenderAssetsStorage};
 use bevy_ecs::change_detection::Res;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
@@ -15,6 +14,7 @@ use dagal::command::CommandBufferState;
 use dagal::pipelines::Pipeline;
 use dagal::traits::AsRaw;
 use tokio::task;
+use crate::render2::resources::MeshBuffer;
 
 pub async fn mesh_render(
     frame_number: usize,
@@ -22,16 +22,7 @@ pub async fn mesh_render(
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     buffers: Res<'_, RenderAssetsStorage<RenderBuffer<GPUAllocatorImpl>>>,
-    meshes_query: Query<
-        '_,
-        '_,
-        (
-            &dare::engine::components::Surface,
-            &dare::physics::components::Transform,
-            &dare::render::components::bounding_box::BoundingBox,
-        ),
-    >,
-    bindless: Res<'_, GPUResourceTable<GPUAllocatorImpl>>,
+    mut mesh_buffer: becs::ResMut<'_,MeshBuffer<GPUAllocatorImpl>>,
 ) {
     #[cfg(feature = "tracing")]
     tracing::trace!("Rendering meshes into {frame_number}");
@@ -41,6 +32,11 @@ pub async fn mesh_render(
                 panic!("Mesh recording invalid cmd buffer state")
             }
             CommandBufferState::Recording(recording) => {
+                // flush buffers for upload
+                    mesh_buffer.flush(
+                        &render_context.inner.immediate_submit.clone(),
+                        &buffers,
+                    ).await;
                 // begin rendering
                 let dynamic_rendering = unsafe {
                     recording
@@ -98,8 +94,8 @@ pub async fn mesh_render(
                     );
                 }
 
-                for (surface, transform, bounding_box) in meshes_query.iter() {
-                    let surface = surface.clone().upgrade();
+                for (mesh, _) in mesh_buffer.mesh_container.iter() {
+                    let surface = mesh.surface.clone().upgrade();
                     if surface.is_none() {
                         continue;
                     }
@@ -109,7 +105,7 @@ pub async fn mesh_render(
                     {
                         // try to load them in
                         task::spawn(async move {});
-                        if frame_number % 8192 == 0 {
+                        if frame_number % 1024 == 0 {
                             if buffers.get(&surface.vertex_buffer.id()).is_none() {
                                 println!("Failed: {:?}", surface.vertex_buffer.id());
                             }
@@ -120,14 +116,14 @@ pub async fn mesh_render(
                         continue;
                     }
                     // calculate visibility
-                    let model = transform.get_transform_matrix();
+                    let model = mesh.transform.get_transform_matrix();
                     let camera_view = camera.get_view_matrix();
                     let camera_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     );
                     let camera_view_proj = camera_proj * camera_view;
 
-                    if !bounding_box.visible_in_frustum(model, camera_view_proj) {
+                    if !mesh.bounding_box.visible_in_frustum(model, camera_view_proj) {
                         continue;
                     }
 

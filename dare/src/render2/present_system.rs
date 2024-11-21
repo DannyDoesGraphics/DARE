@@ -13,6 +13,9 @@ use std::ptr::write;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::MutexGuard;
+use crate::prelude::render::components::RenderBuffer;
+use crate::render2::render_assets::RenderAssetsStorage;
+use crate::render2::resources::MeshBuffer;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
@@ -21,21 +24,13 @@ pub fn present_system_begin(
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     buffers: becs::Res<
         '_,
-        render::render_assets::RenderAssetsStorage<
-            render::components::RenderBuffer<GPUAllocatorImpl>,
+        RenderAssetsStorage<
+            RenderBuffer<GPUAllocatorImpl>,
         >,
     >,
-    meshes: becs::Query<
-        '_,
-        '_,
-        (
-            &dare::engine::components::Surface,
-            &dare::physics::components::Transform,
-            &dare::render::components::bounding_box::BoundingBox,
-        ),
-    >,
-    bindless: becs::Res<'_, render::util::GPUResourceTable<GPUAllocatorImpl>>,
+    mesh_buffer: becs::ResMut<'_, MeshBuffer<GPUAllocatorImpl>>,
     camera: becs::Res<'_, render::components::camera::Camera>,
+
 ) {
     rt.clone().runtime.block_on(async {
         let frame_count = frame_count.clone();
@@ -144,8 +139,7 @@ pub fn present_system_begin(
             &camera,
             frame,
             buffers,
-            meshes,
-            bindless,
+            mesh_buffer,
         )
         .await;
         // end present

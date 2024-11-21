@@ -41,12 +41,9 @@ impl WindowContext {
                     frames_in_flight: ci.frames_in_flight,
                 },
             )?);
-            println!("Making frames");
             let surface_context = surface_guard.as_mut().unwrap();
             surface_context.create_frames(&self.present_queue)?;
-            println!("Frames made");
         }
-        println!("Built surface");
         Ok(())
     }
 }

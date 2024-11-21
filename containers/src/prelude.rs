@@ -10,3 +10,4 @@ pub use super::sparse_slot_map::*;
 pub use super::traits::*;
 pub use dashmap;
 pub use flashmap;
+pub use super::slot_map::*;

@@ -6,11 +6,11 @@ use dare::asset2 as asset;
 use std::collections::HashMap;
 
 /// Stores render assets densely packed
-pub struct SparseRenderAssetStorage<T: super::traits::MetaDataRenderAsset> {
+pub struct HashRenderAssetStorage<T: super::traits::MetaDataRenderAsset> {
     pub assets: HashMap<asset::AssetId<T::Asset>, Option<T::Loaded>>,
 }
 
-impl<T: super::traits::MetaDataRenderAsset> Default for SparseRenderAssetStorage<T> {
+impl<T: super::traits::MetaDataRenderAsset> Default for HashRenderAssetStorage<T> {
     fn default() -> Self {
         Self {
             assets: HashMap::default(),
@@ -49,7 +49,7 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssets<T> {
 
 #[derive(becs::Resource)]
 pub struct RenderAssetsStorage<T: super::traits::MetaDataRenderAsset> {
-    pub dense_render_assets: SparseRenderAssetStorage<T>,
+    pub dense_render_assets: HashRenderAssetStorage<T>,
     recv_deltas: crossbeam_channel::Receiver<RenderAssetDelta<T>>,
     send_deltas: crossbeam_channel::Sender<RenderAssetDelta<T>>,
 }
@@ -57,7 +57,7 @@ impl<T: super::traits::MetaDataRenderAsset> Default for RenderAssetsStorage<T> {
     fn default() -> Self {
         let (send_deltas, recv_deltas) = crossbeam_channel::unbounded();
         Self {
-            dense_render_assets: SparseRenderAssetStorage::default(),
+            dense_render_assets: HashRenderAssetStorage::default(),
             recv_deltas,
             send_deltas,
         }

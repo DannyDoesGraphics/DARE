@@ -106,6 +106,26 @@ impl<A: Allocator> Buffer<A> {
         }
     }
 
+    /// Write to a mapped pointer if one exists
+    ///
+    /// Offset is in bytes
+    pub unsafe fn write_unsafe<T: Sized>(&self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<()> {
+        if offset_bytes + (mem::size_of_val(data) as vk::DeviceSize) > self.size {
+            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
+        }
+        if let Some(mapped_ptr) = self.mapped_ptr() {
+            // SAFETY: Known that size_of_val(data) + offset < buffer.size
+            unsafe {
+                let data_ptr = data.as_ptr() as *const _ as *const c_void;
+                let mapped_ptr = mapped_ptr.as_ptr().add(offset_bytes as usize);
+                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, mem::size_of_val(data));
+            }
+            Ok(())
+        } else {
+            Err(anyhow::Error::from(crate::DagalError::NoMappedPointer))
+        }
+    }
+
     pub fn get_size(&self) -> vk::DeviceSize {
         self.size
     }
