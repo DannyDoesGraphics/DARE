@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 /// Relating to anything that relies on window resizing
-#[derive(Debug, becs::Resource)]
+#[derive(Debug)]
 pub struct SurfaceContext {
     pub swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]>,
     pub swapchain_image_view: Box<[dagal::resource::ImageView]>,
