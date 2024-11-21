@@ -104,6 +104,7 @@ impl<A: Allocator> Drop for TransferPoolInner<A> {
         tracing::trace!("Stopping transfer pool thread");
         self.shutdown.notify_waiters();
         while !self.thread.is_finished() {}
+        tracing::trace!("Stopped transfer pool thread");
     }
 }
 
@@ -266,7 +267,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
             tokio::select! {
                 _ = shut_recv.notified() => {
                     for task in tasks.iter() {
-                        if task.is_finished() {
+                        if !task.is_finished() {
                             task.abort();
                             while task.is_finished() {}
                         }

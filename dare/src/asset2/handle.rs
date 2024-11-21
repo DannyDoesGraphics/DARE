@@ -114,7 +114,9 @@ impl Eq for StrongAssetHandleUntyped {}
 
 impl Drop for StrongAssetHandleUntyped {
     fn drop(&mut self) {
-        self.drop_send.send(self.id).unwrap()
+        if let Err(_) = self.drop_send.send(self.id) {
+            // do not care if the asset drop request was not received (asset server dropped)
+        }
     }
 }
 

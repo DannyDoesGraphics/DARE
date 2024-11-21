@@ -47,9 +47,7 @@ pub struct RenderContextInner {
 
 impl Drop for RenderContextInner {
     fn drop(&mut self) {
-        while self.device.strong_count() >= 1 {}
         while let Some(abort_handle) = self.render_thread.write().unwrap().as_ref() {
-            //println!("Spin locking");
             if abort_handle.is_finished() {
                 break;
             }
@@ -183,7 +181,7 @@ impl RenderContext {
             dare::render::util::TransferPool::new(
                 device.clone(),
                 vk::DeviceSize::from(256_000_u64),
-                vk::DeviceSize::from(1_128_000_u64),
+                vk::DeviceSize::from(2_256_000_u64),
                 transfer_queues,
             )?
         };

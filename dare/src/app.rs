@@ -16,6 +16,7 @@ pub struct App {
     render_server: Option<render::server::RenderServer>,
     configuration: render::create_infos::RenderContextConfiguration,
     last_position: Option<glam::Vec2>,
+    last_dt: std::time::Instant,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -81,10 +82,13 @@ impl winit::application::ApplicationHandler for App {
                                 .await
                                 .unwrap();
                             render.notified().await;
-                        });
+                            
+                        })
                     });
                     if let Some(window) = self.window.as_ref() {
-                        window.set_title(&format!("DARE | FPS: {}", 1));
+                        let current_t: std::time::Instant = std::time::Instant::now();
+                        window.set_title(&format!("DARE | micro-seconds: {}", current_t.duration_since(self.last_dt).as_millis()));
+                        self.last_dt = current_t;
                     }
                 } else {
                 }
@@ -106,6 +110,7 @@ impl winit::application::ApplicationHandler for App {
                     // drop engine server first
                     drop(self.engine_server.take());
                     drop(rs);
+                    println!("Dropping RS");
                     event_loop.exit();
                 }
             }
@@ -190,6 +195,7 @@ impl App {
             render_server: None,
             configuration,
             last_position: None,
+            last_dt: std::time::Instant::now(),
         })
     }
 }
