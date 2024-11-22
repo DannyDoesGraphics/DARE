@@ -141,9 +141,7 @@ impl AssetServer {
         } else if let Some(handle) = {
             match self.infos.states.get(&id_untyped) {
                 None => None,
-                Some(info) => {
-                    info.handle.upgrade()
-                }
+                Some(info) => info.handle.upgrade(),
             }
         } {
             asset::AssetHandle::<T>::Strong(handle)

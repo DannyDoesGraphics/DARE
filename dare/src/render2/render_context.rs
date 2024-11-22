@@ -160,14 +160,11 @@ impl RenderContext {
 
         // pq
         let transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
-        let mut graphics_queue = queue_allocator
-            .retrieve_queues(vk::QueueFlags::GRAPHICS, 2)?;
+        let mut graphics_queue = queue_allocator.retrieve_queues(vk::QueueFlags::GRAPHICS, 2)?;
         let mut present_queue = graphics_queue.pop().unwrap();
         let immediate_queue = graphics_queue.pop().unwrap();
-        let immediate_submit = dare::render::util::ImmediateSubmit::new(
-            device.clone(),
-            immediate_queue
-        )?;
+        let immediate_submit =
+            dare::render::util::ImmediateSubmit::new(device.clone(), immediate_queue)?;
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo { present_queue },

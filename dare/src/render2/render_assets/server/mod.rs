@@ -1,16 +1,16 @@
-use std::collections::HashSet;
 use crate::prelude as dare;
 use crate::prelude::render::{InnerRenderServerRequest, RenderServerAssetRelationDelta};
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use crate::render2::server::IrRecv;
 use bevy_ecs::prelude as becs;
+use bevy_ecs::query::Has;
 use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use futures::stream::FuturesUnordered;
 use futures::{StreamExt, TryFutureExt};
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use bevy_ecs::query::Has;
 
 /// Responsible for receiving and tracking with the main asset server
 #[derive(becs::Resource, Clone)]
@@ -34,8 +34,13 @@ const BUFFER_NAMES: [&'static str; 5] = [
 
 pub fn load_assets_to_gpu_in_world(
     render_context: &dare::render::contexts::RenderContext,
-    surfaces: &[(dare::engine::components::Surface, Option<dare::engine::components::Name>)],
-    buffer_server: super::assets::RenderAssets<dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>>,
+    surfaces: &[(
+        dare::engine::components::Surface,
+        Option<dare::engine::components::Name>,
+    )],
+    buffer_server: super::assets::RenderAssets<
+        dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+    >,
     render_asset_server: &mut RenderAssetServer,
     rt: &dare::concurrent::BevyTokioRunTime,
 ) {
@@ -80,12 +85,12 @@ pub fn load_assets_to_gpu_in_world(
                             )
                         });
                         unsafe {
-                            render_asset_server.update_state(
-                                &*handle, dare::asset2::AssetState::Loading
-                            ).unwrap();
+                            render_asset_server
+                                .update_state(&*handle, dare::asset2::AssetState::Loading)
+                                .unwrap();
                         }
                         let render_asset_server = render_asset_server.clone();
-                            let fut = rt.runtime.spawn(async move {
+                        let fut = rt.runtime.spawn(async move {
                                 let mut allocator = render_context.inner.allocator.clone();
                                 let transfer_pool = render_context.transfer_pool();
                                 let staging_size = transfer_pool.gpu_staging_size() as usize;
@@ -121,7 +126,10 @@ pub fn load_assets_to_gpu_in_world(
                             });
                         futures.push(fut);
                     } else if handle_state != Some(dare::asset2::AssetState::Loaded) {
-                        tracing::warn!("Asset is in unexpected state: {:?}, ignoring", handle_state);
+                        tracing::warn!(
+                            "Asset is in unexpected state: {:?}, ignoring",
+                            handle_state
+                        );
                     }
                 } else {
                     tracing::error!("No metadata found for {:?}", handle);
@@ -179,7 +187,10 @@ pub fn process_asset_relations_incoming_system(
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     ir_recv: becs::ResMut<'_, IrRecv>,
 ) {
-    let mut added_surfaces: Vec<(dare::engine::components::Surface, Option<dare::engine::components::Name>)> = Vec::new();
+    let mut added_surfaces: Vec<(
+        dare::engine::components::Surface,
+        Option<dare::engine::components::Name>,
+    )> = Vec::new();
     // handle any subsequent asset linking requests
     while let Ok(delta) = ir_recv.0.try_recv() {
         match delta {

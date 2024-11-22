@@ -82,12 +82,14 @@ impl winit::application::ApplicationHandler for App {
                                 .await
                                 .unwrap();
                             render.notified().await;
-                            
                         })
                     });
                     if let Some(window) = self.window.as_ref() {
                         let current_t: std::time::Instant = std::time::Instant::now();
-                        window.set_title(&format!("DARE | micro-seconds: {}", current_t.duration_since(self.last_dt).as_millis()));
+                        window.set_title(&format!(
+                            "DARE | micro-seconds: {}",
+                            current_t.duration_since(self.last_dt).as_millis()
+                        ));
                         self.last_dt = current_t;
                     }
                 } else {

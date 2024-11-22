@@ -1,3 +1,4 @@
+use crate::util::either::Either;
 use anyhow::Result;
 use dagal::allocators::{Allocator, ArcAllocator};
 use dagal::ash::vk;
@@ -12,7 +13,6 @@ use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use crate::util::either::Either;
 
 #[derive(Debug)]
 pub enum TransferRequest<A: Allocator> {
@@ -204,24 +204,28 @@ impl<A: Allocator + 'static> TransferPool<A> {
     ) -> Result<TransferRequestCallback<A>> {
         let (sender, receiver) =
             tokio::sync::oneshot::channel::<Result<TransferRequestCallback<A>>>();
-        self.inner.sender.send(TransferRequestInner::TransferRequest(TransferRequestInnerSafe {
-            request,
-            callback: sender,
-        }))?;
+        self.inner
+            .sender
+            .send(TransferRequestInner::TransferRequest(
+                TransferRequestInnerSafe {
+                    request,
+                    callback: sender,
+                },
+            ))?;
         receiver.await?
     }
 
     /// Submit a transfer request to be transferred onto the gpu
-    pub async unsafe fn transfer_gpu_raw(
-        &self,
-        request: TransferRequestRaw,
-    ) -> Result<()> {
-        let (sender, receiver) =
-            tokio::sync::oneshot::channel::<Result<()>>();
-        self.inner.sender.send(TransferRequestInner::TransferRequestRaw(TransferRequestInnerRaw {
-            request,
-            callback: sender,
-        }))?;
+    pub async unsafe fn transfer_gpu_raw(&self, request: TransferRequestRaw) -> Result<()> {
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Result<()>>();
+        self.inner
+            .sender
+            .send(TransferRequestInner::TransferRequestRaw(
+                TransferRequestInnerRaw {
+                    request,
+                    callback: sender,
+                },
+            ))?;
         receiver.await?
     }
 
@@ -365,7 +369,10 @@ impl<A: Allocator + 'static> TransferPool<A> {
         }
     }
 
-    async unsafe fn process_single_transfer_raw(processor: TransferProcessor, request: TransferRequestRaw) -> Result<()> {
+    async unsafe fn process_single_transfer_raw(
+        processor: TransferProcessor,
+        request: TransferRequestRaw,
+    ) -> Result<()> {
         let src_length = match &request {
             TransferRequestRaw::Buffer { length, .. } => *length,
             TransferRequestRaw::Image { src_length, .. } => *src_length,
@@ -401,7 +408,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                     s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                     p_next: ptr::null(),
                                     src_buffer: *src_buffer,
-                                    dst_buffer:  *dst_buffer,
+                                    dst_buffer: *dst_buffer,
                                     region_count: 1,
                                     p_regions: &vk::BufferCopy2 {
                                         s_type: vk::StructureType::BUFFER_COPY_2,
@@ -499,59 +506,73 @@ impl<A: Allocator + 'static> TransferPool<A> {
         Ok(())
     }
 
-    async fn process_single_transfer(processor: TransferProcessor, request: TransferRequestInnerSafe<A>) -> Result<()> {
-            unsafe {
-                Self::process_single_transfer_raw(
-                    processor,
-                    match &request.request {
-                        TransferRequest::Buffer { src_buffer, dst_buffer, src_offset, dst_offset, length } => {
-                            TransferRequestRaw::Buffer {
-                                src_buffer: *src_buffer.as_raw(),
-                                dst_buffer: *dst_buffer.as_raw(),
-                                src_offset: *src_offset,
-                                dst_offset: *dst_offset,
-                                length: *length,
-                            }
-                        }
-                        TransferRequest::Image { src_buffer, src_offset, src_length, extent, dst_image, dst_offset, dst_length } => {
-                            TransferRequestRaw::Image {
-                                src_buffer: *src_buffer.as_raw(),
-                                src_offset: *src_offset,
-                                src_length: *src_length,
-                                extent: *extent,
-                                dst_image: *dst_image.as_raw(),
-                                dst_offset: *dst_offset,
-                                dst_length: *dst_length,
-                            }
-                        }
-                    }
-                )
-            }.await?;
-            request
-                .callback
-                .send(match request.request {
+    async fn process_single_transfer(
+        processor: TransferProcessor,
+        request: TransferRequestInnerSafe<A>,
+    ) -> Result<()> {
+        unsafe {
+            Self::process_single_transfer_raw(
+                processor,
+                match &request.request {
                     TransferRequest::Buffer {
                         src_buffer,
                         dst_buffer,
-                        ..
-                    } => Ok(TransferRequestCallback::Buffer {
-                        src_buffer,
-                        dst_buffer,
-                    }),
+                        src_offset,
+                        dst_offset,
+                        length,
+                    } => TransferRequestRaw::Buffer {
+                        src_buffer: *src_buffer.as_raw(),
+                        dst_buffer: *dst_buffer.as_raw(),
+                        src_offset: *src_offset,
+                        dst_offset: *dst_offset,
+                        length: *length,
+                    },
                     TransferRequest::Image {
                         src_buffer,
+                        src_offset,
+                        src_length,
+                        extent,
                         dst_image,
-                        ..
-                    } => Ok(TransferRequestCallback::Image {
-                        src_buffer,
-                        dst_image,
-                    }),
-                })
-                .map_err(|e| {
-                    tracing::error!("Failed to send transfer callback: {:?}", e);
-                    e
-                })
-                .unwrap();
+                        dst_offset,
+                        dst_length,
+                    } => TransferRequestRaw::Image {
+                        src_buffer: *src_buffer.as_raw(),
+                        src_offset: *src_offset,
+                        src_length: *src_length,
+                        extent: *extent,
+                        dst_image: *dst_image.as_raw(),
+                        dst_offset: *dst_offset,
+                        dst_length: *dst_length,
+                    },
+                },
+            )
+        }
+        .await?;
+        request
+            .callback
+            .send(match request.request {
+                TransferRequest::Buffer {
+                    src_buffer,
+                    dst_buffer,
+                    ..
+                } => Ok(TransferRequestCallback::Buffer {
+                    src_buffer,
+                    dst_buffer,
+                }),
+                TransferRequest::Image {
+                    src_buffer,
+                    dst_image,
+                    ..
+                } => Ok(TransferRequestCallback::Image {
+                    src_buffer,
+                    dst_image,
+                }),
+            })
+            .map_err(|e| {
+                tracing::error!("Failed to send transfer callback: {:?}", e);
+                e
+            })
+            .unwrap();
         Ok(())
     }
 

@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
 use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
+use std::cmp::Ordering;
 
 #[derive(Default, Clone, Debug)]
 pub struct SurfaceBuilder {
@@ -41,9 +41,9 @@ pub struct Surface {
 impl PartialOrd for Surface {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.index_count.cmp(&other.index_count).then_with(|| {
-            self.vertex_count.cmp(&other.vertex_count).then_with(|| {
-                Ordering::Equal
-            })
+            self.vertex_count
+                .cmp(&other.vertex_count)
+                .then_with(|| Ordering::Equal)
         }))
     }
 }

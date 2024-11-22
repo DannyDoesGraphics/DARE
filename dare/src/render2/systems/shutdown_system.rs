@@ -2,13 +2,19 @@ use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
 use futures::task::LocalSpawnExt;
 
-pub fn render_server_shutdown_system(render_context: becs::Res<'_, dare::render::contexts::RenderContext>, rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>) {
+pub fn render_server_shutdown_system(
+    render_context: becs::Res<'_, dare::render::contexts::RenderContext>,
+    rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
+) {
     println!("Shutting down!");
-        unsafe {
-            render_context.inner.device.get_handle()
-                          .device_wait_idle()
-                .unwrap();
-        }
+    unsafe {
+        render_context
+            .inner
+            .device
+            .get_handle()
+            .device_wait_idle()
+            .unwrap();
+    }
     rt.runtime.block_on(async {
         let binding = render_context.clone();
         let surface_context_guard = binding.inner.window_context.surface_context.read().await;

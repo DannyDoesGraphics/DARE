@@ -2,10 +2,10 @@ pub mod indirect_buffers;
 #[allow(unused_imports)]
 pub use indirect_buffers::*;
 
-use std::hash::{Hash, Hasher};
 use crate::prelude as dare;
 use bitflags::bitflags;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use std::hash::{Hash, Hasher};
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -45,15 +45,31 @@ impl Hash for CSurface {
 }
 
 impl CSurface {
-    pub fn from_surface(asset_server: &dare::render::render_assets::RenderAssetsStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>>, surface: dare::engine::components::Surface, transform: &glam::Mat4) -> Option<Self> {
+    pub fn from_surface(
+        asset_server: &dare::render::render_assets::RenderAssetsStorage<
+            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
+        >,
+        surface: dare::engine::components::Surface,
+        transform: &glam::Mat4,
+    ) -> Option<Self> {
         Some(Self {
             material: 0,
             bit_flag: 0,
             _padding: 0,
             positions: asset_server.get_bda(&surface.vertex_buffer.id())?,
             indices: asset_server.get_bda(&surface.index_buffer.id())?,
-            normals: surface.normal_buffer.as_ref().map(|buffer| asset_server.get_bda(&buffer.id())).flatten().unwrap_or(0),
-            tangents: surface.tangent_buffer.as_ref().map(|buffer| asset_server.get_bda(&buffer.id())).flatten().unwrap_or(0),
+            normals: surface
+                .normal_buffer
+                .as_ref()
+                .map(|buffer| asset_server.get_bda(&buffer.id()))
+                .flatten()
+                .unwrap_or(0),
+            tangents: surface
+                .tangent_buffer
+                .as_ref()
+                .map(|buffer| asset_server.get_bda(&buffer.id()))
+                .flatten()
+                .unwrap_or(0),
             uv: 0,
             transform: transform.to_cols_array(),
         })

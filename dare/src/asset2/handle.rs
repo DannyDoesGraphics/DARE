@@ -33,7 +33,7 @@ impl<T: asset::Asset> PartialEq for AssetHandle<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (AssetHandle::Strong(a), AssetHandle::Strong(b)) => a == b,
-            (AssetHandle::Weak{id, ..}, AssetHandle::Weak {id: id_b, ..}) => id == id_b,
+            (AssetHandle::Weak { id, .. }, AssetHandle::Weak { id: id_b, .. }) => id == id_b,
             (_, _) => false,
         }
     }

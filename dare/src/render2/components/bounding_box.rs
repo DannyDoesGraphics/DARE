@@ -1,8 +1,8 @@
-use std::ops::Bound;
 pub use super::super::prelude::components;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
 use glam::Vec4Swizzles;
+use std::ops::Bound;
 
 #[derive(Debug, Clone, PartialEq, becs::Component)]
 pub struct BoundingBox {

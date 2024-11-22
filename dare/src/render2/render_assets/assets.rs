@@ -72,7 +72,8 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
                     asset_id: handle,
                     render_asset,
                 } => {
-                    let displaced = self.dense_render_assets
+                    let displaced = self
+                        .dense_render_assets
                         .assets
                         .insert(handle.as_untyped_id(), Some(render_asset));
                     if displaced.is_some() {
@@ -80,7 +81,9 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
                     }
                 }
                 RenderAssetDelta::Remove(handle) => {
-                    self.dense_render_assets.assets.insert(handle.as_untyped_id(), None);
+                    self.dense_render_assets
+                        .assets
+                        .insert(handle.as_untyped_id(), None);
                 }
             }
         }

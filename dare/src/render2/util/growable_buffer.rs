@@ -1,13 +1,13 @@
+use crate::prelude as dare;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
+use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource::traits::Resource;
 use dagal::resource::BufferCreateInfo;
+use dagal::traits::AsRaw;
 use std::ops::Deref;
 use std::ptr;
 use std::sync::Arc;
-use dagal::command::command_buffer::CmdBuffer;
-use dagal::traits::AsRaw;
-use crate::prelude as dare;
 
 /// blocking changes i need to make:
 /// TODO:
@@ -46,14 +46,18 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
                     println!("{:?}", usage_flags);
                     usage_flags.clone()
-                },
+                }
             },
             handle: Some(Arc::new(dagal::resource::Buffer::new(handle_ci)?)),
         })
     }
 
     /// Sets the current buffer by [`dl`]
-    pub async fn new_size(&mut self, immediate_submit: &dare::render::util::ImmediateSubmit, dl: i128) -> anyhow::Result<()> {
+    pub async fn new_size(
+        &mut self,
+        immediate_submit: &dare::render::util::ImmediateSubmit,
+        dl: i128,
+    ) -> anyhow::Result<()> {
         assert!(self.size as i128 + dl > 0);
         let new_buffer = dagal::resource::Buffer::new(BufferCreateInfo::NewEmptyBuffer {
             device: self.device.clone(),
@@ -111,45 +115,52 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 size: old_buffer.get_size().min(new_buffer.get_size()),
                 _marker: Default::default(),
             };
-            immediate_submit.submit(move |queue, cmd_buffer_recording| unsafe {
-                cmd_buffer_recording.get_device()
-                    .get_handle()
-                    .cmd_pipeline_barrier2(*cmd_buffer_recording.get_handle(),
-                                           &vk::DependencyInfo {
-                                               s_type: vk::StructureType::DEPENDENCY_INFO,
-                                               p_next: ptr::null(),
-                                               dependency_flags: vk::DependencyFlags::empty(),
-                                               memory_barrier_count: 0,
-                                               p_memory_barriers: ptr::null(),
-                                               buffer_memory_barrier_count: 1,
-                                               p_buffer_memory_barriers: &memory_barrier_before,
-                                               image_memory_barrier_count: 0,
-                                               p_image_memory_barriers: ptr::null(),
-                                               _marker: Default::default(),
-                                           }
-                    );
+            immediate_submit
+                .submit(move |queue, cmd_buffer_recording| unsafe {
+                    cmd_buffer_recording
+                        .get_device()
+                        .get_handle()
+                        .cmd_pipeline_barrier2(
+                            *cmd_buffer_recording.get_handle(),
+                            &vk::DependencyInfo {
+                                s_type: vk::StructureType::DEPENDENCY_INFO,
+                                p_next: ptr::null(),
+                                dependency_flags: vk::DependencyFlags::empty(),
+                                memory_barrier_count: 0,
+                                p_memory_barriers: ptr::null(),
+                                buffer_memory_barrier_count: 1,
+                                p_buffer_memory_barriers: &memory_barrier_before,
+                                image_memory_barrier_count: 0,
+                                p_image_memory_barriers: ptr::null(),
+                                _marker: Default::default(),
+                            },
+                        );
 
-                cmd_buffer_recording.get_device()
-                    .get_handle()
-                    .cmd_copy_buffer2(cmd_buffer_recording.handle(), &buffer_copy);
+                    cmd_buffer_recording
+                        .get_device()
+                        .get_handle()
+                        .cmd_copy_buffer2(cmd_buffer_recording.handle(), &buffer_copy);
 
-                cmd_buffer_recording.get_device()
-                    .get_handle()
-                    .cmd_pipeline_barrier2(cmd_buffer_recording.handle(),
-                                           &vk::DependencyInfo {
-                                               s_type: vk::StructureType::DEPENDENCY_INFO,
-                                               p_next: ptr::null(),
-                                               dependency_flags: vk::DependencyFlags::empty(),
-                                               memory_barrier_count: 0,
-                                               p_memory_barriers: ptr::null(),
-                                               buffer_memory_barrier_count: 1,
-                                               p_buffer_memory_barriers: &memory_barrier_after,
-                                               image_memory_barrier_count: 0,
-                                               p_image_memory_barriers: ptr::null(),
-                                               _marker: Default::default(),
-                                           }
-                    );
-            }).await?;
+                    cmd_buffer_recording
+                        .get_device()
+                        .get_handle()
+                        .cmd_pipeline_barrier2(
+                            cmd_buffer_recording.handle(),
+                            &vk::DependencyInfo {
+                                s_type: vk::StructureType::DEPENDENCY_INFO,
+                                p_next: ptr::null(),
+                                dependency_flags: vk::DependencyFlags::empty(),
+                                memory_barrier_count: 0,
+                                p_memory_barriers: ptr::null(),
+                                buffer_memory_barrier_count: 1,
+                                p_buffer_memory_barriers: &memory_barrier_after,
+                                image_memory_barrier_count: 0,
+                                p_image_memory_barriers: ptr::null(),
+                                _marker: Default::default(),
+                            },
+                        );
+                })
+                .await?;
             self.size = (self.size as i128 + dl) as vk::DeviceSize;
             self.handle = Some(Arc::new(new_buffer));
             Ok(())
@@ -160,46 +171,62 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         self.handle.as_ref().unwrap().clone()
     }
 
-    pub async fn upload_to_buffer<T: Sized>(&mut self, immediate_submit: &dare::render::util::ImmediateSubmit, items: &[T]) -> anyhow::Result<()> {
-        let mut staging_buffer = dagal::resource::Buffer::new(
-            BufferCreateInfo::NewEmptyBuffer {
-                device: self.device.clone(),
-                name: Some(format!("Transfer {}", self.name.as_ref().map(|v| v.as_str()).unwrap_or("Swap buffer"))),
-                allocator: &mut self.allocator,
-                size: size_of_val(items) as vk::DeviceSize,
-                memory_type: MemoryLocation::CpuToGpu,
-                usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            }
-        )?;
+    pub async fn upload_to_buffer<T: Sized>(
+        &mut self,
+        immediate_submit: &dare::render::util::ImmediateSubmit,
+        items: &[T],
+    ) -> anyhow::Result<()> {
+        let mut staging_buffer = dagal::resource::Buffer::new(BufferCreateInfo::NewEmptyBuffer {
+            device: self.device.clone(),
+            name: Some(format!(
+                "Transfer {}",
+                self.name
+                    .as_ref()
+                    .map(|v| v.as_str())
+                    .unwrap_or("Swap buffer")
+            )),
+            allocator: &mut self.allocator,
+            size: size_of_val(items) as vk::DeviceSize,
+            memory_type: MemoryLocation::CpuToGpu,
+            usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::TRANSFER_SRC
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+        })?;
         staging_buffer.write(0, items)?;
         if self.size < size_of_val(items) as u64 {
-            self.new_size(immediate_submit,size_of_val(items) as i128 - self.size as i128).await?;
+            self.new_size(
+                immediate_submit,
+                size_of_val(items) as i128 - self.size as i128,
+            )
+            .await?;
         }
-        immediate_submit.submit(|_, cmd_buffer_recording|
-        unsafe {
-            cmd_buffer_recording
-                .get_device()
-                .get_handle()
-                .cmd_copy_buffer2(
-                    *cmd_buffer_recording.get_handle(),
-                    &vk::CopyBufferInfo2 {
-                        s_type: vk::StructureType::COPY_BUFFER_INFO_2,
-                        p_next: ptr::null(),
-                        src_buffer: *staging_buffer.as_raw(),
-                        dst_buffer: *self.handle.as_ref().unwrap().as_raw(),
-                        region_count: 1,
-                        p_regions: &vk::BufferCopy2 {
-                            s_type: vk::StructureType::BUFFER_COPY_2,
+        immediate_submit
+            .submit(|_, cmd_buffer_recording| unsafe {
+                cmd_buffer_recording
+                    .get_device()
+                    .get_handle()
+                    .cmd_copy_buffer2(
+                        *cmd_buffer_recording.get_handle(),
+                        &vk::CopyBufferInfo2 {
+                            s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                             p_next: ptr::null(),
-                            src_offset: 0,
-                            dst_offset: 0,
-                            size: staging_buffer.get_size(),
+                            src_buffer: *staging_buffer.as_raw(),
+                            dst_buffer: *self.handle.as_ref().unwrap().as_raw(),
+                            region_count: 1,
+                            p_regions: &vk::BufferCopy2 {
+                                s_type: vk::StructureType::BUFFER_COPY_2,
+                                p_next: ptr::null(),
+                                src_offset: 0,
+                                dst_offset: 0,
+                                size: staging_buffer.get_size(),
+                                _marker: Default::default(),
+                            },
                             _marker: Default::default(),
                         },
-                        _marker: Default::default(),
-                    }
-                );
-        }).await?;
+                    );
+            })
+            .await?;
 
         Ok(())
     }

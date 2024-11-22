@@ -1,5 +1,8 @@
 use crate::prelude as dare;
 use crate::prelude::render;
+use crate::prelude::render::components::RenderBuffer;
+use crate::render2::render_assets::RenderAssetsStorage;
+use crate::render2::resources::MeshBuffer;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -13,24 +16,15 @@ use std::ptr::write;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::MutexGuard;
-use crate::prelude::render::components::RenderBuffer;
-use crate::render2::render_assets::RenderAssetsStorage;
-use crate::render2::resources::MeshBuffer;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
     frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
-    buffers: becs::Res<
-        '_,
-        RenderAssetsStorage<
-            RenderBuffer<GPUAllocatorImpl>,
-        >,
-    >,
+    buffers: becs::Res<'_, RenderAssetsStorage<RenderBuffer<GPUAllocatorImpl>>>,
     mesh_buffer: becs::ResMut<'_, MeshBuffer<GPUAllocatorImpl>>,
     camera: becs::Res<'_, render::components::camera::Camera>,
-
 ) {
     rt.clone().runtime.block_on(async {
         let frame_count = frame_count.clone();

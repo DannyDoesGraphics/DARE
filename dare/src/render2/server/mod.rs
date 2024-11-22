@@ -84,9 +84,13 @@ impl RenderServer {
                                 allocator: &mut allocator,
                                 size: (size_of::<render::c::CSurface>() * 128) as vk::DeviceSize,
                                 memory_type: dagal::allocators::MemoryLocation::GpuOnly,
-                                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
-                            }
-                        ).unwrap(),
+                                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                                    | vk::BufferUsageFlags::TRANSFER_DST
+                                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                                    | vk::BufferUsageFlags::STORAGE_BUFFER,
+                            },
+                        )
+                        .unwrap(),
                         mesh_container: dare_containers::prelude::InsertionSortSlotMap::default(),
                         external_id_mapping: Default::default(),
                     });

@@ -109,7 +109,11 @@ impl<A: Allocator> Buffer<A> {
     /// Write to a mapped pointer if one exists
     ///
     /// Offset is in bytes
-    pub unsafe fn write_unsafe<T: Sized>(&self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<()> {
+    pub unsafe fn write_unsafe<T: Sized>(
+        &self,
+        offset_bytes: vk::DeviceSize,
+        data: &[T],
+    ) -> Result<()> {
         if offset_bytes + (mem::size_of_val(data) as vk::DeviceSize) > self.size {
             return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
         }

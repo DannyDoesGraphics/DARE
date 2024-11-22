@@ -1,6 +1,6 @@
-use std::slice::{Iter, IterMut};
 use crate::error::ContainerErrors;
 use crate::prelude::Slot;
+use std::slice::{Iter, IterMut};
 
 /// Regular slot map implementation
 #[derive(Debug, PartialEq, Eq)]
@@ -32,10 +32,7 @@ impl<T> SlotMap<T> {
         self.data.push((element, self.slots.len() - 1));
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(
-            self.slots.len() - 1,
-            free_slot.generation
-        );
+        let out_slot = Slot::new(self.slots.len() - 1, free_slot.generation);
         Ok(out_slot)
     }
 
@@ -52,7 +49,9 @@ impl<T> SlotMap<T> {
                     // update the indirect slot
                     let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
                     // since we swapped, we must update to the indirect to point to the data index
-                    self.slots.get_mut(swapped_proxy).map(|slot| slot.id = proxy_slot_data_index);
+                    self.slots
+                        .get_mut(swapped_proxy)
+                        .map(|slot| slot.id = proxy_slot_data_index);
                 }
                 // to be removed must be last in data and slots
                 let data = self.data.pop().unwrap();
@@ -67,23 +66,29 @@ impl<T> SlotMap<T> {
     }
 
     pub fn get(&self, slot: Slot<T>) -> Option<&T> {
-        self.slots.get(slot.id).map(|proxy_slot| {
-            if proxy_slot.generation == slot.generation {
-                self.data.get(proxy_slot.id).map(|data| &data.0)
-            } else {
-                None
-            }
-        }).flatten()
+        self.slots
+            .get(slot.id)
+            .map(|proxy_slot| {
+                if proxy_slot.generation == slot.generation {
+                    self.data.get(proxy_slot.id).map(|data| &data.0)
+                } else {
+                    None
+                }
+            })
+            .flatten()
     }
 
     pub fn get_mut(&mut self, slot: Slot<T>) -> Option<&mut T> {
-        self.slots.get(slot.id).map(|proxy_slot| {
-            if proxy_slot.generation == slot.generation {
-                self.data.get_mut(proxy_slot.id).map(|data| &mut data.0)
-            } else {
-                None
-            }
-        }).flatten()
+        self.slots
+            .get(slot.id)
+            .map(|proxy_slot| {
+                if proxy_slot.generation == slot.generation {
+                    self.data.get_mut(proxy_slot.id).map(|data| &mut data.0)
+                } else {
+                    None
+                }
+            })
+            .flatten()
     }
 
     pub fn iter(&self) -> Iter<'_, (T, usize)> {

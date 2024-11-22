@@ -26,7 +26,11 @@ impl Hash for AssetIdUntyped {
                 id.hash(state);
                 type_id.hash(state);
             }
-            AssetIdUntyped::Generation { id, generation, type_id } => {
+            AssetIdUntyped::Generation {
+                id,
+                generation,
+                type_id,
+            } => {
                 1.hash(state);
                 id.hash(state);
                 generation.hash(state);
@@ -38,18 +42,30 @@ impl Hash for AssetIdUntyped {
 impl PartialOrd<Self> for AssetIdUntyped {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (AssetIdUntyped::MetadataHash{..}, AssetIdUntyped::Generation{..}) => Some(Ordering::Less),
-            (AssetIdUntyped::Generation{..}, AssetIdUntyped::MetadataHash{..}) => Some(Ordering::Greater),
-            (AssetIdUntyped::MetadataHash{id, .. }, AssetIdUntyped::MetadataHash {id: id_b, .. }) => id.partial_cmp(id_b),
-            (AssetIdUntyped::Generation{generation, id, .. }, AssetIdUntyped::Generation{generation: generation_b, id: id_b, .. }) => {
-                Some(match (id.cmp(id_b), generation.cmp(generation_b)) {
-                    (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
-                    (Ordering::Less, _) => Ordering::Less,
-                    (Ordering::Greater, _) => Ordering::Greater,
-                    (Ordering::Equal, Ordering::Less) => Ordering::Less,
-                    (Ordering::Equal, Ordering::Greater) => Ordering::Greater,
-                })
-            },
+            (AssetIdUntyped::MetadataHash { .. }, AssetIdUntyped::Generation { .. }) => {
+                Some(Ordering::Less)
+            }
+            (AssetIdUntyped::Generation { .. }, AssetIdUntyped::MetadataHash { .. }) => {
+                Some(Ordering::Greater)
+            }
+            (
+                AssetIdUntyped::MetadataHash { id, .. },
+                AssetIdUntyped::MetadataHash { id: id_b, .. },
+            ) => id.partial_cmp(id_b),
+            (
+                AssetIdUntyped::Generation { generation, id, .. },
+                AssetIdUntyped::Generation {
+                    generation: generation_b,
+                    id: id_b,
+                    ..
+                },
+            ) => Some(match (id.cmp(id_b), generation.cmp(generation_b)) {
+                (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
+                (Ordering::Less, _) => Ordering::Less,
+                (Ordering::Greater, _) => Ordering::Greater,
+                (Ordering::Equal, Ordering::Less) => Ordering::Less,
+                (Ordering::Equal, Ordering::Greater) => Ordering::Greater,
+            }),
         }
     }
 }
@@ -80,7 +96,10 @@ impl AssetIdUntyped {
                 id,
                 type_id: TypeId::of::<T>(),
             },
-            AssetId::Generation { generation, id: index } => AssetIdUntyped::Generation {
+            AssetId::Generation {
+                generation,
+                id: index,
+            } => AssetIdUntyped::Generation {
                 id: index,
                 generation,
                 type_id: TypeId::of::<T>(),
@@ -93,10 +112,9 @@ impl AssetIdUntyped {
         if self.is_type::<T>() {
             match self {
                 AssetIdUntyped::MetadataHash { id, .. } => Some(AssetId::MetadataHash(id)),
-                AssetIdUntyped::Generation { id, generation, .. } => Some(AssetId::Generation {
-                    id,
-                    generation,
-                }),
+                AssetIdUntyped::Generation { id, generation, .. } => {
+                    Some(AssetId::Generation { id, generation })
+                }
             }
         } else {
             None
@@ -114,7 +132,10 @@ impl<T: super::traits::Asset> Debug for AssetId<T> {
             AssetId::MetadataHash(hash) => {
                 write!(f, "AssetId::MetadataHash({})", hash)
             }
-            AssetId::Generation { id: index, generation } => {
+            AssetId::Generation {
+                id: index,
+                generation,
+            } => {
                 write!(
                     f,
                     "AssetId::Generation {{ index: {}, generation: {} }}",
@@ -158,7 +179,11 @@ impl<T: super::traits::Asset> Hash for AssetId<T> {
                 id.hash(state);
                 TypeId::of::<T>().hash(state);
             }
-            AssetId::Generation { id: index, generation, .. } => {
+            AssetId::Generation {
+                id: index,
+                generation,
+                ..
+            } => {
                 1.hash(state);
                 index.hash(state);
                 generation.hash(state);
@@ -174,7 +199,9 @@ impl<T: super::traits::Asset> Clone for AssetId<T> {
         match self {
             AssetId::MetadataHash(u64) => AssetId::MetadataHash(*u64),
             AssetId::Generation {
-                id: index, generation, ..
+                id: index,
+                generation,
+                ..
             } => AssetId::Generation {
                 id: *index,
                 generation: *generation,
@@ -188,10 +215,9 @@ impl<T: asset::Asset> From<AssetIdUntyped> for AssetId<T> {
     fn from(value: AssetIdUntyped) -> Self {
         match value {
             AssetIdUntyped::MetadataHash { id, .. } => AssetId::MetadataHash(id),
-            AssetIdUntyped::Generation { id, generation, .. } => AssetId::Generation {
-                id,
-                generation,
-            },
+            AssetIdUntyped::Generation { id, generation, .. } => {
+                AssetId::Generation { id, generation }
+            }
         }
     }
 }

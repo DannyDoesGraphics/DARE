@@ -1,9 +1,9 @@
-use std::hash::{Hash, Hasher};
 use crate::prelude as dare;
 use crate::prelude::render::components::RenderBuffer;
 use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
 use crate::render2::render_assets::{RenderAssetServer, RenderAssetsStorage};
+use crate::render2::resources::MeshBuffer;
 use bevy_ecs::change_detection::Res;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
@@ -14,8 +14,8 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::command::CommandBufferState;
 use dagal::pipelines::Pipeline;
 use dagal::traits::AsRaw;
+use std::hash::{Hash, Hasher};
 use tokio::task;
-use crate::render2::resources::MeshBuffer;
 
 pub async fn mesh_render(
     frame_number: usize,
@@ -23,7 +23,7 @@ pub async fn mesh_render(
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     buffers: Res<'_, RenderAssetsStorage<RenderBuffer<GPUAllocatorImpl>>>,
-    mut mesh_buffer: becs::ResMut<'_,MeshBuffer<GPUAllocatorImpl>>,
+    mut mesh_buffer: becs::ResMut<'_, MeshBuffer<GPUAllocatorImpl>>,
 ) {
     #[cfg(feature = "tracing")]
     tracing::trace!("Rendering meshes into {frame_number}");
@@ -34,10 +34,9 @@ pub async fn mesh_render(
             }
             CommandBufferState::Recording(recording) => {
                 // flush buffers for upload
-                    mesh_buffer.flush(
-                        &render_context.inner.immediate_submit.clone(),
-                        &buffers,
-                    ).await;
+                mesh_buffer
+                    .flush(&render_context.inner.immediate_submit.clone(), &buffers)
+                    .await;
                 // begin rendering
                 let dynamic_rendering = unsafe {
                     recording
@@ -123,7 +122,10 @@ pub async fn mesh_render(
                     );
                     let camera_view_proj = camera_proj * camera_view;
 
-                    if !mesh.bounding_box.visible_in_frustum(model, camera_view_proj) {
+                    if !mesh
+                        .bounding_box
+                        .visible_in_frustum(model, camera_view_proj)
+                    {
                         continue;
                     }
 
@@ -137,7 +139,11 @@ pub async fn mesh_render(
                     let index_buffer = buffers.get(&surface.index_buffer.id()).unwrap();
 
                     unsafe {
-                        if last_index_address.as_ref().map(|id| id.clone() != index_buffer.buffer.address() ).unwrap_or(true) {
+                        if last_index_address
+                            .as_ref()
+                            .map(|id| id.clone() != index_buffer.buffer.address())
+                            .unwrap_or(true)
+                        {
                             render_context
                                 .inner
                                 .device
