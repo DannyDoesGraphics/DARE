@@ -1,3 +1,4 @@
+use std::ops::Bound;
 pub use super::super::prelude::components;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
@@ -8,6 +9,7 @@ pub struct BoundingBox {
     pub min: glam::Vec3,
     pub max: glam::Vec3,
 }
+impl Eq for BoundingBox {}
 
 impl BoundingBox {
     /// Given 2 vectors, it will automatically determine the bounding boxes of the 2

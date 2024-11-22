@@ -87,7 +87,7 @@ impl RenderServer {
                                 usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS | vk::BufferUsageFlags::STORAGE_BUFFER,
                             }
                         ).unwrap(),
-                        mesh_container: dare_containers::prelude::slot_map::SlotMap::default(),
+                        mesh_container: dare_containers::prelude::InsertionSortSlotMap::default(),
                         external_id_mapping: Default::default(),
                     });
                 }

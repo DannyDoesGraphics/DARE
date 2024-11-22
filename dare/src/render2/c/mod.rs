@@ -1,3 +1,7 @@
+pub mod indirect_buffers;
+#[allow(unused_imports)]
+pub use indirect_buffers::*;
+
 use std::hash::{Hash, Hasher};
 use crate::prelude as dare;
 use bitflags::bitflags;

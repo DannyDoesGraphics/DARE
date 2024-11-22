@@ -6,6 +6,7 @@ use bevy_ecs::prelude::*;
 use dare_containers::dashmap::try_result::TryResult;
 pub use deltas::AssetServerDelta;
 use std::any::TypeId;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// Asset server (engine side)
@@ -83,19 +84,27 @@ impl AssetServer {
         metadata: T::Metadata,
     ) -> Option<asset::AssetHandle<T>> {
         let id_untyped: asset::AssetIdUntyped = {
-            let handle = self.infos.handle_allocator.get_next_handle();
-            asset::AssetIdUntyped::Generation {
-                id: handle.index,
-                generation: handle.generation,
+            asset::AssetIdUntyped::MetadataHash {
+                id: {
+                    let mut hasher = std::hash::DefaultHasher::default();
+                    metadata.hash(&mut hasher);
+                    hasher.finish()
+                },
                 type_id: TypeId::of::<T>(),
             }
         };
-        let arc = Arc::new(asset::StrongAssetHandleUntyped {
-            id: id_untyped,
-            drop_send: self.inner.drop_send.clone(),
-        });
+
         if self.infos.states.get(&id_untyped).is_none() {
             // new handle made and subsequently loaded back
+            let arc = Arc::new(asset::StrongAssetHandleUntyped {
+                id: id_untyped,
+                drop_send: self.inner.drop_send.clone(),
+            });
+            println!("Was forced to make: {:?} = {}", metadata, {
+                let mut hasher = std::hash::DefaultHasher::default();
+                metadata.hash(&mut hasher);
+                hasher.finish()
+            });
             self.infos
                 .states
                 .insert(id_untyped, asset_info::AssetInfo::new::<T>(&arc, metadata));
@@ -107,22 +116,61 @@ impl AssetServer {
                 .unwrap();
             Some(asset::AssetHandle::<T>::Strong(arc))
         } else {
-            self.infos
-                .handle_allocator
-                .recycle(asset::InternalHandle::from(arc.id));
+            if matches!(id_untyped, asset::AssetIdUntyped::Generation { .. }) {
+                self.infos
+                    .handle_allocator
+                    .recycle(asset::InternalHandle::from(id_untyped));
+            }
             None
         }
     }
 
     pub fn entry<T: asset::Asset>(&self, metadata: T::Metadata) -> asset::AssetHandle<T> {
         let id_untyped: asset::AssetIdUntyped = {
-            let handle = self.infos.handle_allocator.get_next_handle();
-            asset::AssetIdUntyped::Generation {
-                id: handle.index,
-                generation: handle.generation,
+            asset::AssetIdUntyped::MetadataHash {
+                id: {
+                    let mut hasher = std::hash::DefaultHasher::default();
+                    metadata.hash(&mut hasher);
+                    hasher.finish()
+                },
                 type_id: TypeId::of::<T>(),
             }
         };
+        if self.infos.states.get(&id_untyped).is_none() {
+            self.insert_resource(metadata).unwrap()
+        } else if let Some(handle) = {
+            match self.infos.states.get(&id_untyped) {
+                None => None,
+                Some(info) => {
+                    info.handle.upgrade()
+                }
+            }
+        } {
+            asset::AssetHandle::<T>::Strong(handle)
+        } else if {
+            let info = self.infos.states.get(&id_untyped).unwrap();
+            info.handle.upgrade().is_none()
+        } {
+            let mut info = self.infos.states.get_mut(&id_untyped).unwrap();
+            // make a new handle, old one was dropped
+            let arc = Arc::new(asset::StrongAssetHandleUntyped {
+                id: id_untyped,
+                drop_send: self.inner.drop_send.clone(),
+            });
+            info.handle = Arc::downgrade(&arc);
+            // new handle loaded, send it
+            self.inner
+                .delta_send
+                .send(AssetServerDelta::HandleLoaded(
+                    asset::AssetHandleUntyped::Strong(arc.clone()),
+                ))
+                .unwrap();
+            println!("bro {:?}", metadata);
+            asset::AssetHandle::<T>::Strong(arc)
+        } else {
+            panic!()
+        }
+        /*
         self.infos
             .states
             .get_mut(&id_untyped)
@@ -132,14 +180,8 @@ impl AssetServer {
                     .map(|arc| asset::AssetHandle::<T>::Strong(arc))
                     .unwrap_or({
                         // make a new handle, old one was dropped
-                        let internal_handle = self.infos.handle_allocator.get_next_handle();
-                        let untyped_handle = asset::AssetIdUntyped::Generation {
-                            id: internal_handle.index,
-                            generation: internal_handle.generation,
-                            type_id: TypeId::of::<T>(),
-                        };
                         let arc = Arc::new(asset::StrongAssetHandleUntyped {
-                            id: untyped_handle.clone(),
+                            id: id_untyped,
                             drop_send: self.inner.drop_send.clone(),
                         });
                         info.handle = Arc::downgrade(&arc);
@@ -150,11 +192,12 @@ impl AssetServer {
                                 asset::AssetHandleUntyped::Strong(arc.clone()),
                             ))
                             .unwrap();
+                        println!("bro {:?}", metadata);
                         asset::AssetHandle::<T>::Strong(arc)
                     })
             })
             .unwrap_or(self.insert_resource(metadata).unwrap())
-            .clone()
+            .clone()*/
     }
 
     /// Get metadata

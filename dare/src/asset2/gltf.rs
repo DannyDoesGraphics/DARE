@@ -217,6 +217,7 @@ impl GLTFLoader {
                                                 dare::render::util::ElementFormat::U32,
                                                 1,
                                             );
+                                            println!("{:?}", m);
                                             asset_server.entry(m)
                                         },
                                     );

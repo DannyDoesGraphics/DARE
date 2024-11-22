@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 /// Describes metadata about the asset
-pub trait AssetMetadata: Sized + Clone + Send + Sync + 'static {}
+pub trait AssetMetadata: Hash + Sized + Clone + Send + Sync + 'static {}
 
 /// Describes the loaded asset
 pub trait AssetLoaded: Debug + PartialEq + Eq {}

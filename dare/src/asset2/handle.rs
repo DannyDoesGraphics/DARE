@@ -13,7 +13,7 @@ pub(super) struct InternalHandle {
 impl From<asset::AssetIdUntyped> for InternalHandle {
     fn from(value: asset::AssetIdUntyped) -> Self {
         match value {
-            asset::AssetIdUntyped::MetadataHash { .. } => panic!(),
+            asset::AssetIdUntyped::MetadataHash { id, type_id } => panic!(),
             asset::AssetIdUntyped::Generation { id, generation, .. } => Self {
                 index: id,
                 generation,
@@ -29,6 +29,17 @@ pub enum AssetHandle<T: asset::Asset> {
         id: asset::AssetId<T>,
     },
 }
+impl<T: asset::Asset> PartialEq for AssetHandle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (AssetHandle::Strong(a), AssetHandle::Strong(b)) => a == b,
+            (AssetHandle::Weak{id, ..}, AssetHandle::Weak {id: id_b, ..}) => id == id_b,
+            (_, _) => false,
+        }
+    }
+}
+impl<T: asset::Asset> Eq for AssetHandle<T> {}
+
 impl<T: asset::Asset> Hash for AssetHandle<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
@@ -92,12 +103,6 @@ impl<T: asset::Asset> AssetHandle<T> {
                 .into_typed_handle()
                 .unwrap(),
         )
-    }
-}
-
-impl<T: asset::Asset> PartialEq for AssetHandle<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id().as_untyped_id() == other.id().as_untyped_id()
     }
 }
 

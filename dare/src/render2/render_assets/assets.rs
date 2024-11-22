@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Stores render assets densely packed
 pub struct HashRenderAssetStorage<T: super::traits::MetaDataRenderAsset> {
-    pub assets: HashMap<asset::AssetId<T::Asset>, Option<T::Loaded>>,
+    pub assets: HashMap<asset::AssetIdUntyped, Option<T::Loaded>>,
 }
 
 impl<T: super::traits::MetaDataRenderAsset> Default for HashRenderAssetStorage<T> {
@@ -72,12 +72,15 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
                     asset_id: handle,
                     render_asset,
                 } => {
-                    self.dense_render_assets
+                    let displaced = self.dense_render_assets
                         .assets
-                        .insert(handle, Some(render_asset));
+                        .insert(handle.as_untyped_id(), Some(render_asset));
+                    if displaced.is_some() {
+                        panic!("We displaced?")
+                    }
                 }
                 RenderAssetDelta::Remove(handle) => {
-                    self.dense_render_assets.assets.insert(handle, None);
+                    self.dense_render_assets.assets.insert(handle.as_untyped_id(), None);
                 }
             }
         }
@@ -86,7 +89,7 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
     pub fn get(&self, handle: &asset::AssetId<T::Asset>) -> Option<&T::Loaded> {
         self.dense_render_assets
             .assets
-            .get(handle)
+            .get(&handle.as_untyped_id())
             .map(|v| v.as_ref().map(|v| v))
             .flatten()
     }
@@ -106,7 +109,7 @@ impl RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>> {
     ) -> Option<vk::DeviceSize> {
         self.dense_render_assets
             .assets
-            .get(asset_id)
+            .get(&asset_id.as_untyped_id())
             .map(|v| {
                 v.as_ref()
                     .map(|render_buffer| render_buffer.buffer.address())

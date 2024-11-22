@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
 
@@ -26,7 +27,7 @@ impl SurfaceBuilder {
     }
 }
 
-#[derive(becs::Component, Debug, Clone, PartialEq, Hash)]
+#[derive(becs::Component, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Surface {
     pub vertex_count: usize,
     pub index_count: usize,
@@ -35,6 +36,21 @@ pub struct Surface {
     pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
     pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
     pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+}
+
+impl PartialOrd for Surface {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.index_count.cmp(&other.index_count).then_with(|| {
+            self.vertex_count.cmp(&other.vertex_count).then_with(|| {
+                Ordering::Equal
+            })
+        }))
+    }
+}
+impl Ord for Surface {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 impl Surface {

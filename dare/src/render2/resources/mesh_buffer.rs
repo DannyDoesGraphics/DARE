@@ -11,7 +11,7 @@ use dare_containers::prelude as containers;
 pub struct MeshBuffer<A: Allocator + 'static> {
     pub uploaded_hash: u64,
     pub growable_buffer: dare::render::util::GrowableBuffer<A>,
-    pub mesh_container: containers::SlotMap<dare::engine::components::Mesh>,
+    pub mesh_container: containers::InsertionSortSlotMap<dare::engine::components::Mesh>,
     pub external_id_mapping: HashMap<becs::Entity, containers::Slot<dare::engine::components::Mesh>>,
 }
 

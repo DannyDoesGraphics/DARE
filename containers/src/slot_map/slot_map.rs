@@ -3,13 +3,12 @@ use crate::error::ContainerErrors;
 use crate::prelude::Slot;
 
 /// Regular slot map implementation
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct SlotMap<T> {
     // usize is a reference to the proxy slot index
-    data: Vec<(T, usize)>,
-    slots: Vec<Slot<T>>,
-    free_list: Vec<Slot<T>>,
+    pub(crate) data: Vec<(T, usize)>,
+    pub(crate) slots: Vec<Slot<T>>,
+    pub(crate) free_list: Vec<Slot<T>>,
 }
 impl<T> Default for SlotMap<T> {
     fn default() -> Self {

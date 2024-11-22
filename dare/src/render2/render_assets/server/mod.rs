@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::prelude as dare;
 use crate::prelude::render::{InnerRenderServerRequest, RenderServerAssetRelationDelta};
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
@@ -9,7 +10,7 @@ use futures::stream::FuturesUnordered;
 use futures::{StreamExt, TryFutureExt};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use dare::engine::components::Name;
+use bevy_ecs::query::Has;
 
 /// Responsible for receiving and tracking with the main asset server
 #[derive(becs::Resource, Clone)]
@@ -33,8 +34,8 @@ const BUFFER_NAMES: [&'static str; 5] = [
 
 pub fn load_assets_to_gpu_in_world(
     render_context: &dare::render::contexts::RenderContext,
-    surfaces: &[(dare::engine::components::Surface, Option<Name>)],
-    mut buffers: &mut super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
+    surfaces: &[(dare::engine::components::Surface, Option<dare::engine::components::Name>)],
+    buffer_server: super::assets::RenderAssets<dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>>,
     render_asset_server: &mut RenderAssetServer,
     rt: &dare::concurrent::BevyTokioRunTime,
 ) {
@@ -65,6 +66,7 @@ pub fn load_assets_to_gpu_in_world(
                     let handle_state = render_asset_server.get_state(&handle);
                     if handle_state == Some(dare::asset2::AssetState::Unloaded) {
                         let err_handle = handle.clone();
+                        let succ_handle = handle.clone();
                         let render_context = render_context.clone();
                         let name: Option<String> = BUFFER_NAMES.get(index).map(|v| {
                             format!(
@@ -77,36 +79,49 @@ pub fn load_assets_to_gpu_in_world(
                                 v
                             )
                         });
-                        let fut = rt.runtime.spawn(async move {
-                            let mut allocator = render_context.inner.allocator.clone();
-                            let transfer_pool = render_context.transfer_pool();
-                            let staging_size = transfer_pool.gpu_staging_size() as usize;
-                            Some(super::components::RenderBuffer::load_asset(
-                                metadata,
-                                super::components::BufferPrepareInfo {
-                                    allocator,
-                                    handle: dare::asset2::AssetHandleUntyped::from(handle).into_typed_handle::<
-                                        crate::asset2::prelude::assets::Buffer
-                                    >().unwrap(),
-                                    transfer_pool,
-                                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
-                                        | vk::BufferUsageFlags::VERTEX_BUFFER
-                                        | vk::BufferUsageFlags::INDEX_BUFFER
-                                        | vk::BufferUsageFlags::TRANSFER_SRC
-                                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                                    location: MemoryLocation::GpuOnly,
-                                    name,
-                                },
-                                dare::asset2::assets::BufferStreamInfo {
-                                    chunk_size: staging_size,
-                                }
-                            ).await.map_err(move |e| {
-                                (e, err_handle)
-                            }))
-                        });
+                        unsafe {
+                            render_asset_server.update_state(
+                                &*handle, dare::asset2::AssetState::Loading
+                            ).unwrap();
+                        }
+                        let render_asset_server = render_asset_server.clone();
+                            let fut = rt.runtime.spawn(async move {
+                                let mut allocator = render_context.inner.allocator.clone();
+                                let transfer_pool = render_context.transfer_pool();
+                                let staging_size = transfer_pool.gpu_staging_size() as usize;
+                                Some(super::components::RenderBuffer::load_asset(
+                                    metadata,
+                                    super::components::BufferPrepareInfo {
+                                        allocator,
+                                        handle: dare::asset2::AssetHandleUntyped::from(handle).into_typed_handle::<
+                                            crate::asset2::prelude::assets::Buffer
+                                        >().unwrap(),
+                                        transfer_pool,
+                                        usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                                            | vk::BufferUsageFlags::VERTEX_BUFFER
+                                            | vk::BufferUsageFlags::INDEX_BUFFER
+                                            | vk::BufferUsageFlags::TRANSFER_SRC
+                                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                                        location: MemoryLocation::GpuOnly,
+                                        name,
+                                    },
+                                    dare::asset2::assets::BufferStreamInfo {
+                                        chunk_size: staging_size,
+                                    }
+                                ).await.map_err(move |e| {
+                                    (e, err_handle)
+                                })).map(|r| {
+                                    unsafe {
+                                        render_asset_server.update_state(
+                                            &succ_handle, dare::asset2::AssetState::Loaded
+                                        ).unwrap();
+                                    }
+                                    r
+                                })
+                            });
                         futures.push(fut);
                     } else if handle_state != Some(dare::asset2::AssetState::Loaded) {
-                        tracing::warn!("Asset is in unexpected state: {:?}", handle_state);
+                        tracing::warn!("Asset is in unexpected state: {:?}, ignoring", handle_state);
                     }
                 } else {
                     tracing::error!("No metadata found for {:?}", handle);
@@ -115,7 +130,6 @@ pub fn load_assets_to_gpu_in_world(
         }
     }
 
-    let buffer_server = buffers.server();
     // now handle putting the loaded assets in their place after
     rt.runtime.spawn(async move {
         while let Some(result) = futures.next().await {
@@ -165,7 +179,7 @@ pub fn process_asset_relations_incoming_system(
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     ir_recv: becs::ResMut<'_, IrRecv>,
 ) {
-    let mut added_surfaces: Vec<(dare::engine::components::Surface, Option<Name>)> = Vec::new();
+    let mut added_surfaces: Vec<(dare::engine::components::Surface, Option<dare::engine::components::Name>)> = Vec::new();
     // handle any subsequent asset linking requests
     while let Ok(delta) = ir_recv.0.try_recv() {
         match delta {
@@ -179,7 +193,7 @@ pub fn process_asset_relations_incoming_system(
                             name: mesh.name.clone(),
                             transform: mesh.transform,
                         };
-                        let handle = meshes.mesh_container.insert(mesh).unwrap();
+                        let handle = meshes.mesh_container.insertion_sort(mesh).unwrap();
                         meshes.external_id_mapping.insert(entity, handle);
                     }
                 }
@@ -191,7 +205,7 @@ pub fn process_asset_relations_incoming_system(
     load_assets_to_gpu_in_world(
         &render_context,
         &added_surfaces,
-        &mut buffers,
+        buffers.server(),
         &mut render_asset_server,
         &rt,
     );

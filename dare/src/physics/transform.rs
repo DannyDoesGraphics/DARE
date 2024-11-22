@@ -6,7 +6,7 @@ pub struct Transform {
     pub rotation: glam::Quat,
     pub translation: glam::Vec3,
 }
-
+impl Eq for Transform {}
 impl Default for Transform {
     fn default() -> Self {
         Self {

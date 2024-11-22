@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use crate::prelude as dare;
 use crate::prelude::render::components::RenderBuffer;
 use crate::prelude::render::util::GPUResourceTable;
@@ -93,7 +94,7 @@ pub async fn mesh_render(
                         render_context.inner.graphics_pipeline.handle(),
                     );
                 }
-
+                let mut last_index_address: Option<vk::DeviceAddress> = None;
                 for (mesh, _) in mesh_buffer.mesh_container.iter() {
                     let surface = mesh.surface.clone().upgrade();
                     if surface.is_none() {
@@ -104,7 +105,6 @@ pub async fn mesh_render(
                         || buffers.get(&surface.index_buffer.id()).is_none()
                     {
                         // try to load them in
-                        task::spawn(async move {});
                         if frame_number % 1024 == 0 {
                             if buffers.get(&surface.vertex_buffer.id()).is_none() {
                                 println!("Failed: {:?}", surface.vertex_buffer.id());
@@ -137,17 +137,19 @@ pub async fn mesh_render(
                     let index_buffer = buffers.get(&surface.index_buffer.id()).unwrap();
 
                     unsafe {
-                        render_context
-                            .inner
-                            .device
-                            .get_handle()
-                            .cmd_bind_index_buffer(
-                                recording.handle(),
-                                *index_buffer.buffer.as_raw(),
-                                0,
-                                vk::IndexType::UINT32,
-                            );
-
+                        if last_index_address.as_ref().map(|id| id.clone() != index_buffer.buffer.address() ).unwrap_or(true) {
+                            render_context
+                                .inner
+                                .device
+                                .get_handle()
+                                .cmd_bind_index_buffer(
+                                    recording.handle(),
+                                    *index_buffer.buffer.as_raw(),
+                                    0,
+                                    vk::IndexType::UINT32,
+                                );
+                            last_index_address = Some(index_buffer.buffer.address());
+                        }
                         let view_proj = camera_view_proj * model;
                         let push_constant = CPushConstant {
                             transform: view_proj.to_cols_array(),
