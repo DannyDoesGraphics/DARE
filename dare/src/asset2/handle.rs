@@ -120,7 +120,7 @@ impl Eq for StrongAssetHandleUntyped {}
 impl Drop for StrongAssetHandleUntyped {
     fn drop(&mut self) {
         if let Err(_) = self.drop_send.send(self.id) {
-            // do not care if the asset drop request was not received (asset server dropped)
+            // do not care if the asset drop request was not received (asset manager dropped)
         }
     }
 }
@@ -197,5 +197,90 @@ impl AssetHandleUntyped {
                 Some(AssetHandleUntyped::Strong(weak_ref.upgrade()?))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    // Define a simple test asset that meets the trait requirements.
+    #[derive(Hash, Clone)]
+    struct TestAssetMetadata(u64);
+    impl asset::AssetMetadata for TestAssetMetadata {}
+
+    impl Debug for TestAssetMetadata {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            todo!()
+        }
+    }
+
+    impl PartialEq for TestAssetMetadata {
+        fn eq(&self, other: &Self) -> bool {
+            todo!()
+        }
+    }
+
+    impl Eq for TestAssetMetadata {}
+
+    impl asset::AssetLoaded for TestAssetMetadata {
+
+    }
+
+    impl asset::loaders::MetaDataLoad for TestAssetMetadata {
+        type Loaded = TestAssetLoaded;
+        type LoadInfo<'a>
+        where
+            Self: 'a
+        = ();
+
+        async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
+            todo!()
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestAssetLoaded(u64);
+    impl asset::AssetLoaded for TestAssetLoaded {}
+
+    struct TestAsset;
+    impl asset::Asset for TestAsset {
+        type Metadata = TestAssetMetadata;
+        type Loaded = TestAssetLoaded;
+    }
+
+    fn hash_handle<H: Hash>(h: &H) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        h.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn test_hashing_consistency() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+
+        let typed_id: asset::AssetId<TestAsset> = asset::AssetId::Generation { id: 42, generation: 1 };
+        let untyped_id = typed_id.as_untyped_id();
+
+        let strong_untyped = StrongAssetHandleUntyped {
+            id: untyped_id.clone(),
+            drop_send: tx,
+        };
+
+        let arc = Arc::new(strong_untyped);
+        let strong_typed_handle = AssetHandle::<TestAsset>::Strong(arc.clone());
+
+        let initial_hash = hash_handle(&strong_typed_handle);
+
+        let downgraded = strong_typed_handle.clone().downgrade();
+        let downgraded_hash = hash_handle(&downgraded);
+
+        let upgraded = downgraded.clone().upgrade().expect("Should be able to upgrade");
+        let upgraded_hash = hash_handle(&upgraded);
+
+        assert_eq!(initial_hash, downgraded_hash, "Hash should remain the same after downgrade");
+        assert_eq!(initial_hash, upgraded_hash, "Hash should remain the same after upgrade");
     }
 }

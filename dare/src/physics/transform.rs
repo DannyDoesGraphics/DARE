@@ -24,6 +24,6 @@ impl Transform {
     }
 
     pub fn as_raw(&self) -> [f32; 16] {
-        self.get_transform_matrix().transpose().to_cols_array()
+        self.get_transform_matrix().to_cols_array()
     }
 }

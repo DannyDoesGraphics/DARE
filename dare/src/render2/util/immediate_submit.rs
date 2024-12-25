@@ -86,7 +86,11 @@ impl ImmediateSubmit {
                 *fence.as_raw(),
             )?;
         }
-        fence.fence_await().await?;
+        fence.wait(u64::MAX)?;
         anyhow::Ok(res)
+    }
+
+    pub fn get_queue_family_index(&self) -> u32 {
+        self.inner.queue.get_family_index()
     }
 }

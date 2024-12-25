@@ -55,7 +55,7 @@ impl EngineServer {
         })
     }
 
-    /// stops the engine server
+    /// stops the engine manager
     pub fn stop(&self) {
         self.thread.abort();
     }
@@ -67,7 +67,7 @@ impl EngineServer {
 
 impl Drop for EngineServer {
     fn drop(&mut self) {
-        tracing::trace!("Dropping engine server");
+        tracing::trace!("Dropping engine manager");
         self.thread.abort();
     }
 }

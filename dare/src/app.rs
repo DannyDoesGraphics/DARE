@@ -38,19 +38,19 @@ impl winit::application::ApplicationHandler for App {
         tokio::task::block_in_place(|| {
             match self.render_server.as_mut() {
                 None => {
-                    // render server does not exist yet
+                    // render manager does not exist yet
                     let mut render_server = render::server::RenderServer::new(
                         render::create_infos::RenderContextCreateInfo {
-                            rdh: window.raw_display_handle().unwrap(),
+                            window: window.clone(),
                             configuration: config,
                         },
                     );
                     // Call the synchronous blocking send function
-                    render_server.create_surface(&window).unwrap();
+                    render_server.update_surface(&window).unwrap();
                     self.render_server = Some(render_server);
                 }
                 Some(rs) => {
-                    rs.create_surface(&window).unwrap();
+                    rs.update_surface(&window).unwrap();
                 }
             };
         });
@@ -75,22 +75,25 @@ impl winit::application::ApplicationHandler for App {
         match event {
             WindowEvent::RedrawRequested => {
                 if let Some(rs) = self.render_server.as_ref() {
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async move {
-                            let render = rs
-                                .send(render::RenderServerNoCallbackRequest::Render)
-                                .await
-                                .unwrap();
-                            render.notified().await;
-                        })
-                    });
-                    if let Some(window) = self.window.as_ref() {
-                        let current_t: std::time::Instant = std::time::Instant::now();
-                        window.set_title(&format!(
-                            "DARE | micro-seconds: {}",
-                            current_t.duration_since(self.last_dt).as_millis()
-                        ));
-                        self.last_dt = current_t;
+                    // check if there is a valid window to render to
+                    if self.window.as_ref().map(|window| window.inner_size().width != 0 && window.inner_size().height != 0).unwrap_or(false) {
+                        tokio::task::block_in_place(|| {
+                            tokio::runtime::Handle::current().block_on(async move {
+                                let render = rs
+                                    .send(render::RenderServerNoCallbackRequest::Render)
+                                    .await
+                                    .unwrap();
+                                render.notified().await;
+                            })
+                        });
+                        if let Some(window) = self.window.as_ref() {
+                            let current_t: std::time::Instant = std::time::Instant::now();
+                            window.set_title(&format!(
+                                "DARE | micro-seconds: {}",
+                                current_t.duration_since(self.last_dt).as_millis()
+                            ));
+                            self.last_dt = current_t;
+                        }
                     }
                 } else {
                 }
@@ -109,7 +112,7 @@ impl winit::application::ApplicationHandler for App {
                             });
                         });
                     }
-                    // drop engine server first
+                    // drop engine manager first
                     drop(self.engine_server.take());
                     drop(rs);
                     println!("Dropping RS");
@@ -120,7 +123,10 @@ impl winit::application::ApplicationHandler for App {
                 if let Some(rs) = self.render_server.as_ref().cloned() {
                     if let Some(window) = self.window.as_ref() {
                         if window.inner_size().width != 0 && window.inner_size().height != 0 {
-                            tokio::task::block_in_place(|| rs.create_surface(window).unwrap());
+                            rs.update_surface(window);
+                            rs.set_new_surface_flag(false);
+                        } else {
+                            rs.set_new_surface_flag(true);
                         }
                     }
                 };

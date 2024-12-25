@@ -75,33 +75,17 @@ impl RenderServer {
                         )
                         .unwrap(),
                     );
-                    world.insert_resource(super::resources::mesh_buffer::MeshBuffer {
+                    world.insert_resource(super::resources::surface_buffer::RenderSurfaceManager {
                         uploaded_hash: 0,
-                        growable_buffer: render::util::GrowableBuffer::new(
-                            dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                                device: render_context.inner.device.clone(),
-                                name: Some(String::from("Mesh buffer")),
-                                allocator: &mut allocator,
-                                size: (size_of::<render::c::CSurface>() * 128) as vk::DeviceSize,
-                                memory_type: dagal::allocators::MemoryLocation::GpuOnly,
-                                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
-                                    | vk::BufferUsageFlags::TRANSFER_DST
-                                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                                    | vk::BufferUsageFlags::STORAGE_BUFFER,
-                            },
-                        )
-                        .unwrap(),
                         mesh_container: dare_containers::prelude::InsertionSortSlotMap::default(),
-                        external_id_mapping: Default::default(),
+                        surface_hashes: Default::default(),
                     });
                 }
-                world.insert_resource(render_context);
+                world.insert_resource(render_context.clone());
                 world.insert_resource(super::frame_number::FrameCount::default());
                 world.insert_resource(rt);
                 world.insert_resource(asset_server.clone());
-                world.insert_resource(render::render_assets::server::RenderAssetServer::new(
-                    asset_server.clone(),
-                ));
+                world.insert_resource(render::render_assets::manager::MeshLink::default());
                 world.insert_resource(render::components::camera::Camera::default());
                 world.insert_resource(IrRecv(ir_recv));
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
@@ -112,7 +96,7 @@ impl RenderServer {
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
                 schedule.add_systems(
-                    render::render_assets::server::process_asset_relations_incoming_system,
+                    render::render_assets::manager::process_asset_relations_incoming_system,
                 );
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
@@ -129,14 +113,14 @@ impl RenderServer {
                                     shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
                                     shutdown_schedule.run(&mut world);
                                     stop_flag = true;
-                                }
+                                },
                             };
                             packet.callback.0.notify_waiters();
                         }
                         None => {}
                     }
                 }
-                tracing::trace!("Stopping render server");
+                tracing::trace!("Stopping render manager");
                 // drop world
                 drop(world);
                 tracing::trace!("RENDER SERVER STOPPED");
@@ -171,7 +155,7 @@ impl RenderServer {
         self.inner.new_sender.send(RenderServerPacket {
             callback: send_types::Callback(notify.clone()),
             request,
-        })?;
+        }).unwrap();
         Ok(notify)
     }
 
@@ -191,9 +175,9 @@ impl RenderServer {
         Ok(notify)
     }
 
-    pub fn create_surface(&self, window: &winit::window::Window) -> Result<()> {
-        self.render_context.inner.window_context.build_surface(
-            render::create_infos::SurfaceContextCreateInfo {
+    pub fn update_surface(&self, window: &winit::window::Window) -> Result<()> {
+        self.render_context.inner.window_context.update_surface(
+            render::create_infos::SurfaceContextUpdateInfo {
                 instance: &self.render_context.inner.instance,
                 physical_device: &self.render_context.inner.physical_device,
                 allocator: self.render_context.inner.allocator.clone(),
@@ -215,5 +199,9 @@ impl RenderServer {
 
     pub fn asset_server(&self) -> dare::asset2::server::AssetServer {
         self.asset_server.clone()
+    }
+
+    pub fn set_new_surface_flag(&self, flag: bool) {
+        self.render_context.inner.new_swapchain_requested.store(flag, std::sync::atomic::Ordering::Release);
     }
 }

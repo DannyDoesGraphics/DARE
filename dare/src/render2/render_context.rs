@@ -13,10 +13,12 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
+use dagal::raw_window_handle::HasRawDisplayHandle;
 
 pub struct RenderContextCreateInfo {
-    pub(crate) rdh: dagal::raw_window_handle::RawDisplayHandle,
+    pub(crate) window: Arc<winit::window::Window>,
     pub(crate) configuration: RenderContextConfiguration,
 }
 
@@ -34,6 +36,7 @@ pub struct RenderContextInner {
     pub(super) configuration: RenderContextConfiguration,
     pub(super) transfer_pool: dare::render::util::TransferPool<GPUAllocatorImpl>,
     pub(super) window_context: Arc<super::window_context::WindowContext>,
+    pub(super) new_swapchain_requested: AtomicBool,
     pub(super) graphics_pipeline: dagal::pipelines::GraphicsPipeline,
     pub(super) graphics_layout: dagal::pipelines::PipelineLayout,
 
@@ -70,7 +73,9 @@ impl RenderContext {
             .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())
             .set_validation(cfg!(feature = "tracing"));
         // add required extensions
-        let instance = dagal::ash_window::enumerate_required_extensions(ci.rdh)?
+        let instance = dagal::ash_window::enumerate_required_extensions(unsafe {
+            ci.window.raw_display_handle().unwrap()
+        })?
             .into_iter()
             .fold(instance, |mut instance, layer| {
                 instance.add_extension(*layer)
@@ -167,7 +172,7 @@ impl RenderContext {
             dare::render::util::ImmediateSubmit::new(device.clone(), immediate_queue)?;
 
         let window_context = super::window_context::WindowContext::new(
-            super::window_context::WindowContextCreateInfo { present_queue },
+            super::window_context::WindowContextCreateInfo { present_queue, },
         );
         let gpu_rt = dare::render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
             device.clone(),
@@ -226,17 +231,18 @@ impl RenderContext {
                 graphics_layout: graphics_pipeline_layout,
                 debug_messenger: None,
                 immediate_submit,
+                new_swapchain_requested: AtomicBool::new(false),
             }),
         })
     }
 
-    pub async fn build_surface(&self, window: &winit::window::Window) -> Result<()> {
-        self.inner.window_context.build_surface(
-            super::surface_context::SurfaceContextCreateInfo {
+    pub fn update_surface(&self, window: &winit::window::Window) -> Result<()> {
+        self.inner.window_context.update_surface(
+            super::surface_context::SurfaceContextUpdateInfo {
                 instance: &self.inner.instance,
                 physical_device: &self.inner.physical_device,
                 allocator: self.inner.allocator.clone(),
-                window,
+                window: window,
                 frames_in_flight: Some(self.inner.configuration.target_frames_in_flight),
             },
         )?;

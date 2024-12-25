@@ -6,6 +6,7 @@ use crate::prelude as dare;
 use bitflags::bitflags;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
+use bytemuck::{Pod, Zeroable};
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -28,8 +29,10 @@ pub struct CSurface {
     pub normals: u64,
     pub tangents: u64,
     pub uv: u64,
-    pub transform: [f32; 16],
 }
+
+unsafe impl Zeroable for CSurface {}
+unsafe impl Pod for CSurface {}
 
 impl Hash for CSurface {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -40,7 +43,6 @@ impl Hash for CSurface {
         self.normals.hash(state);
         self.tangents.hash(state);
         self.uv.hash(state);
-        //let _ = self.transform.iter().map(|i| (*i).hash(state));
     }
 }
 
@@ -50,11 +52,10 @@ impl CSurface {
             dare::render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
         surface: dare::engine::components::Surface,
-        transform: &glam::Mat4,
     ) -> Option<Self> {
         Some(Self {
-            material: 0,
-            bit_flag: 0,
+            material: 1,
+            bit_flag: 2,
             _padding: 0,
             positions: asset_server.get_bda(&surface.vertex_buffer.id())?,
             indices: asset_server.get_bda(&surface.index_buffer.id())?,
@@ -62,32 +63,15 @@ impl CSurface {
                 .normal_buffer
                 .as_ref()
                 .map(|buffer| asset_server.get_bda(&buffer.id()))
-                .flatten()
-                .unwrap_or(0),
+                .unwrap_or(Some(0))?,
             tangents: surface
                 .tangent_buffer
                 .as_ref()
                 .map(|buffer| asset_server.get_bda(&buffer.id()))
-                .flatten()
-                .unwrap_or(0),
+                .unwrap_or(Some(0))?,
             uv: 0,
-            transform: transform.to_cols_array(),
         })
     }
-}
-
-/// Underlying C mesh representation of a mesh
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct CMesh {
-    pub material: u64,
-    pub bit_flag: u32,
-    pub positions: u64,
-    pub indices: u64,
-    pub normals: u64,
-    pub tangents: u64,
-    pub uv: u64,
-    pub transform: [f32; 16],
 }
 
 #[repr(C)]
@@ -105,5 +89,6 @@ pub struct CMaterial {
 #[derive(Debug, Clone, Copy)]
 pub struct CPushConstant {
     pub transform: [f32; 16],
-    pub vertex_buffer: u64,
+    pub instanced_surface_info: u64,
+    pub draw_id: u64,
 }

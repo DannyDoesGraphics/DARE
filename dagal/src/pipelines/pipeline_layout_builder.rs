@@ -28,7 +28,7 @@ impl PipelineLayoutBuilder {
         self.push_push_constant_ranges(vec![vk::PushConstantRange {
             stage_flags,
             offset: 0,
-            size: std::mem::size_of::<T>() as u32,
+            size: size_of::<T>() as u32,
         }])
     }
 

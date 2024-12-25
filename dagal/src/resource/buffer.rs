@@ -90,7 +90,7 @@ impl<A: Allocator> Buffer<A> {
     ///
     /// Offset is in bytes
     pub fn write<T: Sized>(&mut self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<()> {
-        if offset_bytes + (mem::size_of_val(data) as vk::DeviceSize) > self.size {
+        if offset_bytes + (size_of_val(data) as vk::DeviceSize) > self.size {
             return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
         }
         if let Some(mapped_ptr) = self.mapped_ptr() {

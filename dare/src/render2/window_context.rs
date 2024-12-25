@@ -1,7 +1,8 @@
+use std::sync::{Arc, Mutex, RwLock};
 use crate::render2::surface_context::SurfaceContext;
 use anyhow::Result;
 use dagal::allocators::Allocator;
-use tokio::sync::RwLock;
+use dagal::raw_window_handle::HasRawDisplayHandle;
 
 #[derive(Debug)]
 pub struct WindowContext {
@@ -22,22 +23,22 @@ impl WindowContext {
         }
     }
 
-    pub fn build_surface(
+    pub fn update_surface(
         &self,
-        ci: super::surface_context::SurfaceContextCreateInfo<'_>,
+        ci: super::surface_context::SurfaceContextUpdateInfo<'_>,
     ) -> Result<()> {
-        if let Some(surface_context) = self.surface_context.blocking_write().take() {
-            drop(surface_context);
+        if let Some(sc) = self.surface_context.write().unwrap().take() {
+            drop(sc);
         }
         unsafe {
-            let mut surface_guard = self.surface_context.blocking_write();
+            let mut surface_guard = self.surface_context.write().unwrap();
             *surface_guard = Some(SurfaceContext::new(
                 super::surface_context::InnerSurfaceContextCreateInfo {
                     instance: &ci.instance,
                     physical_device: &ci.physical_device,
                     allocator: ci.allocator,
                     present_queue: self.present_queue.clone(),
-                    window: &ci.window,
+                    window: ci.window,
                     frames_in_flight: ci.frames_in_flight,
                 },
             )?);

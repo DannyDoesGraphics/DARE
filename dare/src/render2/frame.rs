@@ -1,13 +1,14 @@
 use crate::prelude as dare;
 use crate::render2::surface_context::SurfaceContext;
 use anyhow::Result;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
+use std::sync::Arc;
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
@@ -25,6 +26,14 @@ pub struct Frame {
 
     /// any resources binded for the current frame
     pub resources: HashSet<dare::asset2::AssetHandleUntyped>,
+    /// Buffer used to hold indirect commands
+    pub indirect_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
+    /// Buffer used to hold instanced information
+    pub instanced_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
+    /// Buffer used to hold surface information
+    pub surface_buffer: dare::render::resources::surface_buffer::RenderSurfaceBuffer<GPUAllocatorImpl>,
+    /// staging buffers used
+    pub staging_buffers: Vec<dagal::resource::Buffer<GPUAllocatorImpl>>,
 
     // cmd buffers
     pub command_pool: dagal::command::CommandPool,
@@ -181,6 +190,57 @@ impl Frame {
             image_extent: surface_context.image_extent,
 
             resources: HashSet::default(),
+            indirect_buffer: dare::render::util::GrowableBuffer::new(
+                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(String::from(format!(
+                        "Indirect buffer frame {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    ))),
+                    allocator: &mut allocator,
+                    size: 128_000,
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::INDIRECT_BUFFER
+                    | vk::BufferUsageFlags::STORAGE_BUFFER
+                    | vk::BufferUsageFlags::VERTEX_BUFFER,
+                },
+            )?,
+            instanced_buffer: dare::render::util::GrowableBuffer::new(
+                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(String::from(format!(
+                        "Instanced buffer frame {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    ))),
+                    allocator: &mut allocator,
+                    size: 128_000,
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    | vk::BufferUsageFlags::VERTEX_BUFFER,
+                },
+            )?,
+            surface_buffer: dare::render::resources::RenderSurfaceBuffer::new(
+                dare::render::util::GrowableBuffer::new(
+                    dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                        device: surface_context.allocator.device(),
+                        name: Some(String::from(format!(
+                            "Render Surface Buffer {}",
+                            image_number.as_ref().unwrap_or(&0)
+                        ))),
+                        allocator: &mut allocator,
+                        size: 128_000,
+                        memory_type: MemoryLocation::GpuOnly,
+                        usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                            | vk::BufferUsageFlags::VERTEX_BUFFER,
+                    },
+                )?
+            ),
+            staging_buffers: Vec::new(),
             command_pool,
             command_buffer,
         })

@@ -97,7 +97,7 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
             .flatten()
     }
 
-    /// Acquire a server
+    /// Acquire a manager
     pub fn server(&self) -> RenderAssets<T> {
         RenderAssets {
             send_deltas: self.send_deltas.clone(),

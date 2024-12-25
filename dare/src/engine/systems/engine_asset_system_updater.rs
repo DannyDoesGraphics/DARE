@@ -3,7 +3,7 @@ use crate::prelude::render::{InnerRenderServerRequest, RenderServerAssetRelation
 use crate::render2::server::IrSend;
 use bevy_ecs::prelude as becs;
 
-/// updates the server from any newly added surfaces from the engine world
+/// updates the manager from any newly added surfaces from the engine world
 pub fn engine_asset_sync_system(
     send: becs::Res<IrSend>,
     query: becs::Query<

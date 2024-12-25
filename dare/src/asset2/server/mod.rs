@@ -1,5 +1,6 @@
 pub mod asset_info;
 pub mod deltas;
+pub mod render_asset_state;
 
 use super::prelude as asset;
 use bevy_ecs::prelude::*;
@@ -8,8 +9,9 @@ pub use deltas::AssetServerDelta;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+pub use render_asset_state::*;
 
-/// Asset server (engine side)
+/// Asset manager (engine side)
 #[derive(Debug)]
 pub struct AssetServerInner {
     delta_send: crossbeam_channel::Sender<AssetServerDelta>,
@@ -163,7 +165,6 @@ impl AssetServer {
                     asset::AssetHandleUntyped::Strong(arc.clone()),
                 ))
                 .unwrap();
-            println!("bro {:?}", metadata);
             asset::AssetHandle::<T>::Strong(arc)
         } else {
             panic!()

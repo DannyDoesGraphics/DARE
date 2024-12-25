@@ -12,7 +12,7 @@ pub struct Callback(pub(crate) Arc<tokio::sync::Notify>);
 pub enum RenderServerNoCallbackRequest {
     /// Requests a single frame be rendered
     Render,
-    /// Stops the server
+    /// Stops the manager
     Stop,
 }
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub struct RenderServerPacket {
     pub(super) request: RenderServerNoCallbackRequest,
 }
 
-/// Defines deltas to update the render server with the new relations between different assets
+/// Defines deltas to update the render manager with the new relations between different assets
 #[derive(Debug)]
 pub enum RenderServerAssetRelationDelta {
     Entry(becs::Entity, dare::engine::components::Mesh),

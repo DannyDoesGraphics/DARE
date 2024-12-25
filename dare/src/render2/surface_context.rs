@@ -26,7 +26,7 @@ pub struct SurfaceContext {
     pub frames_in_flight: usize,
 }
 
-pub struct SurfaceContextCreateInfo<'a> {
+pub struct SurfaceContextUpdateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
@@ -140,27 +140,30 @@ impl Drop for SurfaceContext {
     fn drop(&mut self) {
         use std::ptr;
         let mut vk_fences: Vec<vk::Fence> = Vec::new();
-        for frame in self.frames.iter() {
-            tokio::task::block_in_place(|| {
-                let rt_handle = tokio::runtime::Handle::current();
-                rt_handle.block_on(async {
-                    let locked_frame = frame.lock().await;
-                    if locked_frame
-                        .render_fence
-                        .get_fence_status()
-                        .unwrap_or(false)
-                    {
-                        vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
-                    }
+        while vk_fences.len() != self.frames.len() {
+            vk_fences.clear();
+            for frame in self.frames.iter() {
+                tokio::task::block_in_place(|| {
+                    let rt_handle = tokio::runtime::Handle::current();
+                    rt_handle.block_on(async {
+                        let locked_frame = frame.lock().await;
+                        if locked_frame
+                            .render_fence
+                            .get_fence_status()
+                            .unwrap_or(true)
+                        {
+                            vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
+                        }
+                    });
                 });
-            });
+            }
         }
         if !vk_fences.is_empty() {
             unsafe {
                 self.allocator
                     .device()
                     .get_handle()
-                    .wait_for_fences(&vk_fences, true, 10)
+                    .wait_for_fences(&vk_fences, true, u64::MAX)
                     .unwrap()
             }
         }

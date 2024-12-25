@@ -1,3 +1,10 @@
+pub mod info;
+pub mod linker;
+
+use std::any::TypeId;
+pub use info::*;
+pub use linker::*;
+
 use crate::prelude as dare;
 use crate::prelude::render::{InnerRenderServerRequest, RenderServerAssetRelationDelta};
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
@@ -8,19 +15,49 @@ use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use futures::stream::FuturesUnordered;
 use futures::{StreamExt, TryFutureExt};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use dare_containers as containers;
 
-/// Responsible for receiving and tracking with the main asset server
-#[derive(becs::Resource, Clone)]
-pub struct RenderAssetServer {
-    asset_server: dare::asset2::server::AssetServer,
+/// System is responsible for taking in deltas of the asset server and updating every
+/// [`RenderAssetManagerStorage`]
+pub fn asset_manager_system(
+    asset_server: becs::Res<dare::asset2::server::AssetServer>
+) {
+    match asset_server.flush() {
+        Ok(_) => {}
+        Err(e) => {
+            tracing::error!("Failed to flush asset server due to {e}");
+        }
+    }
+    for delta in asset_server.get_deltas() {
+        match delta {
+            dare::asset2::server::AssetServerDelta::HandleLoaded(loaded) => {}
+            dare::asset2::server::AssetServerDelta::HandleUnloaded(_) => {}
+        }
+    }
 }
 
-impl RenderAssetServer {
-    pub fn new(asset_server: dare::asset2::server::AssetServer) -> Self {
-        Self { asset_server }
+
+/// Works as a link between the [`dare::asset2::server::AssetServer`] and the render manager
+#[derive(Default, Debug, becs::Resource)]
+pub struct MeshLink {
+    link: bevy_ecs::entity::EntityHashMap<dare::engine::components::Mesh>,
+}
+
+impl Deref for MeshLink {
+    type Target = bevy_ecs::entity::EntityHashMap<dare::engine::components::Mesh>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.link
+    }
+}
+
+impl DerefMut for MeshLink {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.link
     }
 }
 
@@ -41,11 +78,10 @@ pub fn load_assets_to_gpu_in_world(
     buffer_server: super::assets::RenderAssets<
         dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
     >,
-    render_asset_server: &mut RenderAssetServer,
+    asset_server: dare::asset2::server::AssetServer,
     rt: &dare::concurrent::BevyTokioRunTime,
 ) {
     let mut futures = FuturesUnordered::new();
-    let render_asset_server = render_asset_server.asset_server.clone();
     for (surface, name) in surfaces.iter() {
         let buffers = [
             Some(surface.vertex_buffer.clone().into_untyped_handle()),
@@ -66,9 +102,9 @@ pub fn load_assets_to_gpu_in_world(
         for (index, handle) in buffers.into_iter().enumerate() {
             if let Some(handle) = handle {
                 if let Some(metadata) =
-                    render_asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle)
+                    asset_server.get_metadata::<dare::asset2::assets::Buffer>(&handle)
                 {
-                    let handle_state = render_asset_server.get_state(&handle);
+                    let handle_state = asset_server.get_state(&handle);
                     if handle_state == Some(dare::asset2::AssetState::Unloaded) {
                         let err_handle = handle.clone();
                         let succ_handle = handle.clone();
@@ -85,11 +121,11 @@ pub fn load_assets_to_gpu_in_world(
                             )
                         });
                         unsafe {
-                            render_asset_server
+                            asset_server
                                 .update_state(&*handle, dare::asset2::AssetState::Loading)
                                 .unwrap();
                         }
-                        let render_asset_server = render_asset_server.clone();
+                        let render_asset_server = asset_server.clone();
                         let fut = rt.runtime.spawn(async move {
                                 let mut allocator = render_context.inner.allocator.clone();
                                 let transfer_pool = render_context.transfer_pool();
@@ -114,6 +150,7 @@ pub fn load_assets_to_gpu_in_world(
                                         chunk_size: staging_size,
                                     }
                                 ).await.map_err(move |e| {
+                                    tracing::error!("Failed to load asset: {e}");
                                     (e, err_handle)
                                 })).map(|r| {
                                     unsafe {
@@ -147,7 +184,7 @@ pub fn load_assets_to_gpu_in_world(
                     let handle = asset.handle.clone();
                     buffer_server.insert(asset.handle.clone().id(), asset);
                     unsafe {
-                        render_asset_server
+                        asset_server
                             .update_state(
                                 &handle.into_untyped_handle(),
                                 dare::asset2::AssetState::Loaded,
@@ -158,7 +195,7 @@ pub fn load_assets_to_gpu_in_world(
                 Ok(Some(Err((e, handle)))) => {
                     tracing::error!("Error during streaming with handle {:?}: {:?}", handle, e);
                     unsafe {
-                        render_asset_server
+                        asset_server
                             .update_state(&handle, dare::asset2::AssetState::Failed)
                             .unwrap()
                     }
@@ -175,15 +212,15 @@ pub fn load_assets_to_gpu_in_world(
     });
 }
 
-/// Process incoming packets from engine server indicating the relations between each asset
+/// Process incoming packets from engine manager indicating the relations between each asset
 pub fn process_asset_relations_incoming_system(
     render_context: becs::Res<'_, dare::render::contexts::RenderContext>,
     mut buffers: becs::ResMut<
         '_,
         super::assets::RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>>,
     >,
-    mut render_asset_server: becs::ResMut<'_, RenderAssetServer>,
-    mut meshes: becs::ResMut<dare::render::resources::MeshBuffer<GPUAllocatorImpl>>,
+    mut asset_server: becs::ResMut<'_, dare::asset2::server::AssetServer>,
+    mut mesh_link: becs::ResMut<'_, MeshLink>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     ir_recv: becs::ResMut<'_, IrRecv>,
 ) {
@@ -196,19 +233,21 @@ pub fn process_asset_relations_incoming_system(
         match delta {
             InnerRenderServerRequest::Delta(delta) => match delta {
                 RenderServerAssetRelationDelta::Entry(entity, mesh) => {
-                    if !meshes.external_id_mapping.contains_key(&entity) {
-                        added_surfaces.push((mesh.surface.clone(), Some(mesh.name.clone())));
-                        let mesh = dare::engine::components::Mesh {
-                            surface: mesh.surface.downgrade(),
-                            bounding_box: mesh.bounding_box.clone(),
-                            name: mesh.name.clone(),
-                            transform: mesh.transform,
-                        };
-                        let handle = meshes.mesh_container.insertion_sort(mesh).unwrap();
-                        meshes.external_id_mapping.insert(entity, handle);
+                    let mesh = dare::engine::components::Mesh {
+                        surface: mesh.surface.downgrade(),
+                        bounding_box: mesh.bounding_box.clone(),
+                        name: mesh.name.clone(),
+                        transform: mesh.transform,
+                    };
+                    if let Some(replaced_mesh) = mesh_link.insert(entity, mesh) {
+                        tracing::warn!("Unexpected mesh replacement: {:?}", replaced_mesh);
                     }
                 }
-                RenderServerAssetRelationDelta::Remove(_) => {}
+                RenderServerAssetRelationDelta::Remove(entity) => {
+                    if mesh_link.remove(&entity).is_none() {
+                        tracing::warn!("Tried to remove mesh at entity {entity}, got None.");
+                    }
+                }
             },
         }
     }
@@ -217,7 +256,7 @@ pub fn process_asset_relations_incoming_system(
         &render_context,
         &added_surfaces,
         buffers.server(),
-        &mut render_asset_server,
+        asset_server.clone(),
         &rt,
     );
     buffers.process();
