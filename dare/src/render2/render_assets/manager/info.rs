@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use dare_containers as containers;
 use crate::prelude as dare;
+use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use anyhow::Result;
+use dagal::allocators::GPUAllocatorImpl;
+use dagal::ash::vk;
+use dare_containers as containers;
+use dare_containers::dashmap::mapref::one::{Ref, RefMut};
+use dare_containers::dashmap::DashMap;
+use std::hash::Hash;
 
-
-#[derive(Debug)]
-pub struct RenderAssetMangerInfo<T: dare::render::render_assets::traits::MetaDataRenderAsset> {
-}
-
-enum InternalLoadedState<T: dare::render::render_assets::traits::MetaDataRenderAsset> {
+enum InternalLoadedState<T: MetaDataRenderAsset> {
     /// Asset is ready on the GPU to be loaded into
     Readied(T::Loaded),
     /// Asset is entirely loaded
@@ -17,65 +16,53 @@ enum InternalLoadedState<T: dare::render::render_assets::traits::MetaDataRenderA
 }
 
 /// Manages linking between the render world <-> asset world of an individual asset type only
-pub struct RenderAssetManagerStorage<T: dare::render::render_assets::traits::MetaDataRenderAsset> {
-    /// Internal hash of all currently used slot maps
-    hash: u64,
+pub struct RenderAssetManagerStorage<T: MetaDataRenderAsset> {
+    /// Server handle
+    asset_server: dare::asset2::server::AssetServer,
     /// Mesh container to tightly pack them
     ///
     /// This is used to help us "tightly" pack
     containers: containers::slot_map::SlotMap<dare::asset2::AssetHandle<T::Asset>>,
     /// Linking asset -> internal slot
-    internal_linking: HashMap<dare::asset2::AssetHandle<T::Asset>, containers::slot::Slot<dare::asset2::AssetHandle<T::Asset>>>,
+    internal_linking: DashMap<dare::asset2::AssetHandle<T::Asset>, containers::slot::Slot<dare::asset2::AssetHandle<T::Asset>>>,
     /// Links the loaded assets to the asset handle
-    internal_loaded: HashMap<dare::asset2::AssetHandle<T::Asset>, T::Loaded>,
-    /// Effectively functions as a queue, but handles asset loading
-    asset_loaded_recv: crossbeam_channel::Receiver<InternalLoadedState<T>>,
-    asset_loaded_send: crossbeam_channel::Sender<InternalLoadedState<T>>,
+    internal_loaded: DashMap<dare::asset2::AssetHandle<T::Asset>, T::Loaded>,
 }
 
-impl<T: dare::render::render_assets::traits::MetaDataRenderAsset> RenderAssetManagerStorage<T> {
-    pub fn new() -> Self {
-        let (asset_loaded_send, asset_loaded_recv) = crossbeam_channel::unbounded();
+impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
+    pub fn new(asset_server: dare::asset2::server::AssetServer) -> Self {
         Self {
-            hash: 0,
+            asset_server,
             containers: Default::default(),
             internal_linking: Default::default(),
             internal_loaded: Default::default(),
-            asset_loaded_recv,
-            asset_loaded_send,
         }
     }
 
     /// Inserts a new handle
-    pub fn insert(&mut self, handle: dare::asset2::AssetHandle<T::Asset>) -> anyhow::Result<()> {
+    pub fn insert(&mut self, handle: dare::asset2::AssetHandle<T::Asset>) -> Result<()> {
         // ensure we only hold weak
         let handle = handle.downgrade();
         let slot = self.containers.insert(handle.clone());
         self.internal_linking.insert(handle.clone(), slot);
-        let mut hash = std::hash::DefaultHasher::default();
-        for (e, _) in self.containers.iter() {
-            e.hash(&mut hash);
-        }
-        self.hash = hash.finish();
-
         Ok(())
     }
 
     /// Removes from render storage, and if exists a loaded asset, it will return it
     pub fn remove(&mut self, handle: &dare::asset2::AssetHandle<T::Asset>) -> Option<T::Loaded> {
-        self.internal_linking.remove(handle).map(|slot| {
+        self.internal_linking.remove(handle).map(|(asset, slot)| {
             self.containers.remove(slot)
         });
-        self.internal_loaded.remove(handle)
+        self.internal_loaded.remove(handle).map(|(asset, loaded)| loaded)
     }
 
     /// Attempts to retrieve the loaded version
-    pub fn get_loaded(&self, handle: &dare::asset2::AssetHandle<T::Asset>) -> Option<&T::Loaded> {
+    pub fn get_loaded(&self, handle: &dare::asset2::AssetHandle<T::Asset>) -> Option<Ref<'_, dare::asset2::AssetHandle<<T as MetaDataRenderAsset>::Asset>, <T as MetaDataRenderAsset>::Loaded>> {
         self.internal_loaded.get(handle)
     }
 
     /// Attempts to retrieve the loaded version
-    pub fn get_mut_loaded(&mut self, handle: &dare::asset2::AssetHandle<T::Asset>) -> Option<&mut T::Loaded> {
+    pub fn get_mut_loaded(&mut self, handle: &dare::asset2::AssetHandle<T::Asset>) -> Option<RefMut<'_, dare::asset2::AssetHandle<<T as MetaDataRenderAsset>::Asset>, <T as MetaDataRenderAsset>::Loaded>> {
         if self.internal_linking.get(&handle).is_some() {
             self.internal_loaded.get_mut(handle)
         } else {
@@ -83,15 +70,32 @@ impl<T: dare::render::render_assets::traits::MetaDataRenderAsset> RenderAssetMan
         }
     }
 
-    /// If the internal asset is loaded, attempts to fetch
-    pub fn get_mut_loaded_or_load(&mut self, handle: &dare::asset2::AssetHandle<T::Asset>, load_info: T::PrepareInfo) -> Option<Result<&mut T::Loaded>> {
-        if self.internal_linking.get(&handle).is_some() {
-            Some(self.internal_loaded.get_mut(handle).map_or({
-                                                             self.internal_linking.insert(handle.clone(), T::load_asset(load_info, prepare_info, load_info));
-                                                             }, Ok)
+    /// Retrieve using the asset's handle, if it exists, it will grab the loaded, if not
+    /// it will try to load the asset in new
+    pub async fn get_mut_loaded_or_load(&mut self, handle: &dare::asset2::AssetHandle<T::Asset>, prepare_info: T::PrepareInfo, load_info: <<T::Asset as dare::asset2::Asset>::Metadata as dare::asset2::loaders::MetaDataLoad>::LoadInfo<'_>) -> Option<RefMut<'_, dare::asset2::AssetHandle<<T as MetaDataRenderAsset>::Asset>, <T as MetaDataRenderAsset>::Loaded>> {
+        if self.internal_loaded.get(handle).is_some() {
+            self.internal_loaded.get_mut(handle)
+        } else if let Some(metadata) = self.asset_server.get_metadata::<T::Asset>(&handle.clone().into_untyped_handle()) {
+            self.internal_loaded.insert(
+                handle.clone(),
+                T::load_asset(
+                    metadata,
+                    prepare_info,
+                    load_info
+                ).await.ok()?
+            );
+            self.internal_loaded.get_mut(handle)
         } else {
+            // Asset doesn't exist in the asset server???
             None
         }
     }
+}
 
+impl RenderAssetManagerStorage<dare::render::render_assets::components::buffer::RenderBuffer<GPUAllocatorImpl>> {
+    pub fn get_bda(&self, handle: &dare::asset2::AssetHandle<dare::asset2::assets::Buffer>) -> Option<vk::DeviceAddress> {
+        self.internal_loaded.get(handle).map(|slot| {
+            slot.buffer.address()
+        })
+    }
 }
