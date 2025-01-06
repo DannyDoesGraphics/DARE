@@ -8,7 +8,6 @@ use crate::prelude as dare;
 pub fn asset_manager_system(rt: Res<dare::concurrent::BevyTokioRunTime>, render_context: Res<dare::render::contexts::RenderContext>,mut buffer_storage: ResMut<super::RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>>>) {
 
     rt.runtime.block_on(async move {
-        let local_set = tokio::task::LocalSet::new();
         for delta in buffer_storage.asset_server.get_deltas() {
             match delta {
                 AssetServerDelta::HandleCreated(untyped_handle) => {}
@@ -27,12 +26,12 @@ pub fn asset_manager_system(rt: Res<dare::concurrent::BevyTokioRunTime>, render_
                                             allocator: render_context.inner.allocator.clone(),
                                             handle,
                                             transfer_pool: render_context.transfer_pool(),
-                                            usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::ACCELERATION_STRUCTURE_STORAGE_KHR | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                                            usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                                             location: MemoryLocation::GpuOnly,
                                             name: Some(buffer_metadata.name),
                                         }, dare::asset2::assets::BufferStreamInfo {
                                             chunk_size: render_context.transfer_pool().cpu_staging_size() as usize,
-                                        }, &local_set);
+                                        });
                                     }
                                 }
                             }
@@ -53,7 +52,6 @@ pub fn asset_manager_system(rt: Res<dare::concurrent::BevyTokioRunTime>, render_
             }
         }
         // finish awaiting load tasks
-        local_set.await;
         buffer_storage.process_queue();
     });
 }

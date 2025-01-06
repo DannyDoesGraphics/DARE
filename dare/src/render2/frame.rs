@@ -8,7 +8,7 @@ use dagal::traits::AsRaw;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
@@ -52,8 +52,9 @@ impl Frame {
         let draw_image =
             dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                 device: surface_context.allocator.device(),
+                queue_family: Some(present_queue.get_family_index()),
                 allocator: &mut allocator,
-                location: dagal::allocators::MemoryLocation::GpuOnly,
+                location: MemoryLocation::GpuOnly,
                 image_ci: vk::ImageCreateInfo {
                     s_type: vk::StructureType::IMAGE_CREATE_INFO,
                     p_next: ptr::null(),
@@ -109,6 +110,7 @@ impl Frame {
         let depth_image =
             dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                 device: surface_context.allocator.device(),
+                queue_family: Some(present_queue.get_family_index()),
                 allocator: &mut allocator,
                 location: dagal::allocators::MemoryLocation::GpuOnly,
                 image_ci: vk::ImageCreateInfo {
@@ -181,7 +183,7 @@ impl Frame {
         let command_buffer =
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
         Ok(Frame {
-            draw_image,
+            draw_image: draw_image.into(),
             draw_image_view,
             depth_image,
             depth_image_view,

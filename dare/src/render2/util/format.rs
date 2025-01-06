@@ -1,4 +1,6 @@
 use futures_core::stream::BoxStream;
+use dagal::ash::vk;
+use crate::render2::util::WrappingMode::MirrorClampToEdge;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Format {
@@ -169,4 +171,74 @@ pub fn handle_cast_stream(
     };
 
     stream
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+pub enum WrappingMode {
+    Repeat = 0,
+    MirroredRepeat = 1,
+    ClampToEdge = 2,
+    ClampToBorder = 3,
+    MirrorClampToEdge = 4,
+}
+impl Default for WrappingMode {
+    fn default() -> Self {
+        Self::Repeat
+    }
+}
+impl WrappingMode {
+    pub fn as_vk(self) -> vk::SamplerAddressMode {
+        match self {
+            WrappingMode::Repeat => vk::SamplerAddressMode::REPEAT,
+            WrappingMode::MirroredRepeat => vk::SamplerAddressMode::MIRRORED_REPEAT,
+            WrappingMode::ClampToEdge => vk::SamplerAddressMode::CLAMP_TO_EDGE,
+            WrappingMode::ClampToBorder => vk::SamplerAddressMode::CLAMP_TO_BORDER,
+            MirrorClampToEdge => vk::SamplerAddressMode::MIRROR_CLAMP_TO_EDGE,
+        }
+    }
+}
+impl From<gltf::json::texture::WrappingMode> for WrappingMode {
+    fn from(value: gltf::texture::WrappingMode) -> Self {
+        match value {
+            gltf::texture::WrappingMode::ClampToEdge => Self::ClampToEdge,
+            gltf::texture::WrappingMode::MirroredRepeat => Self::MirroredRepeat,
+            gltf::texture::WrappingMode::Repeat => Self::Repeat,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ImageFilter {
+    Nearest = 0,
+    Linear = 1,
+}
+impl Default for ImageFilter {
+    fn default() -> Self {
+        Self::Nearest
+    }
+}
+impl ImageFilter {
+    pub fn as_vk(self) -> vk::Filter {
+        match self {
+            ImageFilter::Nearest => vk::Filter::NEAREST,
+            ImageFilter::Linear => vk::Filter::LINEAR,
+        }
+    }
+}
+impl From<gltf::json::texture::MagFilter> for ImageFilter {
+    fn from(value: gltf::texture::MagFilter) -> Self {
+        match value {
+            gltf::texture::MagFilter::Linear => Self::Linear,
+            gltf::texture::MagFilter::Nearest => Self::Nearest,
+        }
+    }
+}
+impl From<gltf::json::texture::MinFilter> for ImageFilter {
+    fn from(value: gltf::texture::MinFilter) -> Self {
+        match value {
+            gltf::texture::MinFilter::Linear => Self::Linear,
+            gltf::texture::MinFilter::Nearest => Self::Nearest,
+            _ => Self::Nearest,
+        }
+    }
 }

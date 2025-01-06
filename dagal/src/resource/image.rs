@@ -18,6 +18,8 @@ pub struct Image<A: Allocator> {
     format: vk::Format,
     extent: vk::Extent3D,
     mip_levels: u32,
+    queue_family: Option<u32>,
+    layout: vk::ImageLayout,
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
@@ -47,6 +49,8 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     FromVkNotManaged {
         device: crate::device::LogicalDevice,
         image: vk::Image,
+        queue_family: Option<u32>,
+        layout: vk::ImageLayout,
         format: vk::Format,
         extent: vk::Extent3D,
         mip_levels: u32,
@@ -57,12 +61,14 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image without any allocation made
     NewUnallocated {
         device: crate::device::LogicalDevice,
+        queue_family: Option<u32>,
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
     /// Create a new image that has allocated memory
     NewAllocated {
         device: crate::device::LogicalDevice,
+        queue_family: Option<u32>,
         allocator: &'a mut ArcAllocator<A>,
         location: crate::allocators::MemoryLocation,
         image_ci: vk::ImageCreateInfo<'a>,
@@ -93,12 +99,14 @@ impl<A: Allocator> Image<A> {
 
     /// Transitions an image from one layout to another layout
     pub fn transition(
-        &self,
+        &mut self,
         cmd: &crate::command::CommandBufferRecording,
         queue: &crate::device::Queue,
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
+        self.layout = new_layout;
+        self.queue_family = Some(queue.get_family_index());
         unsafe { Self::raw_transition(*self.as_raw(), cmd, queue, current_layout, new_layout) }
     }
 
@@ -247,6 +255,41 @@ impl<A: Allocator> Image<A> {
             )
         }
     }
+
+    pub fn transition_ownership(&mut self, new_queue: &crate::device::Queue) -> Result<()> {
+        if self.queue_family.map(|old_queue| old_queue == new_queue.get_family_index()).unwrap_or(true) {
+            return Ok(())
+        }
+        unsafe {
+            let image_barrier = vk::ImageMemoryBarrier2 {
+                s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                p_next: ptr::null(),
+                src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                dst_access_mask: vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ,
+                old_layout: self.layout,
+                new_layout: self.layout,
+                src_queue_family_index: self.queue_family.unwrap_or(vk::QUEUE_FAMILY_IGNORED),
+                dst_queue_family_index: new_queue.get_family_index(),
+                image: self.handle,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: if self.layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
+                        vk::ImageAspectFlags::DEPTH
+                    } else {
+                        vk::ImageAspectFlags::COLOR
+                    },
+                    base_mip_level: 0,
+                    level_count: vk::REMAINING_MIP_LEVELS,
+                    base_array_layer: 0,
+                    layer_count: vk::REMAINING_ARRAY_LAYERS,
+                },
+                _marker: Default::default(),
+            };
+        }
+        self.queue_family = Some(new_queue.get_family_index());
+        Ok(())
+    }
 }
 
 impl<A: Allocator> Image<A> {
@@ -363,6 +406,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
                 device,
+                queue_family,
+                layout,
                 image,
                 usage_flags,
                 image_type,
@@ -377,6 +422,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                     format,
                     extent,
                     mip_levels,
+                    queue_family,
+                    layout,
                     usage_flags,
                     image_type,
                     allocation: None,
@@ -387,6 +434,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
             }
             ImageCreateInfo::NewUnallocated {
                 device,
+                queue_family,
                 image_ci,
                 name,
             } => {
@@ -399,6 +447,8 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
                     format: image_ci.format,
                     extent: image_ci.extent,
                     mip_levels: image_ci.mip_levels,
+                    queue_family,
+                    layout: image_ci.initial_layout,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
                     device,
@@ -411,6 +461,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
             }
             ImageCreateInfo::NewAllocated {
                 device,
+                queue_family,
                 allocator,
                 location,
                 image_ci,
@@ -418,6 +469,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
             } => {
                 let mut image = Self::new(ImageCreateInfo::NewUnallocated {
                     device,
+                    queue_family,
                     image_ci,
                     name,
                 })?;

@@ -10,7 +10,7 @@ use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
 use crossbeam_channel::SendError;
-use futures::TryFutureExt;
+use futures::{FutureExt, TryFutureExt};
 use dare_containers::prelude::Slot;
 use crate::asset2::prelude::AssetHandle;
 use crate::asset2::server::AssetServerDelta;
@@ -213,7 +213,6 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
         handle: &RenderAssetHandle<T>,
         prepare_info: T::PrepareInfo,
         load_info: <<T::Asset as dare::asset2::Asset>::Metadata as dare::asset2::loaders::MetaDataLoad>::LoadInfo<'static>,
-        local_set: &tokio::task::LocalSet,
     ) {
         // Extract `internal_loaded` check into its own scope
         if self.internal_loaded.get(handle).is_some() {
@@ -242,21 +241,13 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
         let asset_server = self.asset_server.clone();
 
         // Spawn the async task
-        local_set.spawn_local(async move {
-            let loaded = T::load_asset(metadata, prepare_info, load_info)
-                .and_then({
-                    let asset_server = asset_server.clone();
-                    let asset_id_untyped = asset_handle.clone().into_untyped_handle();
-                    move |loaded| async move {
-                        unsafe {
-                            asset_server
-                                .update_state(&*asset_id_untyped, dare::asset2::AssetState::Loaded)
-                                .unwrap();
-                        }
-                        Ok(loaded)
-                    }
-                })
-                .await;
+        tokio::task::spawn(async move {
+            let loaded = T::load_asset(metadata, prepare_info, load_info).await;
+            unsafe {
+                asset_server
+                    .update_state(&*asset_handle.clone().into_untyped_handle(), dare::asset2::AssetState::Loaded)
+                    .unwrap();
+            }
 
             // Handle the result of the loading process
             match loaded {

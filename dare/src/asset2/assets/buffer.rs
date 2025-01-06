@@ -41,7 +41,7 @@ pub struct BufferMetaData {
     /// Number of elements
     pub element_count: usize,
     /// Name of the buffer
-    #[derivative(Debug="ignore")]
+    #[derivative(Hash="ignore")]
     pub name: String,
 }
 unsafe impl Send for BufferMetaData {}

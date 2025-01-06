@@ -10,7 +10,6 @@ use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dare::asset2 as asset;
 use gltf;
 use gltf::accessor::DataType;
-use gltf::buffer::Source;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -63,7 +62,7 @@ impl GLTFLoader {
             .buffers()
             .map(|buffer| {
                 let location: asset::MetaDataLocation = match buffer.source() {
-                    Source::Bin => {
+                    gltf::buffer::Source::Bin => {
                         if let Some(blob) = blob.clone() {
                             asset::MetaDataLocation::Memory(blob)
                         } else {
@@ -72,7 +71,7 @@ impl GLTFLoader {
                             ));
                         }
                     }
-                    Source::Uri(uri) => {
+                    gltf::buffer::Source::Uri(uri) => {
                         if !uri.starts_with("data") {
                             let mut path = path.parent().unwrap().to_path_buf();
                             path.push(std::path::PathBuf::from(uri));
@@ -154,12 +153,62 @@ impl GLTFLoader {
                 }
             }
         }
+        let textures: Vec<engine::components::Texture> = gltf
+            .document
+            .textures()
+            .enumerate()
+            .map(|(index, texture)| {
+                let location = match texture.source().source() {
+                    gltf::image::Source::Uri {uri, .. } => {
+                        dare::asset2::MetaDataLocation::FilePath(
+                            std::path::PathBuf::from(uri)
+                        )
+                    }
+                    _ => unimplemented!(),
+                };
+                let sampler = dare::engine::components::Sampler {
+                    wrapping_mode: (
+                        dare::render::util::WrappingMode::from(
+                            texture.sampler().wrap_s()
+                        ),
+                        dare::render::util::WrappingMode::from(
+                            texture.sampler().wrap_s()
+                        )
+                    ),
+                    min_filter: dare::render::util::ImageFilter::from(
+                        texture.sampler().min_filter().unwrap_or(
+                            gltf::texture::MinFilter::Nearest
+                        )
+                    ),
+                    mag_filter: dare::render::util::ImageFilter::from(
+                        texture.sampler().mag_filter().unwrap_or(
+                            gltf::texture::MagFilter::Nearest
+                        )
+                    ),
+                };
+                let texture = dare::asset2::assets::ImageMetaData {
+                    location,
+                    name: texture.name().map(|n| n.to_string()).unwrap_or(format!("Texture {}", texture.index()).to_string()),
+                };
+                let asset_handle: dare::asset2::AssetHandle<
+                    dare::asset2::assets::Image
+                > = asset_server.entry(texture);
+                engine::components::Texture {
+                    asset_handle,
+                    sampler,
+                }
+            }).collect::<Vec<engine::components::Texture>>();
+        commands.spawn_batch(
+            textures.into_iter()
+                .map(|t| {
+                    (t)
+                })
+        );
         let mut mesh_count: usize = 0;
         let meshes: Vec<engine::components::Mesh> = meshes
             .into_iter()
             .flat_map(|(mesh, transform)| {
                 let mut surfaces = Vec::new();
-                let mut primitive_count: usize = 0;
                 for primitive in mesh.primitives() {
                     // retrieve all required prims
                     //commands.spawn();
@@ -356,7 +405,7 @@ impl GLTFLoader {
                         .name()
                         .map(|name| name.to_string())
                         .unwrap_or(format!("Mesh {mesh_count}"));
-                    let primitive_name = format!("{mesh_name} primitive {primitive_count}");
+                    let primitive_name = format!("{mesh_name} primitive {mesh_count}");
                     surfaces.push(engine::components::Mesh {
                         surface,
                         bounding_box: bounding_box.unwrap_or(dare::render::components::bounding_box::BoundingBox::new(
@@ -370,15 +419,14 @@ impl GLTFLoader {
                             translation,
                         },
                     });
-                    primitive_count += 1;
+                    mesh_count += 1;
                 }
-                mesh_count += 1;
                 Ok(surfaces)
             })
             .flatten()
             .collect::<Vec<engine::components::Mesh>>();
-
         commands.spawn_batch(meshes.clone().into_iter());
+        // same idea, but spawn it like +5 above
         Ok(())
     }
 }

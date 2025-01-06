@@ -1,6 +1,7 @@
 use crate::prelude as dare;
 use dare::asset2 as asset;
 use std::fmt::Debug;
+use futures_core::future::BoxFuture;
 
 pub trait MetaDataRenderAsset: 'static {
     type Loaded: Send;
@@ -14,9 +15,9 @@ pub trait MetaDataRenderAsset: 'static {
     ) -> anyhow::Result<Self::Loaded>;
 
     /// Given the readied asset, load into it
-    async fn load_asset(
+    fn load_asset<'a>(
         metadata: <Self::Asset as asset::Asset>::Metadata,
         prepare_info: Self::PrepareInfo,
         load_info: <<Self::Asset as asset::Asset>::Metadata as asset::loaders::MetaDataLoad>::LoadInfo<'_>,
-    ) -> anyhow::Result<Self::Loaded>;
+    ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>>;
 }

@@ -69,6 +69,8 @@ impl Swapchain {
                 crate::resource::Image::new(crate::resource::ImageCreateInfo::FromVkNotManaged {
                     device: self.device.clone(),
                     image,
+                    queue_family: None,
+                    layout: vk::ImageLayout::UNDEFINED,
                     format: self.format,
                     extent: vk::Extent3D {
                         width: self.extent.width,

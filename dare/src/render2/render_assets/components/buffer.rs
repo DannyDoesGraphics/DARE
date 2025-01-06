@@ -7,10 +7,9 @@ use bevy_ecs::prelude::Component;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use dagal::traits::AsRaw;
 use dare::asset2 as asset;
 use futures::StreamExt;
-use std::marker::PhantomData;
+use futures_core::future::BoxFuture;
 use std::ops::{Deref, DerefMut};
 
 /// Describes a buffer used for rendering
@@ -52,59 +51,58 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
     ) -> anyhow::Result<Self::Loaded> {
         todo!()
     }
-
-    async fn load_asset<'a>(
+    fn load_asset<'a>(
         metadata: <Self::Asset as asset::Asset>::Metadata,
         mut prepare_info: Self::PrepareInfo,
         load_info: <<Self::Asset as asset::Asset>::Metadata as asset::loaders::MetaDataLoad>::LoadInfo<'a>,
-    ) -> anyhow::Result<Self::Loaded>
-    where
-        A: 'a,
+    ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>>
     {
-        let frame_size: usize = load_info
-            .chunk_size
-            .min(prepare_info.transfer_pool.gpu_staging_size() as usize);
-        let destination =
-            dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                name: prepare_info.name,
-                device: prepare_info.allocator.device().clone(),
-                allocator: &mut prepare_info.allocator,
-                size: (metadata.element_count * metadata.format.size()) as vk::DeviceSize,
-                memory_type: prepare_info.location,
-                usage_flags: vk::BufferUsageFlags::TRANSFER_DST | prepare_info.usage_flags,
-            })?;
-        let stream = metadata
-            .stream(asset::assets::BufferStreamInfo {
-                chunk_size: load_info.chunk_size,
-            })
-            .await?;
-        let transfer_pool = prepare_info.transfer_pool.clone();
-        let staging_buffer =
-            dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                device: prepare_info.allocator.get_device().clone(),
-                name: Some(String::from("Staging Buffer")),
-                allocator: &mut prepare_info.allocator,
-                size: frame_size as vk::DeviceSize,
-                memory_type: MemoryLocation::CpuToGpu,
-                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
-                    | vk::BufferUsageFlags::TRANSFER_DST,
-            })?;
-        let mut stream =
-            gpu_buffer_stream(staging_buffer, destination, transfer_pool, stream).boxed();
-        while let Some(res) = stream.next().await {
-            match res {
-                Some((staging, dest)) => {
-                    drop(staging);
-                    return Ok(Self {
-                        buffer: dest,
-                        handle: prepare_info.handle,
-                    });
-                }
-                None => {
-                    // still processing
+        Box::pin(async move {
+            let frame_size: usize = load_info
+                .chunk_size
+                .min(prepare_info.transfer_pool.gpu_staging_size() as usize);
+            let destination =
+                dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    name: prepare_info.name,
+                    device: prepare_info.allocator.device().clone(),
+                    allocator: &mut prepare_info.allocator,
+                    size: (metadata.element_count * metadata.format.size()) as vk::DeviceSize,
+                    memory_type: prepare_info.location,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_DST | prepare_info.usage_flags,
+                })?;
+            let stream = metadata
+                .stream(asset::assets::BufferStreamInfo {
+                    chunk_size: load_info.chunk_size,
+                })
+                .await?;
+            let transfer_pool = prepare_info.transfer_pool.clone();
+            let staging_buffer =
+                dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: prepare_info.allocator.get_device().clone(),
+                    name: Some(String::from("Staging Buffer")),
+                    allocator: &mut prepare_info.allocator,
+                    size: frame_size as vk::DeviceSize,
+                    memory_type: MemoryLocation::CpuToGpu,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST,
+                })?;
+            let mut stream =
+                gpu_buffer_stream(staging_buffer, destination, transfer_pool, stream).boxed();
+            while let Some(res) = stream.next().await {
+                match res {
+                    Some((staging, dest)) => {
+                        drop(staging);
+                        return Ok(Self {
+                            buffer: dest,
+                            handle: prepare_info.handle,
+                        });
+                    }
+                    None => {
+                        // still processing
+                    }
                 }
             }
-        }
-        unreachable!();
+            unreachable!();
+        })
     }
 }

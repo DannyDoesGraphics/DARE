@@ -1,4 +1,4 @@
-use std::future::{Future, IntoFuture};
+use std::future::Future;
 use std::pin::Pin;
 use std::ptr;
 use std::task::{Context, Poll};
@@ -126,7 +126,7 @@ impl<'a> Future for FenceWait<'a> {
     /// A fence's future can be considered ready if:
     /// - The fence has been signaled
     /// - The fence timed out (u64::MAX)
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.fence.get_fence_status() {
             Ok(status) => match status {
                 true => Poll::Ready(Ok(())),

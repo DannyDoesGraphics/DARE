@@ -21,16 +21,16 @@ pub struct PipelineInputAssemblyStateCreateInfo {
     pub primitive_restart_enable: bool,
 }
 
-impl<'a> Into<vk::PipelineInputAssemblyStateCreateInfo<'a>>
-    for PipelineInputAssemblyStateCreateInfo
+impl<'a> From<PipelineInputAssemblyStateCreateInfo>
+    for vk::PipelineInputAssemblyStateCreateInfo<'a>
 {
-    fn into(self) -> vk::PipelineInputAssemblyStateCreateInfo<'a> {
+    fn from(val: PipelineInputAssemblyStateCreateInfo) -> Self {
         vk::PipelineInputAssemblyStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             p_next: ptr::null(),
-            flags: self.flags,
-            topology: self.topology,
-            primitive_restart_enable: self.primitive_restart_enable as u32,
+            flags: val.flags,
+            topology: val.topology,
+            primitive_restart_enable: val.primitive_restart_enable as u32,
             _marker: Default::default(),
         }
     }

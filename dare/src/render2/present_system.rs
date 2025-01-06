@@ -21,7 +21,7 @@ pub fn present_system_begin(
     frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
-    surfaces: Query<'_, '_, (becs::Entity, &dare::engine::components::Surface, &render::components::BoundingBox, &dare::physics::components::Transform)>,
+    surfaces: Query<'_, '_, (becs::Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &render::components::BoundingBox, &dare::physics::components::Transform)>,
     buffers: becs::Res<
         '_,
         render::render_assets::storage::RenderAssetManagerStorage<
@@ -33,13 +33,13 @@ pub fn present_system_begin(
     rt.clone().runtime.block_on(async {
         let frame_count = frame_count.clone();
         let render_context = render_context.clone();
-        let surface_guard = render_context
+        let mut surface_guard = render_context
             .inner
             .window_context
             .surface_context
-            .read()
+            .write()
             .unwrap();
-        let surface = surface_guard.as_ref();
+        let surface = surface_guard.as_mut();
         if surface.is_none() {
             return;
         }
@@ -169,8 +169,8 @@ pub async fn present_system_end(
 
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
-    let swapchain_image: &dagal::resource::Image<GPUAllocatorImpl> =
-        &surface_context.swapchain_images[swapchain_image_index as usize];
+    let mut swapchain_image: std::sync::MutexGuard<dagal::resource::Image<GPUAllocatorImpl>> =
+        surface_context.swapchain_images[swapchain_image_index as usize].lock().unwrap();
     {
         let cmd_recording = match &frame.command_buffer {
             CommandBufferState::Recording(r) => r,
@@ -196,6 +196,7 @@ pub async fn present_system_end(
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
         );
+        drop(swapchain_image);
     }
     {
         let submit_info = {

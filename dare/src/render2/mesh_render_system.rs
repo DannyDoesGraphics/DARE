@@ -28,9 +28,8 @@ impl<'a> SurfaceRender<'a> {
 }
 
 pub fn build_instancing_data(
-    surfaces: &[&dare::engine::components::Surface],
-    materials: &[Option<&dare::engine::components::Material>],
-    transformations: &[glam::Mat4],
+    view_proj: glam::Mat4,
+    query: &Query<'_, '_, (Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &dare::render::components::BoundingBox, &dare::physics::components::Transform)>,
     buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
         dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>
     >
@@ -41,14 +40,32 @@ pub fn build_instancing_data(
     Vec<dare::render::c::InstancedSurfacesInfo>,
     Vec<[f32; 16]>
 ) {
-    assert_eq!(surfaces.len(), materials.len());
-    assert_eq!(transformations.len(), surfaces.len());
-
     // Acquire a tightly packed map
+    let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> = HashMap::with_capacity(query.iter().len());
     let mut unique_surfaces: Vec<dare::render::c::CSurface> = Vec::new();
     let mut asset_unique_surfaces: Vec<dare::engine::components::Surface> = Vec::new();
-    let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> = HashMap::with_capacity(surfaces.len());
-    for (index, surface) in surfaces.iter().enumerate() {
+
+    let mut material_map: HashMap<dare::engine::components::Material, usize> = HashMap::with_capacity(surface_map.len());
+    let mut unique_materials: Vec<dare::render::c::CMaterial> = vec![
+        dare::render::c::CMaterial {
+            bit_flag: 0,
+            _padding: 0,
+            color_factor: glam::Vec4::ONE.to_array(),
+            albedo_texture_id: 0,
+            albedo_sampler_id: 0,
+            normal_texture_id: 0,
+            normal_sampler_id: 0,
+        }
+    ];
+    for (index,(entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+        let c_surface_success: bool = false;
+        // check if it even exists in frame
+        if !bounding_box.visible_in_frustum(
+            transform.get_transform_matrix(),
+            view_proj
+        ) {
+            continue;
+        }
         surface_map.entry((*surface).clone()).or_insert_with(|| {
             let id: usize = unique_surfaces.len();
             if let Some(c_surface) = dare::render::c::CSurface::from_surface(buffers, (*surface).clone()) {
@@ -59,23 +76,17 @@ pub fn build_instancing_data(
                 None
             }
         });
-    }
-
-    let mut unique_materials: Vec<dare::render::c::CMaterial> = Vec::new();
-    let mut material_map: HashMap<dare::engine::components::Material, usize> = HashMap::with_capacity(materials.len());
-    for (index, material) in materials.iter().enumerate() {
-        // If surface could not resolve, we skip
-        if surface_map.get(surfaces[index]).map(|index| index.is_none()).unwrap_or(true) {
+        // skip if we could not process the surface
+        if !c_surface_success {
             continue;
         }
-        // Material default defined here
-        material_map.entry((*material).cloned().unwrap_or({
+        material_map.entry(material.cloned().unwrap_or({
             dare::engine::components::Material {
                 albedo_factor: glam::Vec4::ONE,
             }
         })).or_insert_with(|| {
             let id: usize = unique_materials.len();
-            if let Some(material) = (*material).cloned() {
+            if let Some(material) = material.cloned() {
                 match dare::render::c::CMaterial::from_material(material) {
                     None => {
                         0
@@ -86,26 +97,16 @@ pub fn build_instancing_data(
                     }
                 }
             } else {
-                // No default material exists, make one
-                unique_materials.push(dare::render::c::CMaterial {
-                    bit_flag: 0,
-                    _padding: 0,
-                    color_factor: glam::Vec4::ONE.to_array(),
-                    albedo_texture_id: 0,
-                    albedo_sampler_id: 0,
-                    normal_texture_id: 0,
-                    normal_sampler_id: 0,
-                });
-                id
+                0
             }
         });
     }
 
     /// (surface_index, material_index) -> transforms
     let mut instance_groups: HashMap<(u64, u64), Vec<glam::Mat4>> = HashMap::new();
-    for ((surface, material), transformation) in surfaces.iter().zip(materials.iter()).zip(transformations.iter()) {
+    for (index,(entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
         // ignore surfaces which failed to resolve
-        if surface_map.get(*surface).map(|idx| idx.is_none()).unwrap_or(true) {
+        if surface_map.get(surface).map(|idx| idx.is_none()).unwrap_or(true) {
             continue;
         }
 
@@ -114,8 +115,8 @@ pub fn build_instancing_data(
             surface_map.get(surface).unwrap().unwrap() as u64,
             // default to 0 for the default material
             material.map(|material| *material_map.get(material).unwrap() as u64).unwrap_or(0),
-            )).or_insert_with(Vec::new)
-            .push(transformation.clone());
+        )).or_insert_with(Vec::new)
+                       .push(transform.get_transform_matrix());
     }
 
     // turn all transformations into one global buffer
@@ -157,7 +158,7 @@ pub async fn mesh_render(
     render_context: super::render_context::RenderContext,
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
-    surfaces: Query<'_, '_, (Entity, &dare::engine::components::Surface, &dare::render::components::BoundingBox, &dare::physics::components::Transform)>,
+    surfaces: Query<'_, '_, (Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &dare::render::components::BoundingBox, &dare::physics::components::Transform)>,
     buffers: Res<
         '_,
         dare::render::render_assets::storage::RenderAssetManagerStorage<
@@ -174,22 +175,12 @@ pub async fn mesh_render(
             }
             CommandBufferState::Recording(recording) => {
                 let (asset_surfaces, surfaces, materials, instancing_information, transforms) = {
-                    let mut sfs: Vec<&dare::engine::components::Surface> = Vec::new();
-                    let mut materials: Vec<Option<&dare::engine::components::Material>> = Vec::new();
-                    let mut transforms: Vec<glam::Mat4> = Vec::new();
-                    for (_, surface, _, transform) in surfaces.iter() {
-                        sfs.push(
-                            surface
-                        );
-                        materials.push(None);
-                        transforms.push(
-                            transform.get_transform_matrix()
-                        );
-                    }
+                    let view_proj = camera.get_projection(
+                        frame.image_extent.width as f32 / frame.image_extent.height as f32
+                    ) * camera.get_view_matrix();
                     build_instancing_data(
-                        &sfs,
-                        &materials,
-                        &transforms,
+                        view_proj,
+                        &surfaces,
                         &buffers
                     )
                 };
@@ -309,6 +300,7 @@ pub async fn mesh_render(
                         height: frame.draw_image.extent().height,
                     },
                 };
+
                 unsafe {
                     render_context.inner.device.get_handle().cmd_set_scissor(
                         recording.handle(),
@@ -343,6 +335,7 @@ pub async fn mesh_render(
                 };
                 for (index, instancing) in instancing_information.iter().enumerate()
                 {
+                    let surface_asset = &asset_surfaces[instancing.surface as usize];
                     let index_buffer = buffers.get_loaded_from_asset_handle(&asset_surfaces[instancing.surface as usize].index_buffer).unwrap();
                     // push new constants
                     push_constant.instanced_surface_info = frame.instanced_buffer.get_buffer().address() + instanced_surfaces_bytes_offset[index] as vk::DeviceAddress;
@@ -380,11 +373,11 @@ pub async fn mesh_render(
                                 .get_handle()
                                 .cmd_draw_indexed_indirect(
                                     recording.handle(),
-                                    unsafe { *frame.indirect_buffer.get_buffer().as_raw() },
-                                    0,
+                                    *frame.indirect_buffer.get_buffer().as_raw(),
+                                    (index * size_of::<vk::DrawIndexedIndirectCommand>()) as vk::DeviceSize,
                                     1,
                                     size_of::<vk::DrawIndexedIndirectCommand>() as u32,
-                                ); // tightly packed :)
+                                );
                         }
                 }
                 dynamic_rendering.end_rendering();
