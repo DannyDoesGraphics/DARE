@@ -24,8 +24,8 @@ pub enum Either<A, B> {
 impl<A: Clone, B: Clone> Clone for Either<A, B> {
     fn clone(&self) -> Self {
         match self {
-            Either::Left(A) => Either::Left(A.clone()),
-            Either::Right(B) => Either::Right(B.clone()),
+            Either::Left(a) => Either::Left(a.clone()),
+            Either::Right(b) => Either::Right(b.clone()),
         }
     }
 }
