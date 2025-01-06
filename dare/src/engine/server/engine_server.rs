@@ -3,6 +3,7 @@ use crate::render2::server::IrSend;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::IntoSystemConfigs;
+use crate::util::entity_linker::ComponentsLinkerSender;
 
 #[derive(Debug)]
 pub struct EngineServer {
@@ -13,7 +14,13 @@ unsafe impl Send for EngineServer {}
 unsafe impl Sync for EngineServer {}
 
 impl EngineServer {
-    pub fn new(asset_server: dare::asset2::server::AssetServer, send: IrSend) -> Result<Self> {
+    pub fn new(
+        asset_server: dare::asset2::server::AssetServer,
+        send: IrSend,
+        surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
+        transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
+        bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
+    ) -> Result<Self> {
         let rt = dare::concurrent::BevyTokioRunTime::default();
 
         let mut world = becs::World::new();
@@ -23,14 +30,15 @@ impl EngineServer {
 
         let mut init_schedule = becs::Schedule::default();
         init_schedule.add_systems(super::super::init_assets::init_assets);
-        init_schedule.add_systems(
-            super::super::systems::engine_asset_sync_system
-                .after(super::super::init_assets::init_assets),
-        );
+        surface_link_send.attach_to_world(&mut init_schedule);
+        transform_link_send.attach_to_world(&mut init_schedule);
+        bb_link_send.attach_to_world(&mut init_schedule);
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();
-        scheduler.add_systems(super::super::systems::engine_asset_sync_system);
+        surface_link_send.attach_to_world(&mut scheduler);
+        transform_link_send.attach_to_world(&mut scheduler);
+        bb_link_send.attach_to_world(&mut scheduler);
 
         let (send, mut recv) = tokio::sync::mpsc::channel::<()>(32);
         let thread = rt.runtime.spawn_blocking(move || {

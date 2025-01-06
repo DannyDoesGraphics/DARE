@@ -28,10 +28,10 @@ pub trait MetaDataStreamable: Unpin + Debug + Send {
 /// Defines an asset s.t. it automatically handles the streaming + loading
 pub trait MetaDataLoad: Unpin + Debug + Send {
     /// Type of asset when loaded
-    type Loaded;
+    type Loaded: Send;
 
     /// Load information
-    type LoadInfo<'a>
+    type LoadInfo<'a>: Send
     where
         Self: 'a;
 

@@ -6,7 +6,6 @@ pub fn render_server_shutdown_system(
     render_context: becs::Res<'_, dare::render::contexts::RenderContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
 ) {
-    println!("Shutting down!");
     unsafe {
         render_context
             .inner

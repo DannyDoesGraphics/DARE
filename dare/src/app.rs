@@ -17,6 +17,12 @@ pub struct App {
     configuration: render::create_infos::RenderContextConfiguration,
     last_position: Option<glam::Vec2>,
     last_dt: std::time::Instant,
+    surface_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Surface>,
+    surface_link_send: dare::util::entity_linker::ComponentsLinkerSender<engine::components::Surface>,
+    transform_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
+    transform_link_send: dare::util::entity_linker::ComponentsLinkerSender<dare::physics::components::Transform>,
+    bb_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<render::components::BoundingBox>,
+    bb_link_send: dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -44,6 +50,9 @@ impl winit::application::ApplicationHandler for App {
                             window: window.clone(),
                             configuration: config,
                         },
+                        self.surface_link_recv.clone(),
+                        self.transform_link_recv.clone(),
+                        self.bb_link_recv.clone(),
                     );
                     // Call the synchronous blocking send function
                     render_server.update_surface(&window).unwrap();
@@ -59,6 +68,9 @@ impl winit::application::ApplicationHandler for App {
                 engine::server::EngineServer::new(
                     self.render_server.as_ref().cloned().unwrap().asset_server(),
                     self.render_server.as_ref().unwrap().get_inner_send(),
+                    &self.surface_link_send,
+                    &self.transform_link_send,
+                    &self.bb_link_send,
                 )
                 .unwrap(),
             );
@@ -197,6 +209,9 @@ impl Drop for App {
 
 impl App {
     pub fn new(configuration: render::create_infos::RenderContextConfiguration) -> Result<Self> {
+        let (surface_link_send, surface_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
+        let (transform_link_send, transform_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
+        let (bb_link_send, bb_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
         Ok(Self {
             window: None,
             engine_server: None,
@@ -204,6 +219,12 @@ impl App {
             configuration,
             last_position: None,
             last_dt: std::time::Instant::now(),
+            surface_link_recv,
+            surface_link_send,
+            transform_link_recv,
+            transform_link_send,
+            bb_link_recv,
+            bb_link_send,
         })
     }
 }

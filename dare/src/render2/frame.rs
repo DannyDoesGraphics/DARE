@@ -32,6 +32,8 @@ pub struct Frame {
     pub instanced_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold surface information
     pub surface_buffer: dare::render::resources::surface_buffer::RenderSurfaceBuffer<GPUAllocatorImpl>,
+    /// Contains buffer for transformation
+    pub transform_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// staging buffers used
     pub staging_buffers: Vec<dagal::resource::Buffer<GPUAllocatorImpl>>,
 
@@ -194,7 +196,7 @@ impl Frame {
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
-                        "Indirect buffer frame {}",
+                        "Indirect buffer for frame {}",
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,
@@ -210,7 +212,7 @@ impl Frame {
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
-                        "Instanced buffer frame {}",
+                        "Instanced buffer for frame {}",
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,
@@ -227,7 +229,7 @@ impl Frame {
                     dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                         device: surface_context.allocator.device(),
                         name: Some(String::from(format!(
-                            "Render Surface Buffer {}",
+                            "Render surface buffer for buffer {}",
                             image_number.as_ref().unwrap_or(&0)
                         ))),
                         allocator: &mut allocator,
@@ -240,6 +242,22 @@ impl Frame {
                     },
                 )?
             ),
+            transform_buffer: dare::render::util::GrowableBuffer::new(
+                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(String::from(format!(
+                        "Transform buffer for frame {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    ))),
+                    allocator: &mut allocator,
+                    size: 128_000,
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                        | vk::BufferUsageFlags::VERTEX_BUFFER,
+                },
+            )?,
             staging_buffers: Vec::new(),
             command_pool,
             command_buffer,

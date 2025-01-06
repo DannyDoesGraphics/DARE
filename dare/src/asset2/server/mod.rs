@@ -9,7 +9,16 @@ pub use deltas::AssetServerDelta;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use crossbeam_channel::SendError;
 pub use render_asset_state::*;
+
+#[derive(thiserror::Error, Debug, Copy, Clone)]
+pub enum AssetServerErrors {
+    #[error("Expected state unloaded, got {0:?}. Expected {1:?}")]
+    UnexpectedAssetState(asset::AssetState, asset::AssetState),
+    #[error("Asset handle {0:?} does not exist.")]
+    NullHandle(asset::AssetIdUntyped),
+}
 
 /// Asset manager (engine side)
 #[derive(Debug)]
@@ -110,13 +119,14 @@ impl AssetServer {
             self.infos
                 .states
                 .insert(id_untyped, asset_info::AssetInfo::new::<T>(&arc, metadata));
+            let handle = asset::AssetHandle::<T>::Strong(arc);
             self.inner
                 .delta_send
-                .send(AssetServerDelta::HandleLoaded(
-                    asset::AssetHandleUntyped::Strong(arc.clone()),
+                .send(AssetServerDelta::HandleCreated(
+                    handle.clone().downgrade().into_untyped_handle(),
                 ))
                 .unwrap();
-            Some(asset::AssetHandle::<T>::Strong(arc))
+            Some(handle)
         } else {
             if matches!(id_untyped, asset::AssetIdUntyped::Generation { .. }) {
                 self.infos
@@ -161,46 +171,36 @@ impl AssetServer {
             // new handle loaded, send it
             self.inner
                 .delta_send
-                .send(AssetServerDelta::HandleLoaded(
-                    asset::AssetHandleUntyped::Strong(arc.clone()),
+                .send(AssetServerDelta::HandleCreated(
+                    asset::AssetHandleUntyped::Weak {
+                        id: id_untyped,
+                        weak_ref: Arc::downgrade(&arc),
+                    },
                 ))
                 .unwrap();
             asset::AssetHandle::<T>::Strong(arc)
         } else {
             panic!()
         }
-        /*
+    }
+
+    pub fn get_metadata<T: asset::Asset>(
+        &self,
+        handle: &asset::AssetHandle<T>
+    ) -> Option<T::Metadata> {
         self.infos
             .states
-            .get_mut(&id_untyped)
-            .map(|mut info| {
-                info.handle
-                    .upgrade()
-                    .map(|arc| asset::AssetHandle::<T>::Strong(arc))
-                    .unwrap_or({
-                        // make a new handle, old one was dropped
-                        let arc = Arc::new(asset::StrongAssetHandleUntyped {
-                            id: id_untyped,
-                            drop_send: self.inner.drop_send.clone(),
-                        });
-                        info.handle = Arc::downgrade(&arc);
-                        // new handle loaded, send it
-                        self.inner
-                            .delta_send
-                            .send(AssetServerDelta::HandleLoaded(
-                                asset::AssetHandleUntyped::Strong(arc.clone()),
-                            ))
-                            .unwrap();
-                        println!("bro {:?}", metadata);
-                        asset::AssetHandle::<T>::Strong(arc)
-                    })
+            .get(&handle.clone().into_untyped_handle())
+            .map(|info| {
+                info.metadata
+                    .downcast_ref::<T::Metadata>()
+                    .map(|d| d.clone())
             })
-            .unwrap_or(self.insert_resource(metadata).unwrap())
-            .clone()*/
+            .flatten()
     }
 
     /// Get metadata
-    pub fn get_metadata<T: asset::Asset>(
+    pub fn get_metadata_untyped<T: asset::Asset>(
         &self,
         handle: &asset::AssetHandleUntyped,
     ) -> Option<T::Metadata> {
@@ -216,15 +216,80 @@ impl AssetServer {
     }
 
     /// Update state forcefully
+    ///
+    /// Returns `None` if asset handle does not exist.
     pub unsafe fn update_state(
         &self,
         handle: &asset::AssetIdUntyped,
         state: asset::AssetState,
     ) -> Option<()> {
-        self.infos.states.get_mut(&handle).map(|mut info| {
+        match self.infos.states.get_mut(&handle).map(|mut info| {
             info.asset_state = state;
-        })?;
-        Some(())
+        }) {
+            None => {
+                None
+            }
+            Some(_) => {
+                let handle = self.infos.states.get(&handle).unwrap().handle.clone().upgrade();
+                if let Some(handle) = handle {
+                    match &state {
+                        asset::AssetState::Unloaded => {}
+                        asset::AssetState::Loading => {
+                            match self.inner.delta_send.send(
+                                AssetServerDelta::HandleLoading(
+                                    asset::AssetHandleUntyped::Weak {
+                                        id: handle.id,
+                                        weak_ref: Arc::downgrade(&handle),
+                                    },
+                                )
+                            ) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    tracing::error!("Failed to send delta: {:?}", e);
+                                }
+                            }
+                        }
+                        asset::AssetState::Loaded => {}
+                        asset::AssetState::Unloading => {
+                            match self.inner.delta_send.send(
+                                AssetServerDelta::HandleUnloading(
+                                    asset::AssetHandleUntyped::Weak {
+                                        id: handle.id,
+                                        weak_ref: Arc::downgrade(&handle),
+                                    },
+                                )
+                            ) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    tracing::error!("Failed to send delta: {:?}", e);
+                                }
+                            }
+                        }
+                        asset::AssetState::Failed => {}
+                    }
+                }
+                Some(())
+            }
+        }
+    }
+
+    /// Attempt to transition an asset from unloaded -> loading
+    pub fn transition_loading(&self, handle: &asset::AssetIdUntyped) -> Result<(), AssetServerErrors> {
+        match self.get_state(handle) {
+            None => {
+                Err(AssetServerErrors::NullHandle(handle.clone()))
+            }
+            Some(found_state) => {
+                if matches!(found_state, asset::AssetState::Unloaded) {
+                    unsafe {
+                        self.update_state(handle, asset::AssetState::Loading);
+                        Ok(())
+                    }
+                } else {
+                    Err(AssetServerErrors::UnexpectedAssetState(found_state, asset::AssetState::Unloaded))
+                }
+            }
+        }
     }
 
     pub fn get_state(&self, handle: &asset::AssetIdUntyped) -> Option<asset::AssetState> {

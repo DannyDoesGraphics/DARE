@@ -96,6 +96,7 @@ impl GLTFLoader {
                         1,
                     ),
                     element_count: 0,
+                    name: String::new(),
                 })
             })
             .collect::<Vec<Result<asset::assets::BufferMetaData>>>();
@@ -217,7 +218,12 @@ impl GLTFLoader {
                                                 dare::render::util::ElementFormat::U32,
                                                 1,
                                             );
-                                            asset_server.entry(m)
+                                            m.name.push_str(&format!("Index buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
+                                            let handle = asset_server.entry(m.clone());
+                                            if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                tracing::warn!("Failed to load: {e}");
+                                            }
+                                            handle
                                         },
                                     );
                                     surface_builder.index_buffer = handle;
@@ -248,7 +254,13 @@ impl GLTFLoader {
                                                         dare::render::util::ElementFormat::F32,
                                                         3,
                                                     );
-                                                    asset_server.entry(m)
+                                                    m.name.push_str(&format!("Vertex buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
+                                                    accessor.name().map(|name| m.name.push_str(name));
+                                                    let handle = asset_server.entry(m.clone());
+                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                        tracing::warn!("Failed to load: {e}");
+                                                    }
+                                                    handle
                                                 });
                                             surface_builder.vertex_count = accessor.count();
                                             surface_builder.vertex_buffer = handle;
@@ -285,7 +297,14 @@ impl GLTFLoader {
                                                         dare::render::util::ElementFormat::F32,
                                                         3,
                                                     );
-                                                    asset_server.entry(m)
+                                                    m.name.push_str(&format!("Normal buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
+
+                                                    accessor.name().map(|name| m.name.push_str(name));
+                                                    let handle = asset_server.entry(m.clone());
+                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                        tracing::warn!("Failed to load: {e}");
+                                                    }
+                                                    handle
                                                 });
                                             surface_builder.normal_buffer = handle;
                                         }
@@ -302,7 +321,12 @@ impl GLTFLoader {
                                                         dare::render::util::ElementFormat::F32,
                                                         3,
                                                     );
-                                                    asset_server.entry(m)
+                                                    m.name.push_str(&format!("Tangent buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
+                                                    let handle = asset_server.entry(m.clone());
+                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                        tracing::warn!("Failed to load: {e}");
+                                                    }
+                                                    handle
                                                 });
                                             surface_builder.tangent_buffer = handle;
                                         }

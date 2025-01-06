@@ -48,7 +48,7 @@ impl Hash for CSurface {
 
 impl CSurface {
     pub fn from_surface(
-        asset_server: &dare::render::render_assets::RenderAssetsStorage<
+        buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
             dare::render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
         surface: dare::engine::components::Surface,
@@ -57,17 +57,17 @@ impl CSurface {
             material: 1,
             bit_flag: 2,
             _padding: 0,
-            positions: asset_server.get_bda(&surface.vertex_buffer.id())?,
-            indices: asset_server.get_bda(&surface.index_buffer.id())?,
+            positions: buffers.get_bda_from_asset_handle(&surface.vertex_buffer)?,
+            indices: buffers.get_bda_from_asset_handle(&surface.index_buffer)?,
             normals: surface
                 .normal_buffer
                 .as_ref()
-                .map(|buffer| asset_server.get_bda(&buffer.id()))
+                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
                 .unwrap_or(Some(0))?,
             tangents: surface
                 .tangent_buffer
                 .as_ref()
-                .map(|buffer| asset_server.get_bda(&buffer.id()))
+                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
                 .unwrap_or(Some(0))?,
             uv: 0,
         })
@@ -78,17 +78,38 @@ impl CSurface {
 #[derive(Debug, Clone, Copy)]
 pub struct CMaterial {
     pub bit_flag: u32,
+    pub _padding: u32,
     pub color_factor: [f32; 4],
     pub albedo_texture_id: u32,
     pub albedo_sampler_id: u32,
     pub normal_texture_id: u32,
     pub normal_sampler_id: u32,
 }
+impl CMaterial {
+    pub fn from_material(material: dare::engine::components::Material) -> Option<Self> {
+        Some(Self {
+            bit_flag: 0,
+            _padding: 0,
+            color_factor: material.albedo_factor.to_array(), 
+            albedo_texture_id: 0,
+            albedo_sampler_id: 0,
+            normal_texture_id: 0,
+            normal_sampler_id: 0,
+        })
+    }
+}
+unsafe impl Zeroable for CMaterial {}
+unsafe impl Pod for CMaterial {}
+
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CPushConstant {
     pub transform: [f32; 16],
     pub instanced_surface_info: u64,
+    pub surface_infos: u64,
+    pub transforms: u64,
     pub draw_id: u64,
 }
+unsafe impl Zeroable for CPushConstant {}
+unsafe impl Pod for CPushConstant {}

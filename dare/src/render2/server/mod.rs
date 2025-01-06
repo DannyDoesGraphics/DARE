@@ -1,5 +1,6 @@
 pub mod send_types;
 
+use std::any::Any;
 use crate::prelude as dare;
 use crate::render2::prelude as render;
 use crate::render2::server::send_types::RenderServerPacket;
@@ -14,6 +15,7 @@ use std::cmp::PartialEq;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
+use crate::render2::render_assets::storage::RenderAssetManagerStorage;
 
 #[derive(Debug)]
 pub struct RenderServerInner {
@@ -52,7 +54,12 @@ impl RenderServer {
         &self.inner.input_send
     }
 
-    pub fn new(ci: super::render_context::RenderContextCreateInfo) -> Self {
+    pub fn new(
+        ci: super::render_context::RenderContextCreateInfo,
+        surface_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::engine::components::Surface>,
+        transform_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
+        bb_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::render::components::BoundingBox>,
+    ) -> Self {
         let (new_send, mut new_recv) = tokio::sync::mpsc::unbounded_channel::<RenderServerPacket>();
         let asset_server = dare::asset2::server::AssetServer::default();
         let render_context = super::render_context::RenderContext::new(ci).unwrap();
@@ -75,29 +82,30 @@ impl RenderServer {
                         )
                         .unwrap(),
                     );
-                    world.insert_resource(super::resources::surface_buffer::RenderSurfaceManager {
-                        uploaded_hash: 0,
-                        mesh_container: dare_containers::prelude::InsertionSortSlotMap::default(),
-                        surface_hashes: Default::default(),
-                    });
                 }
                 world.insert_resource(render_context.clone());
                 world.insert_resource(super::frame_number::FrameCount::default());
                 world.insert_resource(rt);
                 world.insert_resource(asset_server.clone());
-                world.insert_resource(render::render_assets::manager::MeshLink::default());
                 world.insert_resource(render::components::camera::Camera::default());
+                world.insert_resource(RenderAssetManagerStorage::<
+                    render::components::RenderBuffer<GPUAllocatorImpl>
+                >::new(asset_server.clone()));
                 world.insert_resource(IrRecv(ir_recv));
+                // rendering
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
                     render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
                 >::default());
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();
+                // links
+                surface_link.attach_to_world(&mut world, &mut schedule);
+                transform_link.attach_to_world(&mut world, &mut schedule);
+                bb_link.attach_to_world(&mut world, &mut schedule);
+                // misc
+                schedule.add_systems(super::render_assets::storage::asset_manager_system);
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
-                schedule.add_systems(
-                    render::render_assets::manager::process_asset_relations_incoming_system,
-                );
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
                 let mut stop_flag = false;

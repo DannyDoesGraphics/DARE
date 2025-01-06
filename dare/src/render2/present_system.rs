@@ -2,7 +2,6 @@ use crate::prelude as dare;
 use crate::prelude::render;
 use crate::prelude::render::components::RenderBuffer;
 use crate::render2::render_assets::RenderAssetsStorage;
-use crate::render2::resources::RenderSurfaceManager;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -22,9 +21,13 @@ pub fn present_system_begin(
     frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
-    buffers: becs::Res<'_, RenderAssetsStorage<RenderBuffer<GPUAllocatorImpl>>>,
-    mesh_buffer: becs::ResMut<'_, RenderSurfaceManager>,
-    mut mesh_link: becs::Res<'_, render::render_assets::MeshLink>,
+    surfaces: Query<'_, '_, (becs::Entity, &dare::engine::components::Surface, &render::components::BoundingBox, &dare::physics::components::Transform)>,
+    buffers: becs::Res<
+        '_,
+        render::render_assets::storage::RenderAssetManagerStorage<
+            RenderBuffer<GPUAllocatorImpl>
+        >
+    >,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
     rt.clone().runtime.block_on(async {
@@ -130,9 +133,8 @@ pub fn present_system_begin(
                     render_context.clone(),
                     &camera,
                     frame,
-                    buffers,
-                    mesh_buffer,
-                    mesh_link,
+                    surfaces,
+                    buffers
                 )
                     .await;
                 // end present

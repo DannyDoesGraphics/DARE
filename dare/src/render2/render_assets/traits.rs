@@ -2,8 +2,8 @@ use crate::prelude as dare;
 use dare::asset2 as asset;
 use std::fmt::Debug;
 
-pub trait MetaDataRenderAsset {
-    type Loaded;
+pub trait MetaDataRenderAsset: 'static {
+    type Loaded: Send;
     type Asset: asset::Asset;
     type PrepareInfo: Send;
 

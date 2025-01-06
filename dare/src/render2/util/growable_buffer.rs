@@ -269,6 +269,9 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         items: &[T],
         queue_index: u32,
     ) -> anyhow::Result<()> {
+        if size_of_val(items) == 0 {
+            return Ok(());
+        }
         let mut staging_buffer = dagal::resource::Buffer::new(BufferCreateInfo::NewEmptyBuffer {
             device: self.device.clone(),
             name: Some(format!(

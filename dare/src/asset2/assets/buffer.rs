@@ -22,7 +22,9 @@ pub struct BufferAsset {
 }
 impl asset::AssetLoaded for BufferAsset {}
 
-#[derive(Debug, Hash, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
+#[derive(Derivative)]
+#[derivative(Hash)]
 pub struct BufferMetaData {
     /// Location of where to find the data
     pub location: asset::MetaDataLocation,
@@ -38,12 +40,15 @@ pub struct BufferMetaData {
     pub stored_format: dare::render::util::Format,
     /// Number of elements
     pub element_count: usize,
+    /// Name of the buffer
+    #[derivative(Debug="ignore")]
+    pub name: String,
 }
 unsafe impl Send for BufferMetaData {}
 impl Unpin for BufferMetaData {}
 impl Eq for BufferMetaData {}
 
-impl asset::loaders::MetaDataStreamable for BufferMetaData {
+impl MetaDataStreamable for BufferMetaData {
     type Chunk = Vec<u8>;
     type StreamInfo<'a> = BufferStreamInfo;
 
@@ -201,6 +206,7 @@ mod test {
                 1,
             ),
             element_count: data_size,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -252,6 +258,7 @@ mod test {
                 1,
             ),
             element_count: data_size,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -306,6 +313,7 @@ mod test {
                 1,
             ),
             element_count: length,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -371,6 +379,7 @@ mod test {
             format: dare::render::util::Format::new(ElementFormat::U32, 1),
             stored_format: dare::render::util::Format::new(ElementFormat::U32, 1),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -422,6 +431,7 @@ mod test {
                 1,
             ),
             element_count: data_size,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -474,6 +484,7 @@ mod test {
                 1,
             ),
             element_count: 0,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -525,6 +536,7 @@ mod test {
                 1,
             ),
             element_count: data_size,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -608,6 +620,7 @@ mod test {
                 3, // Number of components in Vec3<f32>
             ),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -676,6 +689,7 @@ mod test {
                 2, // Vec2<f32>
             ),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -746,6 +760,7 @@ mod test {
                 1,
             ),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -823,6 +838,7 @@ mod test {
                 16, // Mat4<f32> has 16 components
             ),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo
@@ -894,6 +910,7 @@ mod test {
                 3, // Vec3<f32>
             ),
             element_count,
+            name: "".to_string(),
         };
 
         // Set up BufferStreamInfo

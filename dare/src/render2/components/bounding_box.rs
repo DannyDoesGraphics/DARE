@@ -35,6 +35,7 @@ impl BoundingBox {
         self.max = max;
     }
 
+    /// Given a frustum + transformation of a model, check if it is within the bounds
     pub fn visible_in_frustum(&self, model_transform: glam::Mat4, view_proj: glam::Mat4) -> bool {
         let cube = [
             glam::Vec3::new(self.min.x, self.min.y, self.min.z),

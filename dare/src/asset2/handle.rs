@@ -32,9 +32,10 @@ pub enum AssetHandle<T: asset::Asset> {
 impl<T: asset::Asset> PartialEq for AssetHandle<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (AssetHandle::Strong(a), AssetHandle::Strong(b)) => a == b,
+            (AssetHandle::Strong(a), AssetHandle::Strong(b)) => a.id == b.id,
             (AssetHandle::Weak { id, .. }, AssetHandle::Weak { id: id_b, .. }) => id == id_b,
-            (_, _) => false,
+            (AssetHandle::Strong(a), AssetHandle::Weak {id, ..}) => a.id == id.as_untyped_id(),
+            (AssetHandle::Weak{id, ..}, AssetHandle::Strong(b)) => id.as_untyped_id() == b.id,
         }
     }
 }
@@ -109,10 +110,10 @@ impl<T: asset::Asset> AssetHandle<T> {
 /// Represents a wrapper struct for the id, but also a drop queue which will it will send it's
 /// [`Self::id`], upon being dropped
 #[derive(Derivative)]
-#[derivative(PartialEq, Hash, Debug)]
+#[derivative(PartialEq, Debug)]
 pub(super) struct StrongAssetHandleUntyped {
     pub(super) id: asset::AssetIdUntyped,
-    #[derivative(Debug = "ignore", Hash = "ignore", PartialEq = "ignore")]
+    #[derivative(Debug = "ignore", PartialEq = "ignore")]
     pub(super) drop_send: crossbeam_channel::Sender<asset::AssetIdUntyped>,
 }
 impl Eq for StrongAssetHandleUntyped {}
@@ -122,6 +123,11 @@ impl Drop for StrongAssetHandleUntyped {
         if let Err(_) = self.drop_send.send(self.id) {
             // do not care if the asset drop request was not received (asset manager dropped)
         }
+    }
+}
+impl Hash for StrongAssetHandleUntyped {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
     }
 }
 
@@ -175,6 +181,17 @@ impl AssetHandleUntyped {
                 id: id.into_typed_id()?,
                 weak_ref,
             }),
+        }
+    }
+
+    pub fn get_id(&self) -> asset::AssetIdUntyped {
+        match self {
+            AssetHandleUntyped::Strong(arc) => {
+                arc.id.clone()
+            }
+            AssetHandleUntyped::Weak { id, .. } => {
+                id.clone()
+            }
         }
     }
 

@@ -15,6 +15,8 @@ struct FSout {
 struct PushConstant {
     const float4x4 view_proj;
     const InstancedSurfacesInfo *instanced_surface_info;
+    const Surface *surface_infos;
+    const float4x4 *transforms;
     const uint64_t draw_id;
 };
 
@@ -39,20 +41,23 @@ VSout vertex_main(
     //printf("ids: %u - %u\n", pc.instanced_surface_info.surface.bit_flag, pc.instanced_surface_info.instances);
 
     // Print the high and low parts as hexadecimal
-    const InstancedSurfacesInfo surfaces_info = pc.instanced_surface_info[pc.draw_id];
-        VSout out;
-        float3 vertex = float3(surfaces_info.surface.positions[vertex_index]);
-        //float3 vertex = float3(0.0, 0.0, 0.0);
-        float4 local_position = float4(vertex, 1.0);
-        float4 world_position = local_position;
-        float4 clip_space = mul(pc.view_proj, world_position);
-        out.sv_position = clip_space;
+    const InstancedSurfacesInfo instanced_info = pc.instanced_surface_info[0];
+    const Surface surface_info = pc.surface_infos[instanced_info.surface];
+    VSout out;
+    float3 vertex = float3(surface_info.positions[vertex_index]);
+    float4 local_position = float4(vertex, 1.0);
 
-        FSin f_in;
-        f_in.rand = uint(pc.draw_id);
+    float4x4 instance_transform = pc.transforms[instanced_info.instances_offset + instance_id];
+    float4 world_position = mul(local_position, instance_transform);
 
-        out.fragment_in = f_in;
-        return out;
+    float4 clip_space = mul(pc.view_proj, world_position);
+    out.sv_position = clip_space;
+
+    FSin f_in;
+    f_in.rand = uint(pc.draw_id);
+
+    out.fragment_in = f_in;
+    return out;
 }
 
 [shader("fragment")]
