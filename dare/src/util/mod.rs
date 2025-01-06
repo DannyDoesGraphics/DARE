@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-pub mod delta;
 pub mod either;
 pub mod event;
 pub mod plugin;
