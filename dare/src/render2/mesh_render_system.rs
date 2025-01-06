@@ -44,12 +44,11 @@ pub fn build_instancing_data(
     assert_eq!(surfaces.len(), materials.len());
     assert_eq!(transformations.len(), surfaces.len());
 
-    /// Acquire a tightly packed map
+    // Acquire a tightly packed map
     let mut unique_surfaces: Vec<dare::render::c::CSurface> = Vec::new();
     let mut asset_unique_surfaces: Vec<dare::engine::components::Surface> = Vec::new();
     let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> = HashMap::with_capacity(surfaces.len());
     for (index, surface) in surfaces.iter().enumerate() {
-        println!("{:?} -> {:?}", surface.index_count, transformations[index].w_axis.x);
         surface_map.entry((*surface).clone()).or_insert_with(|| {
             let id: usize = unique_surfaces.len();
             if let Some(c_surface) = dare::render::c::CSurface::from_surface(buffers, (*surface).clone()) {
@@ -204,7 +203,7 @@ pub async fn mesh_render(
                     .iter()
                     .map(|instancing| vk::DrawIndexedIndirectCommand {
                         index_count: asset_surfaces[instancing.surface as usize].index_count as u32,
-                        instance_count: transforms[instancing.surface as usize].len() as u32,
+                        instance_count: instancing.instances as u32,
                         first_index: 0,
                         vertex_offset: 0,
                         first_instance: 0,
@@ -261,6 +260,14 @@ pub async fn mesh_render(
                     )
                     .await
                     .unwrap();
+                // finally, store asset handles
+                for surface in asset_surfaces.iter() {
+                    frame.resources.insert(surface.vertex_buffer.clone().into_untyped_handle());
+                    frame.resources.insert(surface.index_buffer.clone().into_untyped_handle());
+                    surface.normal_buffer.clone().map(|b| {
+                        frame.resources.insert(b.clone().into_untyped_handle())
+                    });
+                }
 
                 // begin rendering
                 let dynamic_rendering = unsafe {
@@ -339,7 +346,8 @@ pub async fn mesh_render(
                     let index_buffer = buffers.get_loaded_from_asset_handle(&asset_surfaces[instancing.surface as usize].index_buffer).unwrap();
                     // push new constants
                     push_constant.instanced_surface_info = frame.instanced_buffer.get_buffer().address() + instanced_surfaces_bytes_offset[index] as vk::DeviceAddress;
-                    push_constant.draw_id = index as u64;
+                    let draw_id: u32 = (surfaces[instancing.surface as usize].positions % u32::MAX as u64).try_into().unwrap();
+                    push_constant.draw_id = draw_id as u64;
                     unsafe {
                         let bytes: &[u8] = std::slice::from_raw_parts(
                             &push_constant as *const CPushConstant as *const u8,

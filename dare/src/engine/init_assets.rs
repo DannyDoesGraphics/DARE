@@ -28,8 +28,8 @@ pub fn init_assets(
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Suzanne/glTF/Suzanne.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Assets-main/Models/DamagedHelmet/glTF/DamagedHelmet.gltf",
                 //"C:/Users/Danny/Documents/glTF-Sample-Models/2.0/Lantern/glTF/Lantern.gltf",
-                //"C:/Users/danny/Documents/tests/2_of_us/2_of_us.gltf",
-                "C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Lantern/glTF/Lantern.gltf",
+                "C:/Users/danny/Documents/tests/2_of_us/2_of_us.gltf",
+                //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Lantern/glTF/Lantern.gltf",
                 //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Box/glTF/Box.gltf",
             ),
         )

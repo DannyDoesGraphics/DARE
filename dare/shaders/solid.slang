@@ -46,7 +46,6 @@ VSout vertex_main(
     VSout out;
     float3 vertex = float3(surface_info.positions[vertex_index]);
     float4 local_position = float4(vertex, 1.0);
-
     float4x4 instance_transform = pc.transforms[instanced_info.instances_offset + instance_id];
     float4 world_position = mul(local_position, instance_transform);
 
