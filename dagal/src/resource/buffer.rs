@@ -135,9 +135,9 @@ impl<A: Allocator> Buffer<A> {
     }
 }
 
-impl<'a, A: Allocator + 'a> Resource<'a> for Buffer<A> {
-    type CreateInfo = BufferCreateInfo<'a, A>;
-    fn new(create_info: Self::CreateInfo) -> Result<Self> {
+impl<A: Allocator> Resource for Buffer<A> {
+    type CreateInfo<'a> = BufferCreateInfo<'a, A>;
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self> {
         match create_info {
             BufferCreateInfo::NewEmptyBuffer {
                 device,

@@ -7,11 +7,11 @@ use ash::vk;
 use crate::traits::AsRaw;
 
 /// Every resource in Vulkan is expected to have a lifetime + debuggable
-pub trait Resource<'a>: Sized + AsRaw {
+pub trait Resource: Sized + AsRaw {
     /// Necessary create info
-    type CreateInfo: 'a;
+    type CreateInfo<'a>: 'a;
     /// Attempt to create a new resource given the [`Self::CreateInfo`] struct
-    fn new(create_info: Self::CreateInfo) -> Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
     where
         Self: Sized;
     /// Get underlying reference to the device the object belongs to
@@ -34,7 +34,7 @@ pub(crate) fn name_nameable<T: Nameable>(
     name_resource(debug_utils, raw_handle, T::OBJECT_TYPE, name)
 }
 
-pub(crate) fn update_name<'a, T: Resource<'a> + Nameable>(
+pub(crate) fn update_name<T: Resource + Nameable>(
     resource: &mut T,
     name: Option<&str>,
 ) -> Option<Result<()>> {

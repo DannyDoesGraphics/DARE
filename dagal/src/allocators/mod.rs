@@ -21,7 +21,7 @@ pub mod memory_type;
 pub mod test_allocator;
 
 /// An interface to universally interact with all allocators with
-pub trait Allocator: Debug + Clone + Send + Sync + Unpin {
+pub trait Allocator: Debug + Clone + Send + Sync + Unpin + 'static {
     type Allocation: Allocation;
 
     /// Create a new allocation

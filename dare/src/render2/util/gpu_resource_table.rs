@@ -62,12 +62,12 @@ const STORAGE_IMAGE_BINDING_INDEX: u32 = 2;
 const SAMPLED_IMAGE_BINDING_INDEX: u32 = 1;
 const SAMPLER_BINDING_INDEX: u32 = 0;
 
-pub enum ResourceInput<'a, T: Resource<'a>> {
+pub enum ResourceInput<'a, T: Resource> {
     ResourceHandle(T),
     ResourceArc(Arc<T>),
     ResourceWeak(Weak<T>),
-    ResourceCIHandle(T::CreateInfo),
-    ResourceCIArc(T::CreateInfo),
+    ResourceCIHandle(T::CreateInfo<'a>),
+    ResourceCIArc(T::CreateInfo<'a>),
 }
 
 impl<A: Allocator> GPUResourceTable<A> {

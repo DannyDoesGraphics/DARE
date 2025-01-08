@@ -32,10 +32,10 @@ impl Drop for PipelineLayout {
     }
 }
 
-impl<'a> Resource<'a> for PipelineLayout {
-    type CreateInfo = PipelineLayoutCreateInfo<'a>;
+impl Resource for PipelineLayout {
+    type CreateInfo<'a> = PipelineLayoutCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> anyhow::Result<Self>
     where
         Self: Sized,
     {

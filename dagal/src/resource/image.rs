@@ -304,8 +304,8 @@ impl<A: Allocator> Image<A> {
     }
 }
 
-impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
-    type CreateInfo = ImageCreateInfo<'a, A>;
+impl<A: Allocator + 'static> Resource for Image<A> {
+    type CreateInfo<'a> = ImageCreateInfo<'a, A>;
 
     ///
     /// # Examples
@@ -399,7 +399,7 @@ impl<'a, A: Allocator + 'a> Resource<'a> for Image<A> {
     /// }).unwrap();
     /// drop(image);
     /// ```
-    fn new(create_info: ImageCreateInfo<'a, A>) -> Result<Self>
+    fn new(create_info: ImageCreateInfo<A>) -> Result<Self>
     where
         Self: Sized,
     {

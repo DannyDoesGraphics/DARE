@@ -19,10 +19,10 @@ pub enum DescriptorSetLayoutCreateInfo<'a> {
     },
 }
 
-impl<'a> Resource<'a> for DescriptorSetLayout {
-    type CreateInfo = DescriptorSetLayoutCreateInfo<'a>;
+impl Resource for DescriptorSetLayout {
+    type CreateInfo<'a> = DescriptorSetLayoutCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo) -> anyhow::Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> anyhow::Result<Self>
     where
         Self: Sized,
     {

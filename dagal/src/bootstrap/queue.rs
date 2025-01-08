@@ -146,6 +146,7 @@ mod test {
                 family_index: 0,
                 index: 0,
                 count: 1,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
     }
@@ -168,6 +169,7 @@ mod test {
                 family_index: 0,
                 index: 0,
                 count: 3,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
         assert_eq!(
@@ -176,6 +178,7 @@ mod test {
                 family_index: 0,
                 index: 3,
                 count: 1,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
     }
@@ -199,6 +202,7 @@ mod test {
                 family_index: 0,
                 index: 0,
                 count: 4,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
         assert_eq!(
@@ -207,6 +211,7 @@ mod test {
                 family_index: 2,
                 index: 0,
                 count: 1,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
         assert_eq!(
@@ -215,6 +220,7 @@ mod test {
                 family_index: 2,
                 index: 1,
                 count: 1,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
     }
@@ -238,6 +244,7 @@ mod test {
                 family_index: 0,
                 index: 0,
                 count: 4,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
         assert_eq!(
@@ -246,6 +253,7 @@ mod test {
                 family_index: 2,
                 index: 0,
                 count: 1,
+                family_flags: vk::QueueFlags::GRAPHICS,
             }
         );
         assert_eq!(

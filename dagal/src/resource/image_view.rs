@@ -112,8 +112,8 @@ pub enum ImageViewCreateInfo<'a> {
     },
 }
 
-impl<'a> Resource<'a> for ImageView {
-    type CreateInfo = ImageViewCreateInfo<'a>;
+impl Resource for ImageView {
+    type CreateInfo<'a> = ImageViewCreateInfo<'a>;
     fn new(create_info: ImageViewCreateInfo) -> Result<Self>
     where
         Self: Sized,

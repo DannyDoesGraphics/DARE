@@ -63,11 +63,11 @@ pub enum SamplerCreateInfo<'a> {
     },
 }
 
-impl<'a> Resource<'a> for Sampler {
-    type CreateInfo = SamplerCreateInfo<'a>;
+impl Resource for Sampler {
+    type CreateInfo<'a> = SamplerCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo) -> Result<Self>
-    where
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
+           where
         Self: Sized,
     {
         match create_info {

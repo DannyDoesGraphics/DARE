@@ -228,7 +228,7 @@ impl<T> FreeList<T> {
     }
 }
 
-impl<'a, T: Resource<'a> + AsRaw> FreeList<T> {
+impl<T: Resource + AsRaw> FreeList<T> {
     /// If you're simply acquiring a resource's handle
     pub fn get_resource_handle(&self, handle: &Handle<T>) -> Result<T::RawType> {
         if !self.is_valid(handle)? {

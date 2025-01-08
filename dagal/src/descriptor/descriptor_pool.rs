@@ -150,9 +150,9 @@ pub enum DescriptorPoolCreateInfo<'a> {
     },
 }
 
-impl<'a> Resource<'a> for DescriptorPool {
-    type CreateInfo = DescriptorPoolCreateInfo<'a>;
-    fn new(create_info: Self::CreateInfo) -> Result<Self>
+impl Resource for DescriptorPool {
+    type CreateInfo<'a> = DescriptorPoolCreateInfo<'a>;
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
     where
         Self: Sized,
     {

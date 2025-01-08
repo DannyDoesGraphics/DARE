@@ -25,9 +25,9 @@ pub enum AccelerationStructureInfo<'a> {
     },
 }
 
-impl<'a> Resource<'a> for AccelerationStructure {
-    type CreateInfo = AccelerationStructureInfo<'a>;
-    fn new(create_info: Self::CreateInfo) -> Result<Self>
+impl Resource for AccelerationStructure {
+    type CreateInfo<'a> = AccelerationStructureInfo<'a>;
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
     where
         Self: Sized,
     {
