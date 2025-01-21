@@ -262,6 +262,7 @@ mod test {
                 family_index: 1,
                 index: 0,
                 count: 1,
+                family_flags: Default::default(),
             }
         );
     }
