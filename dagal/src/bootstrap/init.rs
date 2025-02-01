@@ -109,12 +109,17 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             )?
         };
         let surface: Option<crate::wsi::Surface> = if let (Some(display_handle), Some(window_handle)) = (display_handle, window_handle) {
-            Some(crate::wsi::Surface::new_with_handles(
+            crate::wsi::Surface::new_with_handles(
                 instance.get_entry(),
                 instance.get_instance(),
                 display_handle?,
                 window_handle?,
-            )?)
+            ).map_or_else(|err| {
+                tracing::error!("Failed to construct surface: {:?}", err);
+                None
+            }, |surface| {
+                Some(surface)
+            })
         } else {
             None
         };
