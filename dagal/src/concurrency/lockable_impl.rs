@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 /// Concerning components of Mute x
 pub use super::lockable::*;
 use crate::DagalError::PoisonError;
@@ -13,14 +14,16 @@ impl<T> Lockable for std::sync::Mutex<T> {
     }
 }
 
-impl<T> SyncLockable for std::sync::Mutex<T> {
-    fn lock(&self) -> anyhow::Result<Self::Lock<'_>> {
-        self.lock().map_err(|_| anyhow::Error::from(PoisonError))
-    }
-
+impl<T> TryLockable for Mutex<T> {
     fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         self.try_lock()
             .map_err(|_| anyhow::Error::from(PoisonError))
+    }
+}
+
+impl<T> SyncLockable for std::sync::Mutex<T> {
+    fn lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self.lock().map_err(|_| anyhow::Error::from(PoisonError))
     }
 }
 
@@ -35,6 +38,15 @@ impl<T> Lockable for tokio::sync::Mutex<T> {
         tokio::sync::Mutex::new(t)
     }
 }
+
+#[cfg(feature = "tokio")]
+impl<T> TryLockable for tokio::sync::Mutex<T> {
+    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self.try_lock()
+            .map_err(|_| anyhow::Error::from(PoisonError))
+    }
+}
+
 #[cfg(feature = "tokio")]
 impl<T> AsyncLockable for tokio::sync::Mutex<T> {
     async fn lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
@@ -43,10 +55,6 @@ impl<T> AsyncLockable for tokio::sync::Mutex<T> {
 
     fn blocking_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         Ok(self.blocking_lock())
-    }
-
-    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
-        Ok(self.try_lock()?)
     }
 }
 
@@ -64,6 +72,14 @@ impl<T> Lockable for futures::lock::Mutex<T> {
 }
 
 #[cfg(feature = "futures")]
+impl<T> TryLockable for futures::lock::Mutex<T> {
+    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self.try_lock()
+            .map_or(Err(anyhow::anyhow!("Unable to acquire lock")), Ok)
+    }
+}
+
+#[cfg(feature = "futures")]
 impl<T> AsyncLockable for futures::lock::Mutex<T> {
     async fn lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
         Ok(self.lock().await)
@@ -73,10 +89,6 @@ impl<T> AsyncLockable for futures::lock::Mutex<T> {
         Ok(self.blocking_lock()?)
     }
 
-    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
-        self.try_lock()
-            .map_or(Err(anyhow::anyhow!("Unable to acquire lock")), Ok)
-    }
 }
 
 #[cfg(feature = "async-std")]
@@ -93,6 +105,14 @@ impl<T> Lockable for async_std::sync::Mutex<T> {
 }
 
 #[cfg(feature = "async-std")]
+impl<T> TryLockable for async_std::sync::Mutex<T> {
+    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
+        self.try_lock()
+            .map_or(Err(anyhow::anyhow!("Unable to acquire lock")), Ok)
+    }
+}
+
+#[cfg(feature = "async-std")]
 impl<T> AsyncLockable for async_std::sync::Mutex<T> {
     async fn lock<'a>(&'a self) -> anyhow::Result<Self::Lock<'a>> {
         Ok(self.lock().await)
@@ -102,8 +122,4 @@ impl<T> AsyncLockable for async_std::sync::Mutex<T> {
         Ok(self.blocking_lock()?)
     }
 
-    fn try_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
-        self.try_lock()
-            .map_or(Err(anyhow::anyhow!("Unable to acquire lock")), Ok)
-    }
 }

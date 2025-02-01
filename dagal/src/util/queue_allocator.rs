@@ -111,7 +111,7 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             if out.len() >= request.count {
                 break;
             }
-            match queue.try_queue_lock_async() {
+            match queue.try_queue_lock() {
                 Ok(guard) => {
                     used_queues.insert((queue.get_family_index(), queue.get_index()));
                     out.push(guard);
@@ -164,7 +164,7 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             if out.len() >= request.count {
                 break;
             }
-            match queue.try_queue_lock_async() {
+            match queue.try_queue_lock() {
                 Ok(guard) => {
                     used_queues.insert((queue.get_family_index(), queue.get_index()));
                     out.push(guard);

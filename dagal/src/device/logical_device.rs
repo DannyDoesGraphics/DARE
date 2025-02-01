@@ -8,6 +8,7 @@ use derivative::Derivative;
 use std::collections::HashSet;
 use std::ffi::c_char;
 use std::sync::{Arc, Weak};
+use crate::device::QueueInfo;
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
@@ -18,7 +19,7 @@ struct LogicalDeviceInner {
     #[derivative(PartialEq = "ignore")]
     queue_families: Vec<u32>,
     /// Enabled extensions
-    enabled_extensions: HashSet<String>,
+    enabled_extensions: Vec<String>,
     /// Debug utils
     #[derivative(PartialEq = "ignore", Debug = "ignore")]
     debug_utils: Option<ash::ext::debug_utils::Device>,
@@ -35,16 +36,19 @@ impl LogicalDeviceInner {
     pub unsafe fn get_queue(
         &self,
         queue_info: &vk::DeviceQueueInfo2,
-        dedicated: bool,
+        strict: bool,
         queue_flags: vk::QueueFlags,
     ) -> crate::device::Queue {
         let queue = unsafe { self.handle.get_device_queue2(queue_info) };
         crate::device::Queue::new(
             queue,
-            queue_info.queue_family_index,
-            queue_info.queue_index,
-            dedicated,
-            queue_flags,
+            QueueInfo {
+                family_index: queue_info.queue_family_index,
+                index: queue_info.queue_index,
+                strict,
+                queue_flags,
+                can_present: true,
+            }
         )
     }
 }
@@ -107,9 +111,6 @@ pub struct LogicalDeviceCreateInfo<'a> {
     pub instance: &'a ash::Instance,
     pub physical_device: PhysicalDevice,
     pub device_ci: vk::DeviceCreateInfo<'a>,
-    pub queues: Vec<super::Queue>,
-    pub queue_families: Vec<u32>,
-    pub enabled_extensions: HashSet<String>,
     pub debug_utils: bool,
 }
 
@@ -135,7 +136,7 @@ impl LogicalDevice {
         }
 
         let mut acceleration_structure: Option<ash::khr::acceleration_structure::Device> = None;
-        if device_ci.enabled_extensions.contains(
+        if device_ci.physical_device.get_extensions().contains(
             &crate::util::wrap_c_str(ash::khr::acceleration_structure::NAME.as_ptr())
                 .to_string_lossy()
                 .to_string(),
@@ -149,8 +150,8 @@ impl LogicalDevice {
         Ok(Self {
             inner: Arc::new(LogicalDeviceInner {
                 handle: device,
-                queue_families: device_ci.queue_families,
-                enabled_extensions: device_ci.enabled_extensions,
+                queue_families: device_ci.physical_device.get_active_queues().iter().map(|q| q.family_index).collect::<HashSet<u32>>().into_iter().collect(),
+                enabled_extensions: device_ci.physical_device.get_extensions().to_vec(),
                 debug_utils,
                 acceleration_structure,
             }),
@@ -177,19 +178,23 @@ impl LogicalDevice {
     ///
     /// # Safety
     /// Queues created here do not guarantee thread safety whatsoever with other queues
-    pub unsafe fn get_queue(
+    pub unsafe fn get_queue<M: crate::concurrency::lockable::Lockable<Target = vk::Queue>>(
         &self,
         queue_info: &vk::DeviceQueueInfo2,
-        dedicated: bool,
         queue_flags: vk::QueueFlags,
-    ) -> crate::device::Queue {
+        strict: bool,
+        can_present: bool,
+    ) -> crate::device::Queue<M> {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
-        crate::device::Queue::new(
+        crate::device::Queue::<M>::new(
             queue,
-            queue_info.queue_family_index,
-            queue_info.queue_index,
-            dedicated,
-            queue_flags,
+            QueueInfo {
+                family_index: queue_info.queue_family_index,
+                index: queue_info.queue_index,
+                strict,
+                queue_flags,
+                can_present,
+            },
         )
     }
 

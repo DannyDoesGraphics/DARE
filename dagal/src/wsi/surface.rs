@@ -2,7 +2,6 @@ use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::traits::{AsRaw, Destructible};
 
@@ -84,15 +83,21 @@ impl Surface {
     /// ```
     pub fn new<T>(entry: &ash::Entry, instance: &ash::Instance, window: &T) -> Result<Self>
     where
-        T: HasWindowHandle + HasDisplayHandle,
+        T: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    {
+        Self::new_with_handles(entry, instance, window.display_handle()?.as_raw(), window.window_handle()?.as_raw())
+    }
+
+    /// Similar to [`Self::new`] but you pass in manaully the handles
+    pub fn new_with_handles(entry: &ash::Entry, instance: &ash::Instance, display_handle: raw_window_handle::RawDisplayHandle, window_handle: raw_window_handle::RawWindowHandle) -> Result<Self>
     {
         let ext = ash::khr::surface::Instance::new(entry, instance);
         let handle = unsafe {
             ash_window::create_surface(
                 entry,
                 instance,
-                window.display_handle()?.as_raw(),
-                window.window_handle()?.as_raw(),
+                display_handle,
+                window_handle,
                 None,
             )?
         };

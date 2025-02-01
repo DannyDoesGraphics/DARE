@@ -5,6 +5,8 @@ pub mod logical_device;
 pub mod physical_device;
 pub mod queue;
 pub mod swapchain;
+pub mod init;
+pub mod app_info;
 
 pub use instance::InstanceBuilder;
 pub use logical_device::LogicalDeviceBuilder;

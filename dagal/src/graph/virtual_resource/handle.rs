@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use derivative::Derivative;
 use crate::resource::traits::Resource;
 
-/// Untyped version of resource handles
+/// Untyped version of resource handlesdd
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct ResourceHandleUntyped {
     pub(crate) id: u32,

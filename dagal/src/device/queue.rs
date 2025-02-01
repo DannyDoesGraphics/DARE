@@ -1,4 +1,5 @@
 use std::hash::{Hash, Hasher};
+use std::ptr;
 use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
@@ -8,10 +9,35 @@ use crate::DagalError;
 #[allow(unused_imports)]
 use anyhow::Result;
 use ash::vk;
-
 use crate::prelude as dagal;
 
-/// Quick easy abstraction over queues
+/// Information about queues
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueInfo {
+    /// Index to the family queue
+    pub family_index: u32,
+    /// Queue's index in the family
+    pub index: u32,
+    /// Whether the queue is dedicated
+    pub strict: bool,
+    /// Flags of the queue
+    pub queue_flags: vk::QueueFlags,
+    /// Can the queue present to the device's surface
+    pub can_present: bool,
+}
+
+impl<'a> Into<vk::DeviceQueueInfo2<'a>> for QueueInfo {
+    fn into(self) -> vk::DeviceQueueInfo2<'a> {
+        vk::DeviceQueueInfo2 {
+            s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+            p_next: ptr::null(),
+            flags: vk::DeviceQueueCreateFlags::empty(),
+            queue_family_index: self.family_index,
+            queue_index: self.index,
+            _marker: Default::default(),
+        }
+    }
+}
 
 /// Represents a [`vk::Queue`] and it's indices
 ///
@@ -23,58 +49,48 @@ pub struct Queue<
 > {
     /// Handle to [`vk::Queue`]
     handle: Arc<M>,
-
-    /// Index to the family queue
-    family_index: u32,
-
-    /// Queue's index in the family
-    index: u32,
-
-    /// Whether the queue is dedicated
-    dedicated: bool,
-
-    /// Flags of the queue
-    queue_flags: vk::QueueFlags,
+    queue_info: QueueInfo,
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for Queue<M> {
     fn clone(&self) -> Self {
         Self {
             handle: self.handle.clone(),
-            family_index: self.family_index,
-            index: self.index,
-            dedicated: self.dedicated,
-            queue_flags: self.queue_flags,
+            queue_info: self.queue_info.clone(),
         }
     }
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> PartialEq for Queue<M> {
     fn eq(&self, other: &Self) -> bool {
-        self.family_index == other.family_index && self.index == other.index
+        self.queue_info.family_index == other.queue_info.family_index && self.queue_info.index == other.queue_info.index
     }
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Eq for Queue<M> {}
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Hash for Queue<M> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.family_index.hash(state);
-        self.index.hash(state);
+        self.queue_info.family_index.hash(state);
+        self.queue_info.index.hash(state);
     }
 }
 unsafe impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Send for Queue<M> {}
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     pub fn get_index(&self) -> u32 {
-        self.index
+        self.queue_info.index
     }
 
     pub fn get_family_index(&self) -> u32 {
-        self.family_index
+        self.queue_info.family_index
     }
 
     pub fn get_dedicated(&self) -> bool {
-        self.dedicated
+        self.queue_info.strict
     }
 
     pub fn get_queue_flags(&self) -> vk::QueueFlags {
-        self.queue_flags
+        self.queue_info.queue_flags
+    }
+
+    pub fn can_present(&self) -> bool {
+        self.queue_info.can_present
     }
 }
 
@@ -82,17 +98,11 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     /// It is undefined behavior to pass in a [`vk:Queue`] from an already existing [`Queue`]
     pub unsafe fn new(
         handle: vk::Queue,
-        family_index: u32,
-        index: u32,
-        dedicated: bool,
-        queue_flags: vk::QueueFlags,
+        queue_info: QueueInfo,
     ) -> Self {
         Self {
             handle: Arc::new(M::new(handle)),
-            family_index,
-            index,
-            dedicated,
-            queue_flags,
+            queue_info,
         }
     }
 
@@ -105,7 +115,9 @@ impl<M: dagal::concurrency::SyncLockable<Target = vk::Queue>> Queue<M> {
     pub fn acquire_queue_lock(&self) -> Result<M::Lock<'_>> {
         self.handle.lock()
     }
+}
 
+impl<M: dagal::concurrency::TryLockable<Target = vk::Queue>> Queue<M> {
     pub fn try_queue_lock(&self) -> Result<M::Lock<'_>> {
         self.handle.try_lock()
     }
@@ -118,9 +130,5 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> Queue<M> {
 
     pub fn acquire_queue_blocking(&self) -> M::Lock<'_> {
         self.handle.blocking_lock().unwrap()
-    }
-
-    pub fn try_queue_lock_async(&self) -> Result<M::Lock<'_>> {
-        self.handle.try_lock()
     }
 }

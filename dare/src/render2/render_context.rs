@@ -8,13 +8,15 @@ use dagal::ash::vk::Handle;
 use dagal::pipelines::PipelineBuilder;
 use dagal::traits::AsRaw;
 use dagal::winit;
-use std::ffi::{CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
+use dagal::bootstrap::app_info::{Expected, QueueRequest};
+use dagal::bootstrap::init::ContextInit;
 use dagal::raw_window_handle::HasRawDisplayHandle;
 
 pub struct RenderContextCreateInfo {
@@ -68,6 +70,90 @@ pub struct RenderContext {
 
 impl RenderContext {
     pub fn new(ci: RenderContextCreateInfo) -> Result<Self> {
+        let mut features_1_3 = vk::PhysicalDeviceVulkan13Features {
+            s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            dynamic_rendering: vk::TRUE,
+            synchronization2: vk::TRUE,
+            ..Default::default()
+        };
+        let mut features_1_2 = vk::PhysicalDeviceVulkan12Features {
+            s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            p_next: &mut features_1_3 as *mut _ as *mut c_void,
+            buffer_device_address: vk::TRUE,
+            descriptor_indexing: vk::TRUE,
+            descriptor_binding_partially_bound: vk::TRUE,
+            descriptor_binding_update_unused_while_pending: vk::TRUE,
+            descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+            descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+            descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+            shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+            shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+            shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+            runtime_descriptor_array: vk::TRUE,
+            scalar_block_layout: vk::TRUE,
+            ..Default::default()
+        };
+        let mut features_1_1 = vk::PhysicalDeviceVulkan11Features {
+            s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+            p_next: &mut features_1_2 as *mut _ as *mut c_void,
+            variable_pointers: vk::TRUE,
+            variable_pointers_storage_buffer: vk::TRUE,
+            ..Default::default()
+        };
+        let (
+            instance,
+            physical_device,
+            surface,
+            logical_device,
+            arc_allocator,
+            execution_manager
+        ) = dagal::bootstrap::init::WindowedContext::init(
+            dagal::bootstrap::app_info::AppSettings::<winit::window::Window> {
+                name: "DARE".to_string(),
+                version: 0,
+                engine_name: "DARE".to_string(),
+                engine_version: 0,
+                api_version: (1, 3, 0, 0),
+                enable_validation: false,
+                window: None,
+                surface_format: None,
+                present_mode: None,
+                gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
+                    dedicated: Expected::Required(true),
+                    features: vk::PhysicalDeviceFeatures2 {
+                        s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
+                        p_next: &mut features_1_1 as *mut _ as *mut c_void,
+                        features: vk::PhysicalDeviceFeatures {
+                            shader_int64: vk::TRUE,
+                            ..Default::default()
+                        },
+                        _marker: Default::default(),
+                    },
+                    device_extensions: vec![
+                        Expected::Preferred(
+                            dagal::ash::ext::debug_utils::NAME.to_string_lossy().to_string()
+                        )
+                    ],
+                    queues: vec![
+                            QueueRequest {
+                                strict: false,
+                                queue_type: vec![
+                                    Expected::Required(vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER | vk::QueueFlags::COMPUTE)
+                                ].into(),
+                                count: Expected::Required(1),
+                            },
+                            QueueRequest {
+                                strict: true,
+                                queue_type: vec![
+                                    Expected::Required(vk::QueueFlags::TRANSFER)
+                                ].into(),
+                                count: Expected::Preferred(u32::MAX),
+                            }
+                    ],
+                },
+            }
+        )?;
+
         let instance = dagal::bootstrap::InstanceBuilder::new().set_vulkan_version((1, 3, 0));
         let instance = instance
             .add_extension(dagal::ash::ext::debug_utils::NAME.as_ptr())

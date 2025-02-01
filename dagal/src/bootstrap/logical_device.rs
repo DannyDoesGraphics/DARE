@@ -5,6 +5,7 @@ use std::ptr;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
+use crate::device::QueueInfo;
 
 /// Builds a logical device
 #[derive(Derivative)]
@@ -198,14 +199,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
             instance,
             physical_device: self.physical_device,
             device_ci,
-            queue_families: queue_families_used.into_iter().collect::<Vec<u32>>(),
-            enabled_extensions: self
-                .extensions
-                .iter()
-                .map(|data| data.to_string_lossy().to_string())
-                .collect::<HashSet<String>>(),
             debug_utils: self.debug_utils,
-            queues: Vec::new(),
         })?;
         let mut queues = Vec::new();
         // reallocate back the queues
@@ -216,7 +210,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 let queue_flags: vk::QueueFlags = queue_request.family_flags;
                 let dedicated: bool = queue_request.dedicated;
                 queues.push(unsafe {
-                    device.get_queue(
+                    device.get_queue::<crate::concurrency::DEFAULT_LOCKABLE<vk::Queue>>(
                         &vk::DeviceQueueInfo2 {
                             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
                             p_next: ptr::null(),
@@ -225,10 +219,9 @@ impl<'a> LogicalDeviceBuilder<'a> {
                             queue_index: allocation.index,
                             _marker: Default::default(),
                         },
+                        queue_flags,
                         dedicated,
-                        // use the provided allocation family flags since it contains
-                        // all flags in the family and not just the requested one
-                        allocation.family_flags,
+                        true
                     )
                 });
             }

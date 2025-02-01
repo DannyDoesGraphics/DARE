@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 /// Contains a dagal context mainly used by the render graph
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Context {
-    pub instance: crate::core::Instance,
+    pub instance: Arc<crate::core::Instance>,
     pub physical_device: crate::device::PhysicalDevice,
-    pub device: crate::device::LogicalDevice,
+    pub device: Arc<crate::device::LogicalDevice>,
 }
+
