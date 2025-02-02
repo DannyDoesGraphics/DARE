@@ -171,13 +171,9 @@ impl PhysicalDevice {
                     match settings.gpu_requirements.dedicated {
                         Expected::Required(required_is_discrete) => {
                             let this_is_discrete = dev_type == vk::PhysicalDeviceType::DISCRETE_GPU;
-                            println!("{:?}", props.device_type);
                             if this_is_discrete != required_is_discrete {
                                 // mismatch => not suitable
-                                println!("Not suitable");
                                 return None;
-                            } else {
-                                println!("Suitable");
                             }
                         }
                         Expected::Preferred(pref_is_discrete) => {
@@ -229,7 +225,6 @@ impl PhysicalDevice {
                             }
                             if !allocated {
                                 // Could not fulfill a required request
-                                println!("Could not fufill?");
                                 return None;
                             }
                         }
@@ -279,7 +274,6 @@ impl PhysicalDevice {
                             pd.heuristic += allocated_preferred * 10;
                         }
                     }
-                    println!("Yeah man");
                     Some(pd)
                 })
                 .max_by_key(|pd| pd.heuristic)
