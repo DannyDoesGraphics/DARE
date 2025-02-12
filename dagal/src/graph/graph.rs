@@ -30,6 +30,9 @@ impl Default for Graph {
 impl Graph {
     /// Inserts a pass in
     pub fn insert_pass<T: Pipeline + 'static>(&mut self, pass: Box<Pass<T>>) {
+
+        // SAFETY: so long as `Pass<T>`, does not actually contain the underlying pass
+        // and only uses it for type safety, we *should* be fine transmuting this
         let pass: Box<Pass<dyn Pipeline>> = unsafe {
             std::mem::transmute(pass)
         };
