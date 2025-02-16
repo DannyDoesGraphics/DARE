@@ -17,12 +17,18 @@ pub struct App {
     configuration: render::create_infos::RenderContextConfiguration,
     last_position: Option<glam::Vec2>,
     last_dt: std::time::Instant,
-    surface_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Surface>,
-    surface_link_send: dare::util::entity_linker::ComponentsLinkerSender<engine::components::Surface>,
-    transform_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
-    transform_link_send: dare::util::entity_linker::ComponentsLinkerSender<dare::physics::components::Transform>,
-    bb_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<render::components::BoundingBox>,
-    bb_link_send: dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
+    surface_link_recv:
+        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Surface>,
+    surface_link_send:
+        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Surface>,
+    transform_link_recv:
+        dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
+    transform_link_send:
+        dare::util::entity_linker::ComponentsLinkerSender<dare::physics::components::Transform>,
+    bb_link_recv:
+        dare::util::entity_linker::ComponentsLinkerReceiver<render::components::BoundingBox>,
+    bb_link_send:
+        dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -88,7 +94,14 @@ impl winit::application::ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 if let Some(rs) = self.render_server.as_ref() {
                     // check if there is a valid window to render to
-                    if self.window.as_ref().map(|window| window.inner_size().width != 0 && window.inner_size().height != 0).unwrap_or(false) {
+                    if self
+                        .window
+                        .as_ref()
+                        .map(|window| {
+                            window.inner_size().width != 0 && window.inner_size().height != 0
+                        })
+                        .unwrap_or(false)
+                    {
                         tokio::task::block_in_place(|| {
                             tokio::runtime::Handle::current().block_on(async move {
                                 let render = rs
@@ -209,8 +222,10 @@ impl Drop for App {
 
 impl App {
     pub fn new(configuration: render::create_infos::RenderContextConfiguration) -> Result<Self> {
-        let (surface_link_send, surface_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
-        let (transform_link_send, transform_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
+        let (surface_link_send, surface_link_recv) =
+            dare::util::entity_linker::ComponentsLinker::default();
+        let (transform_link_send, transform_link_recv) =
+            dare::util::entity_linker::ComponentsLinker::default();
         let (bb_link_send, bb_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
         Ok(Self {
             window: None,

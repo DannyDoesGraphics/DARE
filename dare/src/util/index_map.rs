@@ -3,7 +3,7 @@ use std::collections::HashMap;
 pub struct PersistentIndexMap<K, V> {
     pub map: HashMap<K, (usize, V)>, // Maps keys to their persistent indices and values
     pub elements: Vec<Option<(K, V)>>, // Stores keys and values by index for iteration
-    pub next_index: usize,             // Tracks the next available index
+    pub next_index: usize,           // Tracks the next available index
 }
 
 impl<K: Clone + Eq + std::hash::Hash, V: Clone> PersistentIndexMap<K, V> {
@@ -84,7 +84,9 @@ impl<K: Clone + Eq + std::hash::Hash, V: Clone> PersistentIndexMap<K, V> {
             .iter()
             .enumerate() // Retain the original persistent index
             .filter_map(|(persistent_index, opt_entry)| {
-                opt_entry.as_ref().map(|(key, value)| (persistent_index, key, value))
+                opt_entry
+                    .as_ref()
+                    .map(|(key, value)| (persistent_index, key, value))
             })
             .collect();
 
@@ -97,5 +99,4 @@ impl<K: Clone + Eq + std::hash::Hash, V: Clone> PersistentIndexMap<K, V> {
             .enumerate()
             .map(|(dense_index, (_, key, value))| (dense_index, key, value))
     }
-
 }

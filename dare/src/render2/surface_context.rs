@@ -92,8 +92,8 @@ impl SurfaceContext {
                 window_context_ci.instance.get_instance(),
                 window_context_ci.allocator.get_device().clone(),
             )?;
-        let swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>> = swapchain
-            .get_images::<GPUAllocatorImpl>()?;
+        let swapchain_images: Vec<dagal::resource::Image<GPUAllocatorImpl>> =
+            swapchain.get_images::<GPUAllocatorImpl>()?;
         let swapchain_image_view: Box<[dagal::resource::ImageView]> = swapchain
             .get_image_views(
                 &swapchain_images
@@ -102,12 +102,12 @@ impl SurfaceContext {
                     .collect::<Vec<vk::Image>>(),
             )?
             .into_boxed_slice();
-        let swapchain_images: Box<[std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>]> = swapchain_images
-            .into_iter()
-            .map(|image: dagal::resource::Image<GPUAllocatorImpl>| {
-                std::sync::Mutex::new(image)
-            }).collect::<Vec<std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>>>()
-            .into_boxed_slice();
+        let swapchain_images: Box<[std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>]> =
+            swapchain_images
+                .into_iter()
+                .map(|image: dagal::resource::Image<GPUAllocatorImpl>| std::sync::Mutex::new(image))
+                .collect::<Vec<std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>>>()
+                .into_boxed_slice();
         let frames_in_flight =
             frames_in_flight.unwrap_or(surface.get_capabilities().min_image_count) as usize;
         println!("Surface made");
@@ -152,11 +152,7 @@ impl Drop for SurfaceContext {
                     let rt_handle = tokio::runtime::Handle::current();
                     rt_handle.block_on(async {
                         let locked_frame = frame.lock().await;
-                        if locked_frame
-                            .render_fence
-                            .get_fence_status()
-                            .unwrap_or(true)
-                        {
+                        if locked_frame.render_fence.get_fence_status().unwrap_or(true) {
                             vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
                         }
                     });

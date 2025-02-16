@@ -1,14 +1,14 @@
 use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataStreamable;
+use crate::asset2::metadata_location::MetaDataLocation;
 use crate::prelude as dare;
 use crate::render2::util::{handle_cast_stream, ElementFormat};
 use bytemuck::Pod;
 use derivative::Derivative;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use futures_core::stream::BoxStream;
-use std::sync::Arc;
 use image::{EncodableLayout, GenericImageView};
-use crate::asset2::metadata_location::MetaDataLocation;
+use std::sync::Arc;
 
 pub struct Image {}
 impl asset::Asset for Image {
@@ -22,8 +22,7 @@ pub struct ImageAsset {
 }
 impl Eq for ImageAsset {}
 
-impl asset::AssetLoaded for ImageAsset {
-}
+impl asset::AssetLoaded for ImageAsset {}
 
 #[derive(Derivative, Debug, PartialEq, Clone)]
 #[derivative(Hash)]
@@ -43,24 +42,17 @@ impl asset::loaders::MetaDataLoad for ImageMetaData {
     type Loaded = ImageAsset;
     type LoadInfo<'a>
     where
-        Self: 'a
+        Self: 'a,
     = ();
 
     async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
         let bytes: Vec<u8> = match &self.location {
-            MetaDataLocation::Url(url) => {
-                reqwest::get(url).await?.bytes().await?.to_vec()
-            }
-            MetaDataLocation::FilePath(path) => {
-                tokio::fs::read(path).await?.as_bytes().to_vec()
-            }
+            MetaDataLocation::Url(url) => reqwest::get(url).await?.bytes().await?.to_vec(),
+            MetaDataLocation::FilePath(path) => tokio::fs::read(path).await?.as_bytes().to_vec(),
             MetaDataLocation::Memory(mem) => unimplemented!(),
         };
-        let image = image::ImageReader::new(std::io::Cursor::new(bytes))
-            .with_guessed_format()?;
+        let image = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
         let image = image.decode()?;
-        Ok(ImageAsset {
-            image
-        })
+        Ok(ImageAsset { image })
     }
 }

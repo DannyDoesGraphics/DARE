@@ -1,4 +1,6 @@
+use std::any::Any;
 use std::ffi::CString;
+use std::hash::{Hash, Hasher};
 use std::ptr;
 
 use anyhow::Result;
@@ -7,7 +9,7 @@ use ash::vk;
 use crate::traits::AsRaw;
 
 /// Every resource in Vulkan is expected to have a lifetime + debuggable
-pub trait Resource: Sized + AsRaw {
+pub trait Resource: Hash + Sized + AsRaw {
     /// Necessary create info
     type CreateInfo<'a>: 'a;
     /// Attempt to create a new resource given the [`Self::CreateInfo`] struct

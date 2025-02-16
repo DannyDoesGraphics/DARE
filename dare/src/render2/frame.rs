@@ -31,7 +31,8 @@ pub struct Frame {
     /// Buffer used to hold instanced information
     pub instanced_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold surface information
-    pub surface_buffer: dare::render::resources::surface_buffer::RenderSurfaceBuffer<GPUAllocatorImpl>,
+    pub surface_buffer:
+        dare::render::resources::surface_buffer::RenderSurfaceBuffer<GPUAllocatorImpl>,
     /// Contains buffer for transformation
     pub transform_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// staging buffers used
@@ -206,8 +207,8 @@ impl Frame {
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::INDIRECT_BUFFER
-                    | vk::BufferUsageFlags::STORAGE_BUFFER
-                    | vk::BufferUsageFlags::VERTEX_BUFFER,
+                        | vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
             )?,
             instanced_buffer: dare::render::util::GrowableBuffer::new(
@@ -223,7 +224,7 @@ impl Frame {
                     usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                    | vk::BufferUsageFlags::VERTEX_BUFFER,
+                        | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
             )?,
             surface_buffer: dare::render::resources::RenderSurfaceBuffer::new(
@@ -242,7 +243,7 @@ impl Frame {
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                             | vk::BufferUsageFlags::VERTEX_BUFFER,
                     },
-                )?
+                )?,
             ),
             transform_buffer: dare::render::util::GrowableBuffer::new(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {

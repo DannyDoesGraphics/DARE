@@ -55,8 +55,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
         metadata: <Self::Asset as asset::Asset>::Metadata,
         mut prepare_info: Self::PrepareInfo,
         load_info: <<Self::Asset as asset::Asset>::Metadata as asset::loaders::MetaDataLoad>::LoadInfo<'a>,
-    ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>>
-    {
+    ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>> {
         Box::pin(async move {
             let frame_size: usize = load_info
                 .chunk_size

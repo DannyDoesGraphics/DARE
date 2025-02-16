@@ -1,21 +1,21 @@
+use crate::asset2::prelude::AssetHandle;
+use crate::asset2::server::AssetServerDelta;
 use crate::prelude as dare;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
+use crossbeam_channel::SendError;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dare_containers as containers;
+use dare_containers::prelude::Slot;
+use futures::{FutureExt, TryFutureExt};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
-use crossbeam_channel::SendError;
-use futures::{FutureExt, TryFutureExt};
-use dare_containers::prelude::Slot;
-use crate::asset2::prelude::AssetHandle;
-use crate::asset2::server::AssetServerDelta;
-pub mod handle;
 pub mod asset_manager_system;
+pub mod handle;
 pub use asset_manager_system::*;
 pub use handle::*;
 
@@ -90,7 +90,11 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
                     self.internal_loaded.insert(loaded_asset.handle, loaded);
                 }
                 Err(e) => {
-                    tracing::error!("Failed to load handle {:?}, due to: {:?}", loaded_asset.handle.as_ref(), e)
+                    tracing::error!(
+                        "Failed to load handle {:?}, due to: {:?}",
+                        loaded_asset.handle.as_ref(),
+                        e
+                    )
                 }
             }
         }
@@ -111,26 +115,34 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
                         // no refs left, delete
                         if *amount == 0 {
                             // remove whatever is loaded
-                            let asset_handle = self.containers.get(handle.as_ref().clone()).cloned();
+                            let asset_handle =
+                                self.containers.get(handle.as_ref().clone()).cloned();
                             if self.internal_loaded.remove(&handle).is_none() {
-                                tracing::warn!("Tried removing handle {:?}, expected loaded, got `None`.", handle.as_ref());
+                                tracing::warn!(
+                                    "Tried removing handle {:?}, expected loaded, got `None`.",
+                                    handle.as_ref()
+                                );
                                 // Indicate unloading failed
                                 if let Some(asset_handle) = asset_handle {
                                     // Indicate asset was unloaded
                                     unsafe {
-                                        self.asset_server.update_state(
-                                            &*asset_handle.into_untyped_handle(),
-                                            dare::asset2::AssetState::Failed
-                                        ).unwrap()
+                                        self.asset_server
+                                            .update_state(
+                                                &*asset_handle.into_untyped_handle(),
+                                                dare::asset2::AssetState::Failed,
+                                            )
+                                            .unwrap()
                                     }
                                 }
                             } else if let Some(asset_handle) = asset_handle {
                                 // Indicate asset was unloaded
                                 unsafe {
-                                    self.asset_server.update_state(
-                                        &*asset_handle.into_untyped_handle(),
-                                        dare::asset2::AssetState::Unloaded
-                                    ).unwrap()
+                                    self.asset_server
+                                        .update_state(
+                                            &*asset_handle.into_untyped_handle(),
+                                            dare::asset2::AssetState::Unloaded,
+                                        )
+                                        .unwrap()
                                 }
                             }
                         }
@@ -149,10 +161,13 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
         let handle = handle.downgrade();
         let slot = self.containers.insert(handle.clone());
         self.handle_references.insert(slot.clone(), 1);
-        self.slot_mappings.insert(handle.clone(), RenderAssetHandle::Strong {
-            handle: slot.clone(),
-            dropped_handles_send: self.dropped_handles_send.clone(),
-        });
+        self.slot_mappings.insert(
+            handle.clone(),
+            RenderAssetHandle::Strong {
+                handle: slot.clone(),
+                dropped_handles_send: self.dropped_handles_send.clone(),
+            },
+        );
         {
             let mut hasher = DefaultHasher::new();
             handle.hash(&mut hasher);
@@ -167,7 +182,7 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     /// Removes asset handle from render storage, and if exists a loaded asset, it will return it
     pub fn remove(&mut self, handle: RenderAssetHandle<T>) -> Option<T::Loaded> {
         self.containers.remove(handle.as_ref().clone()).unwrap();
-        let mut hasher= DefaultHasher::new();
+        let mut hasher = DefaultHasher::new();
         handle.hash(&mut hasher);
         println!("Removing {:?}", hasher.finish());
         self.handle_references.remove(&handle);
@@ -175,25 +190,35 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     }
 
     /// Attempts to retrieve the loaded version
-    pub fn get_loaded(&self, handle: &RenderAssetHandle<T>) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
+    pub fn get_loaded(
+        &self,
+        handle: &RenderAssetHandle<T>,
+    ) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
         self.internal_loaded.get(handle)
     }
 
     /// Attempts to retrieve loaded version from asset handle
-    pub fn get_loaded_from_asset_handle(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
-        self.get_storage_handle(asset_handle).map(|handle| {
-            self.get_loaded(&handle)
-        })?
+    pub fn get_loaded_from_asset_handle(
+        &self,
+        asset_handle: &AssetHandle<T::Asset>,
+    ) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
+        self.get_storage_handle(asset_handle)
+            .map(|handle| self.get_loaded(&handle))?
     }
 
     /// Attempts to retrieve the loaded version
-    pub fn get_mut_loaded(&mut self, handle: &RenderAssetHandle<T>) -> Option<&mut <T as MetaDataRenderAsset>::Loaded> {
+    pub fn get_mut_loaded(
+        &mut self,
+        handle: &RenderAssetHandle<T>,
+    ) -> Option<&mut <T as MetaDataRenderAsset>::Loaded> {
         self.internal_loaded.get_mut(handle)
     }
 
     /// Get the associated render asset handle for each from an asset handle
-    pub fn get_storage_handle(&self, handle: &AssetHandle<T::Asset>) -> Option<RenderAssetHandle<T>> {
-
+    pub fn get_storage_handle(
+        &self,
+        handle: &AssetHandle<T::Asset>,
+    ) -> Option<RenderAssetHandle<T>> {
         if !self.slot_mappings.contains_key(&handle.clone().downgrade()) {
             for key in self.slot_mappings.keys() {
                 let mut hasher = DefaultHasher::new();
@@ -245,7 +270,10 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
             let loaded = T::load_asset(metadata, prepare_info, load_info).await;
             unsafe {
                 asset_server
-                    .update_state(&*asset_handle.clone().into_untyped_handle(), dare::asset2::AssetState::Loaded)
+                    .update_state(
+                        &*asset_handle.clone().into_untyped_handle(),
+                        dare::asset2::AssetState::Loaded,
+                    )
                     .unwrap();
             }
 
@@ -276,18 +304,27 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     }
 }
 
-impl RenderAssetManagerStorage<dare::render::render_assets::components::buffer::RenderBuffer<GPUAllocatorImpl>> {
-    pub fn get_bda(&self, handle: &RenderAssetHandle<dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>>) -> Option<vk::DeviceAddress> {
-        self.internal_loaded.get(handle).map(|slot| {
-            slot.buffer.address()
-        })
+impl
+    RenderAssetManagerStorage<
+        dare::render::render_assets::components::buffer::RenderBuffer<GPUAllocatorImpl>,
+    >
+{
+    pub fn get_bda(
+        &self,
+        handle: &RenderAssetHandle<
+            dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+        >,
+    ) -> Option<vk::DeviceAddress> {
+        self.internal_loaded
+            .get(handle)
+            .map(|slot| slot.buffer.address())
     }
 
-    pub fn get_bda_from_asset_handle(&self, handle: &AssetHandle<
-        dare::asset2::assets::Buffer
-    >) -> Option<vk::DeviceAddress> {
-        self.get_loaded_from_asset_handle(handle).map(|buffer| {
-            buffer.address()
-        })
+    pub fn get_bda_from_asset_handle(
+        &self,
+        handle: &AssetHandle<dare::asset2::assets::Buffer>,
+    ) -> Option<vk::DeviceAddress> {
+        self.get_loaded_from_asset_handle(handle)
+            .map(|buffer| buffer.address())
     }
 }

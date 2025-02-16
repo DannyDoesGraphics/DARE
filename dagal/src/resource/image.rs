@@ -257,8 +257,12 @@ impl<A: Allocator> Image<A> {
     }
 
     pub fn transition_ownership(&mut self, new_queue: &crate::device::Queue) -> Result<()> {
-        if self.queue_family.map(|old_queue| old_queue == new_queue.get_family_index()).unwrap_or(true) {
-            return Ok(())
+        if self
+            .queue_family
+            .map(|old_queue| old_queue == new_queue.get_family_index())
+            .unwrap_or(true)
+        {
+            return Ok(());
         }
         unsafe {
             let image_barrier = vk::ImageMemoryBarrier2 {

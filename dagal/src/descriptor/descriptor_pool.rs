@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use std::ptr;
 
 use anyhow::Result;
@@ -148,6 +149,12 @@ pub enum DescriptorPoolCreateInfo<'a> {
         device: crate::device::LogicalDevice,
         name: Option<&'a str>,
     },
+}
+
+impl Hash for DescriptorPool {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
 }
 
 impl Resource for DescriptorPool {

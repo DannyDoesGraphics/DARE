@@ -1,5 +1,5 @@
-use bevy_ecs::prelude::*;
 use crate::prelude as dare;
+use bevy_ecs::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Component)]
 pub struct Texture {

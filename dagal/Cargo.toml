@@ -24,6 +24,7 @@ shaderc = { version = "0.8.3", optional = true }
 glam = "0.29.0"
 log = "0.4.22"
 petgraph = "0.7.0"
+crossbeam-channel = "0.5.14"
 
 [dev-dependencies]
 winit = { version = "0.30.0", optional = false }

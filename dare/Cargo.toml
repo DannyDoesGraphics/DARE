@@ -24,14 +24,14 @@ image = "0.25.5"
 rayon = "1.10.0"
 tokio = { version = "1.41.1", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
 derivative = "2.2.0"
-bevy_ecs = { version = "0.14.2", features = ["default", "multi_threaded"] }
+bevy_ecs = { version = "0.15.2", features = ["default", "multi_threaded"] }
 reqwest = { version = "0.12.9", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 async-stream = "0.3.6"
 log = "0.4.22"
 backtrace = "0.3.74"
 glm = "0.2.3"
-bevy_tasks = "0.14.2"
+bevy_tasks = "0.15.2"
 futures = "0.3.31"
 futures-core = "0.3.31"
 crossbeam-channel = "0.5.13"

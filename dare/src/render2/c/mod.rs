@@ -4,9 +4,9 @@ pub use indirect_buffers::*;
 
 use crate::prelude as dare;
 use bitflags::bitflags;
+use bytemuck::{Pod, Zeroable};
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
-use bytemuck::{Pod, Zeroable};
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -90,7 +90,7 @@ impl CMaterial {
         Some(Self {
             bit_flag: 0,
             _padding: 0,
-            color_factor: material.albedo_factor.to_array(), 
+            color_factor: material.albedo_factor.to_array(),
             albedo_texture_id: 0,
             albedo_sampler_id: 0,
             normal_texture_id: 0,
@@ -100,7 +100,6 @@ impl CMaterial {
 }
 unsafe impl Zeroable for CMaterial {}
 unsafe impl Pod for CMaterial {}
-
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

@@ -1,9 +1,9 @@
 use crate::prelude as dare;
 use crate::render2::server::IrSend;
+use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::IntoSystemConfigs;
-use crate::util::entity_linker::ComponentsLinkerSender;
 
 #[derive(Debug)]
 pub struct EngineServer {

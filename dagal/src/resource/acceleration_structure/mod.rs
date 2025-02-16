@@ -1,6 +1,7 @@
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
+use std::hash::{Hash, Hasher};
 
 pub use acceleration_structure_build_geometry_info::AccelerationStructureBuildGeometryInfo as BuildGeometryInfo;
 pub use acceleration_structure_build_geometry_info::*;
@@ -23,6 +24,12 @@ pub enum AccelerationStructureInfo<'a> {
         device: crate::device::LogicalDevice,
         name: Option<&'a str>,
     },
+}
+
+impl Hash for AccelerationStructure {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
 }
 
 impl Resource for AccelerationStructure {

@@ -3,6 +3,7 @@ use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug)]
 pub struct Sampler {
@@ -63,11 +64,17 @@ pub enum SamplerCreateInfo<'a> {
     },
 }
 
+impl Hash for Sampler {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
+}
+
 impl Resource for Sampler {
     type CreateInfo<'a> = SamplerCreateInfo<'a>;
 
     fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
-           where
+    where
         Self: Sized,
     {
         match create_info {

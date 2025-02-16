@@ -4,13 +4,13 @@ pub mod render_asset_state;
 
 use super::prelude as asset;
 use bevy_ecs::prelude::*;
+use crossbeam_channel::SendError;
 use dare_containers::dashmap::try_result::TryResult;
 pub use deltas::AssetServerDelta;
+pub use render_asset_state::*;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use crossbeam_channel::SendError;
-pub use render_asset_state::*;
 
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 pub enum AssetServerErrors {
@@ -186,7 +186,7 @@ impl AssetServer {
 
     pub fn get_metadata<T: asset::Asset>(
         &self,
-        handle: &asset::AssetHandle<T>
+        handle: &asset::AssetHandle<T>,
     ) -> Option<T::Metadata> {
         self.infos
             .states
@@ -226,23 +226,26 @@ impl AssetServer {
         match self.infos.states.get_mut(&handle).map(|mut info| {
             info.asset_state = state;
         }) {
-            None => {
-                None
-            }
+            None => None,
             Some(_) => {
-                let handle = self.infos.states.get(&handle).unwrap().handle.clone().upgrade();
+                let handle = self
+                    .infos
+                    .states
+                    .get(&handle)
+                    .unwrap()
+                    .handle
+                    .clone()
+                    .upgrade();
                 if let Some(handle) = handle {
                     match &state {
                         asset::AssetState::Unloaded => {}
                         asset::AssetState::Loading => {
-                            match self.inner.delta_send.send(
-                                AssetServerDelta::HandleLoading(
-                                    asset::AssetHandleUntyped::Weak {
-                                        id: handle.id,
-                                        weak_ref: Arc::downgrade(&handle),
-                                    },
-                                )
-                            ) {
+                            match self.inner.delta_send.send(AssetServerDelta::HandleLoading(
+                                asset::AssetHandleUntyped::Weak {
+                                    id: handle.id,
+                                    weak_ref: Arc::downgrade(&handle),
+                                },
+                            )) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     tracing::error!("Failed to send delta: {:?}", e);
@@ -251,14 +254,15 @@ impl AssetServer {
                         }
                         asset::AssetState::Loaded => {}
                         asset::AssetState::Unloading => {
-                            match self.inner.delta_send.send(
-                                AssetServerDelta::HandleUnloading(
+                            match self
+                                .inner
+                                .delta_send
+                                .send(AssetServerDelta::HandleUnloading(
                                     asset::AssetHandleUntyped::Weak {
                                         id: handle.id,
                                         weak_ref: Arc::downgrade(&handle),
                                     },
-                                )
-                            ) {
+                                )) {
                                 Ok(_) => {}
                                 Err(e) => {
                                     tracing::error!("Failed to send delta: {:?}", e);
@@ -274,11 +278,12 @@ impl AssetServer {
     }
 
     /// Attempt to transition an asset from unloaded -> loading
-    pub fn transition_loading(&self, handle: &asset::AssetIdUntyped) -> Result<(), AssetServerErrors> {
+    pub fn transition_loading(
+        &self,
+        handle: &asset::AssetIdUntyped,
+    ) -> Result<(), AssetServerErrors> {
         match self.get_state(handle) {
-            None => {
-                Err(AssetServerErrors::NullHandle(handle.clone()))
-            }
+            None => Err(AssetServerErrors::NullHandle(handle.clone())),
             Some(found_state) => {
                 if matches!(found_state, asset::AssetState::Unloaded) {
                     unsafe {
@@ -286,7 +291,10 @@ impl AssetServer {
                         Ok(())
                     }
                 } else {
-                    Err(AssetServerErrors::UnexpectedAssetState(found_state, asset::AssetState::Unloaded))
+                    Err(AssetServerErrors::UnexpectedAssetState(
+                        found_state,
+                        asset::AssetState::Unloaded,
+                    ))
                 }
             }
         }

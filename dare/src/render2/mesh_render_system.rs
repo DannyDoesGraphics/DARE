@@ -1,6 +1,7 @@
 use crate::prelude as dare;
 use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
+use crate::render2::render_assets::storage::asset_manager_system;
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
@@ -10,11 +11,10 @@ use dagal::command::CommandBufferState;
 use dagal::pipelines::Pipeline;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
+use image::imageops::unsharpen;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use image::imageops::unsharpen;
 use tokio::task;
-use crate::render2::render_assets::storage::asset_manager_system;
 
 /// Functions effectively as a collection
 struct SurfaceRender<'a> {
@@ -22,53 +22,67 @@ struct SurfaceRender<'a> {
     transform: &'a dare::physics::components::Transform,
 }
 impl<'a> SurfaceRender<'a> {
-    pub fn decompose(self) -> (&'a dare::engine::components::Surface, &'a dare::physics::components::Transform) {
+    pub fn decompose(
+        self,
+    ) -> (
+        &'a dare::engine::components::Surface,
+        &'a dare::physics::components::Transform,
+    ) {
         (self.surface, self.transform)
     }
 }
 
 pub fn build_instancing_data(
     view_proj: glam::Mat4,
-    query: &Query<'_, '_, (Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &dare::render::components::BoundingBox, &dare::physics::components::Transform)>,
+    query: &Query<
+        '_,
+        '_,
+        (
+            Entity,
+            &dare::engine::components::Surface,
+            Option<&dare::engine::components::Material>,
+            &dare::render::components::BoundingBox,
+            &dare::physics::components::Transform,
+        ),
+    >,
     buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-        dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>
-    >
+        dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+    >,
 ) -> (
     Vec<dare::engine::components::Surface>,
     Vec<dare::render::c::CSurface>,
     Vec<dare::render::c::CMaterial>,
     Vec<dare::render::c::InstancedSurfacesInfo>,
-    Vec<[f32; 16]>
+    Vec<[f32; 16]>,
 ) {
     // Acquire a tightly packed map
-    let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> = HashMap::with_capacity(query.iter().len());
+    let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> =
+        HashMap::with_capacity(query.iter().len());
     let mut unique_surfaces: Vec<dare::render::c::CSurface> = Vec::new();
     let mut asset_unique_surfaces: Vec<dare::engine::components::Surface> = Vec::new();
 
-    let mut material_map: HashMap<dare::engine::components::Material, usize> = HashMap::with_capacity(surface_map.len());
-    let mut unique_materials: Vec<dare::render::c::CMaterial> = vec![
-        dare::render::c::CMaterial {
-            bit_flag: 0,
-            _padding: 0,
-            color_factor: glam::Vec4::ONE.to_array(),
-            albedo_texture_id: 0,
-            albedo_sampler_id: 0,
-            normal_texture_id: 0,
-            normal_sampler_id: 0,
-        }
-    ];
-    for (index,(entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+    let mut material_map: HashMap<dare::engine::components::Material, usize> =
+        HashMap::with_capacity(surface_map.len());
+    let mut unique_materials: Vec<dare::render::c::CMaterial> = vec![dare::render::c::CMaterial {
+        bit_flag: 0,
+        _padding: 0,
+        color_factor: glam::Vec4::ONE.to_array(),
+        albedo_texture_id: 0,
+        albedo_sampler_id: 0,
+        normal_texture_id: 0,
+        normal_sampler_id: 0,
+    }];
+    for (index, (entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
         let c_surface_success: bool = false;
         // check if it even exists in frame
-        if !bounding_box.visible_in_frustum(
-            transform.get_transform_matrix(),
-            view_proj
-        ) {
+        if !bounding_box.visible_in_frustum(transform.get_transform_matrix(), view_proj) {
             continue;
         }
         surface_map.entry((*surface).clone()).or_insert_with(|| {
             let id: usize = unique_surfaces.len();
-            if let Some(c_surface) = dare::render::c::CSurface::from_surface(buffers, (*surface).clone()) {
+            if let Some(c_surface) =
+                dare::render::c::CSurface::from_surface(buffers, (*surface).clone())
+            {
                 unique_surfaces.push(c_surface);
                 asset_unique_surfaces.push((*surface).clone());
                 Some(id)
@@ -80,47 +94,56 @@ pub fn build_instancing_data(
         if !c_surface_success {
             continue;
         }
-        material_map.entry(material.cloned().unwrap_or({
-            dare::engine::components::Material {
-                albedo_factor: glam::Vec4::ONE,
-            }
-        })).or_insert_with(|| {
-            let id: usize = unique_materials.len();
-            if let Some(material) = material.cloned() {
-                match dare::render::c::CMaterial::from_material(material) {
-                    None => {
-                        0
-                    }
-                    Some(material) => {
-                        unique_materials.push(material);
-                        id
-                    }
+        material_map
+            .entry(material.cloned().unwrap_or({
+                dare::engine::components::Material {
+                    albedo_factor: glam::Vec4::ONE,
                 }
-            } else {
-                0
-            }
-        });
+            }))
+            .or_insert_with(|| {
+                let id: usize = unique_materials.len();
+                if let Some(material) = material.cloned() {
+                    match dare::render::c::CMaterial::from_material(material) {
+                        None => 0,
+                        Some(material) => {
+                            unique_materials.push(material);
+                            id
+                        }
+                    }
+                } else {
+                    0
+                }
+            });
     }
 
     /// (surface_index, material_index) -> transforms
     let mut instance_groups: HashMap<(u64, u64), Vec<glam::Mat4>> = HashMap::new();
-    for (index,(entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+    for (index, (entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
         // ignore surfaces which failed to resolve
-        if surface_map.get(surface).map(|idx| idx.is_none()).unwrap_or(true) {
+        if surface_map
+            .get(surface)
+            .map(|idx| idx.is_none())
+            .unwrap_or(true)
+        {
             continue;
         }
 
         // focus on grouping for instancing
-        instance_groups.entry((
-            surface_map.get(surface).unwrap().unwrap() as u64,
-            // default to 0 for the default material
-            material.map(|material| *material_map.get(material).unwrap() as u64).unwrap_or(0),
-        )).or_insert_with(Vec::new)
-                       .push(transform.get_transform_matrix());
+        instance_groups
+            .entry((
+                surface_map.get(surface).unwrap().unwrap() as u64,
+                // default to 0 for the default material
+                material
+                    .map(|material| *material_map.get(material).unwrap() as u64)
+                    .unwrap_or(0),
+            ))
+            .or_insert_with(Vec::new)
+            .push(transform.get_transform_matrix());
     }
 
     // turn all transformations into one global buffer
-    let mut instancing_information: Vec<dare::render::c::InstancedSurfacesInfo> = Vec::with_capacity(instance_groups.len());
+    let mut instancing_information: Vec<dare::render::c::InstancedSurfacesInfo> =
+        Vec::with_capacity(instance_groups.len());
     let mut transforms: Vec<[f32; 16]> = Vec::new();
     for ((surface, material), transformations) in instance_groups.iter() {
         instancing_information.push(dare::render::c::InstancedSurfacesInfo {
@@ -129,14 +152,23 @@ pub fn build_instancing_data(
             instances: transformations.len() as u64,
             transformation_offset: transforms.len() as u64,
         });
-        transforms.append(&mut transformations.iter().map(|transform| transform.transpose().to_cols_array()).collect::<Vec<[f32; 16]>>());
+        transforms.append(
+            &mut transformations
+                .iter()
+                .map(|transform| transform.transpose().to_cols_array())
+                .collect::<Vec<[f32; 16]>>(),
+        );
     }
     // sanity check
     for (instancing, (_, tfs)) in instancing_information.iter().zip(instance_groups.iter()) {
         let start = instancing.transformation_offset as usize;
         let end = instancing.transformation_offset as usize + instancing.instances as usize;
         if transforms[start..end]
-            != tfs.iter().map(|t| t.transpose().to_cols_array()).collect::<Vec<[f32; 16]>>() {
+            != tfs
+                .iter()
+                .map(|t| t.transpose().to_cols_array())
+                .collect::<Vec<[f32; 16]>>()
+        {
             panic!("Not equivalent?");
         }
     }
@@ -149,7 +181,7 @@ pub fn build_instancing_data(
         unique_surfaces,
         unique_materials,
         instancing_information,
-        transforms
+        transforms,
     )
 }
 
@@ -158,12 +190,22 @@ pub async fn mesh_render(
     render_context: super::render_context::RenderContext,
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
-    surfaces: Query<'_, '_, (Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &dare::render::components::BoundingBox, &dare::physics::components::Transform)>,
+    surfaces: Query<
+        '_,
+        '_,
+        (
+            Entity,
+            &dare::engine::components::Surface,
+            Option<&dare::engine::components::Material>,
+            &dare::render::components::BoundingBox,
+            &dare::physics::components::Transform,
+        ),
+    >,
     buffers: Res<
         '_,
         dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>
-        >
+            dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+        >,
     >,
 ) {
     #[cfg(feature = "tracing")]
@@ -176,13 +218,9 @@ pub async fn mesh_render(
             CommandBufferState::Recording(recording) => {
                 let (asset_surfaces, surfaces, materials, instancing_information, transforms) = {
                     let view_proj = camera.get_projection(
-                        frame.image_extent.width as f32 / frame.image_extent.height as f32
+                        frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     ) * camera.get_view_matrix();
-                    build_instancing_data(
-                        view_proj,
-                        &surfaces,
-                        &buffers
-                    )
+                    build_instancing_data(view_proj, &surfaces, &buffers)
                 };
                 // check for empty surfaces, before going
                 if instancing_information.is_empty() {
@@ -209,7 +247,11 @@ pub async fn mesh_render(
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
                         indirect_calls.as_slice(),
-                        render_context.inner.window_context.present_queue.get_family_index(),
+                        render_context
+                            .inner
+                            .window_context
+                            .present_queue
+                            .get_family_index(),
                     )
                     .await
                     .unwrap();
@@ -218,12 +260,23 @@ pub async fn mesh_render(
                     .instanced_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        instancing_information.iter().flat_map(|instancing| {
-                            let bytes = bytemuck::bytes_of(instancing).to_vec();
-                            instanced_surfaces_bytes_offset.push(instanced_surfaces_bytes_offset.last().unwrap() + bytes.len() as u64);
-                            bytes
-                        }).collect::<Vec<u8>>().as_slice(),
-                        render_context.inner.window_context.present_queue.get_family_index(),
+                        instancing_information
+                            .iter()
+                            .flat_map(|instancing| {
+                                let bytes = bytemuck::bytes_of(instancing).to_vec();
+                                instanced_surfaces_bytes_offset.push(
+                                    instanced_surfaces_bytes_offset.last().unwrap()
+                                        + bytes.len() as u64,
+                                );
+                                bytes
+                            })
+                            .collect::<Vec<u8>>()
+                            .as_slice(),
+                        render_context
+                            .inner
+                            .window_context
+                            .present_queue
+                            .get_family_index(),
                     )
                     .await
                     .unwrap();
@@ -232,10 +285,17 @@ pub async fn mesh_render(
                     .surface_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        surfaces.iter().flat_map(|surface| {
-                            bytemuck::bytes_of(surface)
-                        }).copied().collect::<Vec<u8>>().as_slice(),
-                        render_context.inner.window_context.present_queue.get_family_index(),
+                        surfaces
+                            .iter()
+                            .flat_map(|surface| bytemuck::bytes_of(surface))
+                            .copied()
+                            .collect::<Vec<u8>>()
+                            .as_slice(),
+                        render_context
+                            .inner
+                            .window_context
+                            .present_queue
+                            .get_family_index(),
                     )
                     .await
                     .unwrap();
@@ -244,20 +304,32 @@ pub async fn mesh_render(
                     .transform_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        transforms.iter().flat_map(|transform| {
-                            bytemuck::bytes_of(transform)
-                        }).copied().collect::<Vec<u8>>().as_slice(),
-                        render_context.inner.window_context.present_queue.get_family_index(),
+                        transforms
+                            .iter()
+                            .flat_map(|transform| bytemuck::bytes_of(transform))
+                            .copied()
+                            .collect::<Vec<u8>>()
+                            .as_slice(),
+                        render_context
+                            .inner
+                            .window_context
+                            .present_queue
+                            .get_family_index(),
                     )
                     .await
                     .unwrap();
                 // finally, store asset handles
                 for surface in asset_surfaces.iter() {
-                    frame.resources.insert(surface.vertex_buffer.clone().into_untyped_handle());
-                    frame.resources.insert(surface.index_buffer.clone().into_untyped_handle());
-                    surface.normal_buffer.clone().map(|b| {
-                        frame.resources.insert(b.clone().into_untyped_handle())
-                    });
+                    frame
+                        .resources
+                        .insert(surface.vertex_buffer.clone().into_untyped_handle());
+                    frame
+                        .resources
+                        .insert(surface.index_buffer.clone().into_untyped_handle());
+                    surface
+                        .normal_buffer
+                        .clone()
+                        .map(|b| frame.resources.insert(b.clone().into_untyped_handle()));
                 }
 
                 // begin rendering
@@ -331,15 +403,23 @@ pub async fn mesh_render(
                     instanced_surface_info: frame.instanced_buffer.get_buffer().address(),
                     surface_infos: frame.surface_buffer.get_buffer().address(),
                     transforms: frame.transform_buffer.get_buffer().address(),
-                    draw_id: 0
+                    draw_id: 0,
                 };
-                for (index, instancing) in instancing_information.iter().enumerate()
-                {
+                for (index, instancing) in instancing_information.iter().enumerate() {
                     let surface_asset = &asset_surfaces[instancing.surface as usize];
-                    let index_buffer = buffers.get_loaded_from_asset_handle(&asset_surfaces[instancing.surface as usize].index_buffer).unwrap();
+                    let index_buffer = buffers
+                        .get_loaded_from_asset_handle(
+                            &asset_surfaces[instancing.surface as usize].index_buffer,
+                        )
+                        .unwrap();
                     // push new constants
-                    push_constant.instanced_surface_info = frame.instanced_buffer.get_buffer().address() + instanced_surfaces_bytes_offset[index] as vk::DeviceAddress;
-                    let draw_id: u32 = (surfaces[instancing.surface as usize].positions % u32::MAX as u64).try_into().unwrap();
+                    push_constant.instanced_surface_info =
+                        frame.instanced_buffer.get_buffer().address()
+                            + instanced_surfaces_bytes_offset[index] as vk::DeviceAddress;
+                    let draw_id: u32 = (surfaces[instancing.surface as usize].positions
+                        % u32::MAX as u64)
+                        .try_into()
+                        .unwrap();
                     push_constant.draw_id = draw_id as u64;
                     unsafe {
                         let bytes: &[u8] = std::slice::from_raw_parts(
@@ -347,38 +427,39 @@ pub async fn mesh_render(
                             size_of::<CPushConstant>(),
                         );
                         render_context.inner.device.get_handle().cmd_push_constants(
-                                recording.handle(),
-                                *render_context.inner.graphics_layout.as_raw(),
-                                vk::ShaderStageFlags::VERTEX,
-                                0,
-                                bytes,
-                            );
-                        }
+                            recording.handle(),
+                            *render_context.inner.graphics_layout.as_raw(),
+                            vk::ShaderStageFlags::VERTEX,
+                            0,
+                            bytes,
+                        );
+                    }
 
-                        // indirect draw
-                        unsafe {
-                            render_context
-                                .inner
-                                .device
-                                .get_handle()
-                                .cmd_bind_index_buffer(
-                                    recording.handle(),
-                                    *index_buffer.buffer.as_raw(),
-                                    0,
-                                    vk::IndexType::UINT32,
-                                );
-                            render_context
-                                .inner
-                                .device
-                                .get_handle()
-                                .cmd_draw_indexed_indirect(
-                                    recording.handle(),
-                                    *frame.indirect_buffer.get_buffer().as_raw(),
-                                    (index * size_of::<vk::DrawIndexedIndirectCommand>()) as vk::DeviceSize,
-                                    1,
-                                    size_of::<vk::DrawIndexedIndirectCommand>() as u32,
-                                );
-                        }
+                    // indirect draw
+                    unsafe {
+                        render_context
+                            .inner
+                            .device
+                            .get_handle()
+                            .cmd_bind_index_buffer(
+                                recording.handle(),
+                                *index_buffer.buffer.as_raw(),
+                                0,
+                                vk::IndexType::UINT32,
+                            );
+                        render_context
+                            .inner
+                            .device
+                            .get_handle()
+                            .cmd_draw_indexed_indirect(
+                                recording.handle(),
+                                *frame.indirect_buffer.get_buffer().as_raw(),
+                                (index * size_of::<vk::DrawIndexedIndirectCommand>())
+                                    as vk::DeviceSize,
+                                1,
+                                size_of::<vk::DrawIndexedIndirectCommand>() as u32,
+                            );
+                    }
                 }
                 dynamic_rendering.end_rendering();
             }

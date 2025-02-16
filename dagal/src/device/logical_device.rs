@@ -1,4 +1,5 @@
 use crate::device::physical_device::PhysicalDevice;
+use crate::device::QueueInfo;
 use crate::resource::traits::Resource;
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
@@ -8,7 +9,6 @@ use derivative::Derivative;
 use std::collections::HashSet;
 use std::ffi::c_char;
 use std::sync::{Arc, Weak};
-use crate::device::QueueInfo;
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
@@ -48,7 +48,7 @@ impl LogicalDeviceInner {
                 strict,
                 queue_flags,
                 can_present: true,
-            }
+            },
         )
     }
 }
@@ -150,7 +150,14 @@ impl LogicalDevice {
         Ok(Self {
             inner: Arc::new(LogicalDeviceInner {
                 handle: device,
-                queue_families: device_ci.physical_device.get_active_queues().iter().map(|q| q.family_index).collect::<HashSet<u32>>().into_iter().collect(),
+                queue_families: device_ci
+                    .physical_device
+                    .get_active_queues()
+                    .iter()
+                    .map(|q| q.family_index)
+                    .collect::<HashSet<u32>>()
+                    .into_iter()
+                    .collect(),
                 enabled_extensions: device_ci.physical_device.get_extensions().to_vec(),
                 debug_utils,
                 acceleration_structure,

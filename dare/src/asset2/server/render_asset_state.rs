@@ -1,4 +1,3 @@
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum RenderAssetState {
     /// Indicates the asset is loaded

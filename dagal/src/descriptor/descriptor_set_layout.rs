@@ -1,5 +1,6 @@
 use ash::vk;
 use ash::vk::Handle;
+use std::hash::{Hash, Hasher};
 
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
@@ -17,6 +18,12 @@ pub enum DescriptorSetLayoutCreateInfo<'a> {
         device: crate::device::LogicalDevice,
         name: Option<&'a str>,
     },
+}
+
+impl Hash for DescriptorSetLayout {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
 }
 
 impl Resource for DescriptorSetLayout {

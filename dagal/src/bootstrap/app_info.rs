@@ -1,7 +1,7 @@
+use crate::device::queue::QueueInfo;
+use ash::vk;
 use std::ffi::CString;
 use std::fmt::Debug;
-use ash::vk;
-use crate::device::queue::QueueInfo;
 
 /// Indicates what the expectation of such an input
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +47,6 @@ pub struct QueueRequest {
 }
 
 impl QueueRequest {
-
     /// Check if any given [`vk::QueueFamilyProperties2`] matches
     pub fn contains_required(&self, family_properties: &vk::QueueFamilyProperties2) -> bool {
         let mut required_flags: vk::QueueFlags = vk::QueueFlags::empty();
@@ -62,7 +61,12 @@ impl QueueRequest {
 
         if self.strict && required_flags != family_properties.queue_family_properties.queue_flags {
             false
-        } else if !self.strict && family_properties.queue_family_properties.queue_flags.contains(required_flags) {
+        } else if !self.strict
+            && family_properties
+                .queue_family_properties
+                .queue_flags
+                .contains(required_flags)
+        {
             false
         } else {
             true
@@ -71,12 +75,16 @@ impl QueueRequest {
 
     /// Get the # of preferred flags which are found in a [`vk::QueueFamilyProperties2`]
     pub fn get_matching_preferred(&self, family_properties: &vk::QueueFamilyProperties2) -> u32 {
-        self.queue_type.iter().filter(|expected_flags| {
-            match expected_flags {
-                Expected::Preferred(expected_flags) => family_properties.queue_family_properties.queue_flags.contains(*expected_flags),
+        self.queue_type
+            .iter()
+            .filter(|expected_flags| match expected_flags {
+                Expected::Preferred(expected_flags) => family_properties
+                    .queue_family_properties
+                    .queue_flags
+                    .contains(*expected_flags),
                 _ => false,
-            }
-        }).count() as u32
+            })
+            .count() as u32
     }
 }
 

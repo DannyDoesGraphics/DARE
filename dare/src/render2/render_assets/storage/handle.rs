@@ -1,8 +1,8 @@
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
-use dare_containers::prelude::Slot;
 use crate::prelude::asset2::AssetHandle;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
+use dare_containers::prelude::Slot;
+use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 /// Change in reference count
 pub(super) enum HandleRCDelta<T: MetaDataRenderAsset> {
@@ -19,17 +19,13 @@ pub enum RenderAssetHandle<T: MetaDataRenderAsset> {
     },
     Weak {
         handle: Slot<AssetHandle<T::Asset>>,
-    }
+    },
 }
 impl<T: MetaDataRenderAsset> AsRef<Slot<AssetHandle<T::Asset>>> for RenderAssetHandle<T> {
     fn as_ref(&self) -> &Slot<AssetHandle<T::Asset>> {
         match self {
-            RenderAssetHandle::Strong { handle, .. } => {
-                handle
-            }
-            RenderAssetHandle::Weak { handle } => {
-                handle
-            }
+            RenderAssetHandle::Strong { handle, .. } => handle,
+            RenderAssetHandle::Weak { handle } => handle,
         }
     }
 }
@@ -38,39 +34,45 @@ impl<T: MetaDataRenderAsset> Deref for RenderAssetHandle<T> {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            RenderAssetHandle::Strong { handle, .. } => {handle}
-            RenderAssetHandle::Weak { handle, .. } => {handle}
+            RenderAssetHandle::Strong { handle, .. } => handle,
+            RenderAssetHandle::Weak { handle, .. } => handle,
         }
     }
 }
 impl<T: MetaDataRenderAsset> Clone for RenderAssetHandle<T> {
     fn clone(&self) -> Self {
         match &self {
-            RenderAssetHandle::Strong { handle, dropped_handles_send } => {
+            RenderAssetHandle::Strong {
+                handle,
+                dropped_handles_send,
+            } => {
                 let clone = RenderAssetHandle::Strong {
                     handle: handle.clone(),
                     dropped_handles_send: dropped_handles_send.clone(),
                 };
-                dropped_handles_send.send(HandleRCDelta::Add(RenderAssetHandle::Weak {
-                    handle: handle.clone(),
-                })).unwrap();
+                dropped_handles_send
+                    .send(HandleRCDelta::Add(RenderAssetHandle::Weak {
+                        handle: handle.clone(),
+                    }))
+                    .unwrap();
                 clone
             }
-            RenderAssetHandle::Weak { handle } => {
-                RenderAssetHandle::Weak { handle: handle.clone() }
-            }
+            RenderAssetHandle::Weak { handle } => RenderAssetHandle::Weak {
+                handle: handle.clone(),
+            },
         }
     }
 }
 impl<T: MetaDataRenderAsset> Drop for RenderAssetHandle<T> {
     fn drop(&mut self) {
         match self {
-            RenderAssetHandle::Strong { handle, dropped_handles_send } => {
-                dropped_handles_send.send(
-                    HandleRCDelta::Remove(RenderAssetHandle::Weak {
-                        handle: handle.clone(),
-                    })
-                );
+            RenderAssetHandle::Strong {
+                handle,
+                dropped_handles_send,
+            } => {
+                dropped_handles_send.send(HandleRCDelta::Remove(RenderAssetHandle::Weak {
+                    handle: handle.clone(),
+                }));
             }
             RenderAssetHandle::Weak { .. } => {}
         }

@@ -85,21 +85,24 @@ impl Surface {
     where
         T: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        Self::new_with_handles(entry, instance, window.display_handle()?.as_raw(), window.window_handle()?.as_raw())
+        Self::new_with_handles(
+            entry,
+            instance,
+            window.display_handle()?.as_raw(),
+            window.window_handle()?.as_raw(),
+        )
     }
 
     /// Similar to [`Self::new`] but you pass in manaully the handles
-    pub fn new_with_handles(entry: &ash::Entry, instance: &ash::Instance, display_handle: raw_window_handle::RawDisplayHandle, window_handle: raw_window_handle::RawWindowHandle) -> Result<Self>
-    {
+    pub fn new_with_handles(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        display_handle: raw_window_handle::RawDisplayHandle,
+        window_handle: raw_window_handle::RawWindowHandle,
+    ) -> Result<Self> {
         let ext = ash::khr::surface::Instance::new(entry, instance);
         let handle = unsafe {
-            ash_window::create_surface(
-                entry,
-                instance,
-                display_handle,
-                window_handle,
-                None,
-            )?
+            ash_window::create_surface(entry, instance, display_handle, window_handle, None)?
         };
 
         #[cfg(feature = "log-lifetimes")]

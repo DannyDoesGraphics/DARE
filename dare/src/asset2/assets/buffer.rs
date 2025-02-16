@@ -22,8 +22,7 @@ pub struct BufferAsset {
 }
 impl asset::AssetLoaded for BufferAsset {}
 
-#[derive(Debug, PartialEq, Clone)]
-#[derive(Derivative)]
+#[derive(Debug, PartialEq, Clone, Derivative)]
 #[derivative(Hash)]
 pub struct BufferMetaData {
     /// Location of where to find the data
@@ -41,7 +40,7 @@ pub struct BufferMetaData {
     /// Number of elements
     pub element_count: usize,
     /// Name of the buffer
-    #[derivative(Hash="ignore")]
+    #[derivative(Hash = "ignore")]
     pub name: String,
 }
 unsafe impl Send for BufferMetaData {}

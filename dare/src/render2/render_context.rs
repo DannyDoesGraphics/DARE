@@ -5,19 +5,19 @@ use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
+use dagal::bootstrap::app_info::{Expected, QueueRequest};
+use dagal::bootstrap::init::ContextInit;
 use dagal::pipelines::PipelineBuilder;
+use dagal::raw_window_handle::HasRawDisplayHandle;
 use dagal::traits::AsRaw;
 use dagal::winit;
 use std::ffi::{c_void, CStr, CString};
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ptr;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::sync::RwLock;
-use dagal::bootstrap::app_info::{Expected, QueueRequest};
-use dagal::bootstrap::init::ContextInit;
-use dagal::raw_window_handle::HasRawDisplayHandle;
 
 pub struct RenderContextCreateInfo {
     pub(crate) window: Arc<winit::window::Window>,
@@ -100,59 +100,55 @@ impl RenderContext {
             variable_pointers_storage_buffer: vk::TRUE,
             ..Default::default()
         };
-        let (
-            instance,
-            physical_device,
-            surface,
-            logical_device,
-            arc_allocator,
-            execution_manager
-        ) = dagal::bootstrap::init::WindowedContext::init(
-            dagal::bootstrap::app_info::AppSettings::<winit::window::Window> {
-                name: "DARE".to_string(),
-                version: 0,
-                engine_name: "DARE".to_string(),
-                engine_version: 0,
-                api_version: (1, 3, 0, 0),
-                enable_validation: false,
-                window: None,
-                surface_format: None,
-                present_mode: None,
-                gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
-                    dedicated: Expected::Required(true),
-                    features: vk::PhysicalDeviceFeatures2 {
-                        s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
-                        p_next: &mut features_1_1 as *mut _ as *mut c_void,
-                        features: vk::PhysicalDeviceFeatures {
-                            shader_int64: vk::TRUE,
-                            ..Default::default()
+        let (instance, physical_device, surface, logical_device, arc_allocator, execution_manager) =
+            dagal::bootstrap::init::WindowedContext::init(
+                dagal::bootstrap::app_info::AppSettings::<winit::window::Window> {
+                    name: "DARE".to_string(),
+                    version: 0,
+                    engine_name: "DARE".to_string(),
+                    engine_version: 0,
+                    api_version: (1, 3, 0, 0),
+                    enable_validation: false,
+                    window: None,
+                    surface_format: None,
+                    present_mode: None,
+                    gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
+                        dedicated: Expected::Required(true),
+                        features: vk::PhysicalDeviceFeatures2 {
+                            s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
+                            p_next: &mut features_1_1 as *mut _ as *mut c_void,
+                            features: vk::PhysicalDeviceFeatures {
+                                shader_int64: vk::TRUE,
+                                ..Default::default()
+                            },
+                            _marker: Default::default(),
                         },
-                        _marker: Default::default(),
-                    },
-                    device_extensions: vec![
-                        Expected::Preferred(
-                            dagal::ash::ext::debug_utils::NAME.to_string_lossy().to_string()
-                        )
-                    ],
-                    queues: vec![
+                        device_extensions: vec![Expected::Preferred(
+                            dagal::ash::ext::debug_utils::NAME
+                                .to_string_lossy()
+                                .to_string(),
+                        )],
+                        queues: vec![
                             QueueRequest {
                                 strict: false,
-                                queue_type: vec![
-                                    Expected::Required(vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER | vk::QueueFlags::COMPUTE)
-                                ].into(),
+                                queue_type: vec![Expected::Required(
+                                    vk::QueueFlags::GRAPHICS
+                                        | vk::QueueFlags::TRANSFER
+                                        | vk::QueueFlags::COMPUTE,
+                                )]
+                                .into(),
                                 count: Expected::Required(1),
                             },
                             QueueRequest {
                                 strict: true,
-                                queue_type: vec![
-                                    Expected::Required(vk::QueueFlags::TRANSFER)
-                                ].into(),
+                                queue_type: vec![Expected::Required(vk::QueueFlags::TRANSFER)]
+                                    .into(),
                                 count: Expected::Preferred(u32::MAX),
-                            }
-                    ],
+                            },
+                        ],
+                    },
                 },
-            }
-        )?;
+            )?;
 
         let instance = dagal::bootstrap::InstanceBuilder::new().set_vulkan_version((1, 3, 0));
         let instance = instance
@@ -162,11 +158,11 @@ impl RenderContext {
         let instance = dagal::ash_window::enumerate_required_extensions(unsafe {
             ci.window.raw_display_handle().unwrap()
         })?
-            .into_iter()
-            .fold(instance, |mut instance, layer| {
-                instance.add_extension(*layer)
-            })
-            .build()?;
+        .into_iter()
+        .fold(instance, |mut instance, layer| {
+            instance.add_extension(*layer)
+        })
+        .build()?;
 
         // Make physical device
         let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
@@ -258,7 +254,7 @@ impl RenderContext {
             dare::render::util::ImmediateSubmit::new(device.clone(), immediate_queue)?;
 
         let window_context = super::window_context::WindowContext::new(
-            super::window_context::WindowContextCreateInfo { present_queue, },
+            super::window_context::WindowContextCreateInfo { present_queue },
         );
         let gpu_rt = dare::render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
             device.clone(),

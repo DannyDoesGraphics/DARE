@@ -327,7 +327,12 @@ impl PhysicalDeviceSelector {
                 .map(|ext| wrap_c_str(ext.extension_name.as_ptr()))
                 .collect();
             let mut bs_physical_device = PhysicalDevice {
-                handle: crate::device::PhysicalDevice::new(instance, physical_device, Vec::new(), Vec::new()),
+                handle: crate::device::PhysicalDevice::new(
+                    instance,
+                    physical_device,
+                    Vec::new(),
+                    Vec::new(),
+                ),
                 queues_allocated: vec![],
                 extensions_enabled: HashSet::new(),
                 queue_requests: vec![],

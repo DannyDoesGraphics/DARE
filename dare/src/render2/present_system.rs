@@ -21,12 +21,20 @@ pub fn present_system_begin(
     frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
     render_context: becs::Res<'_, super::render_context::RenderContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
-    surfaces: Query<'_, '_, (becs::Entity, &dare::engine::components::Surface, Option<&dare::engine::components::Material>, &render::components::BoundingBox, &dare::physics::components::Transform)>,
+    surfaces: Query<
+        '_,
+        '_,
+        (
+            becs::Entity,
+            &dare::engine::components::Surface,
+            Option<&dare::engine::components::Material>,
+            &render::components::BoundingBox,
+            &dare::physics::components::Transform,
+        ),
+    >,
     buffers: becs::Res<
         '_,
-        render::render_assets::storage::RenderAssetManagerStorage<
-            RenderBuffer<GPUAllocatorImpl>
-        >
+        render::render_assets::storage::RenderAssetManagerStorage<RenderBuffer<GPUAllocatorImpl>>,
     >,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
@@ -134,9 +142,9 @@ pub fn present_system_begin(
                     &camera,
                     frame,
                     surfaces,
-                    buffers
+                    buffers,
                 )
-                    .await;
+                .await;
                 // end present
                 present_system_end(
                     frame_count.clone(),
@@ -145,12 +153,15 @@ pub fn present_system_begin(
                     frame,
                     swapchain_image_index,
                 )
-                    .await;
-            },
+                .await;
+            }
             Err(e) => {
                 tracing::error!("Failed to acquire next swapchain image due to: {e}");
                 // early return
-                render_context.inner.new_swapchain_requested.store(true, Ordering::Release);
+                render_context
+                    .inner
+                    .new_swapchain_requested
+                    .store(true, Ordering::Release);
                 return;
             }
         };
@@ -170,7 +181,9 @@ pub async fn present_system_end(
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
     let mut swapchain_image: std::sync::MutexGuard<dagal::resource::Image<GPUAllocatorImpl>> =
-        surface_context.swapchain_images[swapchain_image_index as usize].lock().unwrap();
+        surface_context.swapchain_images[swapchain_image_index as usize]
+            .lock()
+            .unwrap();
     {
         let cmd_recording = match &frame.command_buffer {
             CommandBufferState::Recording(r) => r,

@@ -1,3 +1,5 @@
+pub mod app_info;
+pub mod init;
 pub mod instance;
 pub mod logical_device;
 /// Set of utilities structs and methods which streamline the Vulkan initialization process
@@ -5,8 +7,6 @@ pub mod logical_device;
 pub mod physical_device;
 pub mod queue;
 pub mod swapchain;
-pub mod init;
-pub mod app_info;
 
 pub use instance::InstanceBuilder;
 pub use logical_device::LogicalDeviceBuilder;

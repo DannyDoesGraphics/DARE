@@ -1,5 +1,6 @@
 use ash::vk;
 use ash::vk::Handle;
+use std::hash::{Hash, Hasher};
 
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::AsRaw;
@@ -29,6 +30,12 @@ impl Drop for PipelineLayout {
                 .get_handle()
                 .destroy_pipeline_layout(self.handle, None);
         }
+    }
+}
+
+impl Hash for PipelineLayout {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
     }
 }
 

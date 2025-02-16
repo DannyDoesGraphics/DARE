@@ -11,5 +11,6 @@ pub mod slot_map;
 pub mod sparse_slot_map;
 pub mod traits;
 pub mod hashmap;
+mod virtual_containers;
 
 pub use dashmap;

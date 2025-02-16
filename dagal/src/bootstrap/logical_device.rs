@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_void, CString};
 use std::ptr;
 
+use crate::device::QueueInfo;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
-use crate::device::QueueInfo;
 
 /// Builds a logical device
 #[derive(Derivative)]
@@ -221,7 +221,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
                         },
                         queue_flags,
                         dedicated,
-                        true
+                        true,
                     )
                 });
             }

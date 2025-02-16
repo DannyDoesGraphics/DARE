@@ -159,51 +159,45 @@ impl GLTFLoader {
             .enumerate()
             .map(|(index, texture)| {
                 let location = match texture.source().source() {
-                    gltf::image::Source::Uri {uri, .. } => {
-                        dare::asset2::MetaDataLocation::FilePath(
-                            std::path::PathBuf::from(uri)
-                        )
+                    gltf::image::Source::Uri { uri, .. } => {
+                        dare::asset2::MetaDataLocation::FilePath(std::path::PathBuf::from(uri))
                     }
                     _ => unimplemented!(),
                 };
                 let sampler = dare::engine::components::Sampler {
                     wrapping_mode: (
-                        dare::render::util::WrappingMode::from(
-                            texture.sampler().wrap_s()
-                        ),
-                        dare::render::util::WrappingMode::from(
-                            texture.sampler().wrap_s()
-                        )
+                        dare::render::util::WrappingMode::from(texture.sampler().wrap_s()),
+                        dare::render::util::WrappingMode::from(texture.sampler().wrap_s()),
                     ),
                     min_filter: dare::render::util::ImageFilter::from(
-                        texture.sampler().min_filter().unwrap_or(
-                            gltf::texture::MinFilter::Nearest
-                        )
+                        texture
+                            .sampler()
+                            .min_filter()
+                            .unwrap_or(gltf::texture::MinFilter::Nearest),
                     ),
                     mag_filter: dare::render::util::ImageFilter::from(
-                        texture.sampler().mag_filter().unwrap_or(
-                            gltf::texture::MagFilter::Nearest
-                        )
+                        texture
+                            .sampler()
+                            .mag_filter()
+                            .unwrap_or(gltf::texture::MagFilter::Nearest),
                     ),
                 };
                 let texture = dare::asset2::assets::ImageMetaData {
                     location,
-                    name: texture.name().map(|n| n.to_string()).unwrap_or(format!("Texture {}", texture.index()).to_string()),
+                    name: texture
+                        .name()
+                        .map(|n| n.to_string())
+                        .unwrap_or(format!("Texture {}", texture.index()).to_string()),
                 };
-                let asset_handle: dare::asset2::AssetHandle<
-                    dare::asset2::assets::Image
-                > = asset_server.entry(texture);
+                let asset_handle: dare::asset2::AssetHandle<dare::asset2::assets::Image> =
+                    asset_server.entry(texture);
                 engine::components::Texture {
                     asset_handle,
                     sampler,
                 }
-            }).collect::<Vec<engine::components::Texture>>();
-        commands.spawn_batch(
-            textures.into_iter()
-                .map(|t| {
-                    (t)
-                })
-        );
+            })
+            .collect::<Vec<engine::components::Texture>>();
+        commands.spawn_batch(textures.into_iter().map(|t| (t)));
         let mut mesh_count: usize = 0;
         let meshes: Vec<engine::components::Mesh> = meshes
             .into_iter()

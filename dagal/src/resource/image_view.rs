@@ -4,6 +4,7 @@ use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug)]
 pub struct ImageView {
@@ -110,6 +111,12 @@ pub enum ImageViewCreateInfo<'a> {
         device: crate::device::LogicalDevice,
         image_view: vk::ImageView,
     },
+}
+
+impl Hash for ImageView {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
 }
 
 impl Resource for ImageView {

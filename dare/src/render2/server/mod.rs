@@ -1,8 +1,8 @@
 pub mod send_types;
 
-use std::any::Any;
 use crate::prelude as dare;
 use crate::render2::prelude as render;
+use crate::render2::render_assets::storage::RenderAssetManagerStorage;
 use crate::render2::server::send_types::RenderServerPacket;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
@@ -11,11 +11,11 @@ use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::winit;
 use derivative::Derivative;
+use std::any::Any;
 use std::cmp::PartialEq;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
-use crate::render2::render_assets::storage::RenderAssetManagerStorage;
 
 #[derive(Debug)]
 pub struct RenderServerInner {
@@ -56,9 +56,15 @@ impl RenderServer {
 
     pub fn new(
         ci: super::render_context::RenderContextCreateInfo,
-        surface_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::engine::components::Surface>,
-        transform_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
-        bb_link: dare::util::entity_linker::ComponentsLinkerReceiver<dare::render::components::BoundingBox>,
+        surface_link: dare::util::entity_linker::ComponentsLinkerReceiver<
+            dare::engine::components::Surface,
+        >,
+        transform_link: dare::util::entity_linker::ComponentsLinkerReceiver<
+            dare::physics::components::Transform,
+        >,
+        bb_link: dare::util::entity_linker::ComponentsLinkerReceiver<
+            dare::render::components::BoundingBox,
+        >,
     ) -> Self {
         let (new_send, mut new_recv) = tokio::sync::mpsc::unbounded_channel::<RenderServerPacket>();
         let asset_server = dare::asset2::server::AssetServer::default();
@@ -89,7 +95,7 @@ impl RenderServer {
                 world.insert_resource(asset_server.clone());
                 world.insert_resource(render::components::camera::Camera::default());
                 world.insert_resource(RenderAssetManagerStorage::<
-                    render::components::RenderBuffer<GPUAllocatorImpl>
+                    render::components::RenderBuffer<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
                 world.insert_resource(IrRecv(ir_recv));
                 // rendering
@@ -121,7 +127,7 @@ impl RenderServer {
                                     shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
                                     shutdown_schedule.run(&mut world);
                                     stop_flag = true;
-                                },
+                                }
                             };
                             packet.callback.0.notify_waiters();
                         }
@@ -160,10 +166,13 @@ impl RenderServer {
         request: render::RenderServerNoCallbackRequest,
     ) -> Result<Arc<tokio::sync::Notify>> {
         let notify = Arc::new(tokio::sync::Notify::new());
-        self.inner.new_sender.send(RenderServerPacket {
-            callback: send_types::Callback(notify.clone()),
-            request,
-        }).unwrap();
+        self.inner
+            .new_sender
+            .send(RenderServerPacket {
+                callback: send_types::Callback(notify.clone()),
+                request,
+            })
+            .unwrap();
         Ok(notify)
     }
 
@@ -210,6 +219,9 @@ impl RenderServer {
     }
 
     pub fn set_new_surface_flag(&self, flag: bool) {
-        self.render_context.inner.new_swapchain_requested.store(flag, std::sync::atomic::Ordering::Release);
+        self.render_context
+            .inner
+            .new_swapchain_requested
+            .store(flag, std::sync::atomic::Ordering::Release);
     }
 }

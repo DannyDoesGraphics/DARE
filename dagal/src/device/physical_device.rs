@@ -29,8 +29,7 @@ fn allocated_preferred_queues(
     family_infos: &[vk::QueueFamilyProperties2],
     request: &QueueRequest,
     needed: u32,
-) -> u32
-{
+) -> u32 {
     let mut remaining = needed;
 
     for (i, family) in family_infos.iter().enumerate() {
@@ -52,8 +51,6 @@ fn allocated_preferred_queues(
     let allocated = needed - remaining;
     allocated
 }
-
-
 
 impl PhysicalDevice {
     /// References the underlying [`VkPhysicalDevice`](vk::PhysicalDevice)
@@ -87,7 +84,12 @@ impl PhysicalDevice {
     }
 
     /// Creates a new physical device
-    pub fn new(instance: &ash::Instance, handle: vk::PhysicalDevice, enabled_extensions: Vec<String>, active_queues: Vec<QueueInfo>) -> Self {
+    pub fn new(
+        instance: &ash::Instance,
+        handle: vk::PhysicalDevice,
+        enabled_extensions: Vec<String>,
+        active_queues: Vec<QueueInfo>,
+    ) -> Self {
         let mut properties_2 = vk::PhysicalDeviceProperties2::default();
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(handle) };
@@ -128,38 +130,56 @@ impl PhysicalDevice {
 
         let suitable_device: Option<PhysicalDeviceInfo> = unsafe {
             /// Find all physical devices
-            let physical_devices: Vec<PhysicalDeviceInfo> = instance.enumerate_physical_devices()?
-                .into_iter().map(|physical_device| {
-                // Get device properties
-                let mut properties_1_3: vk::PhysicalDeviceVulkan13Properties = Default::default();
-                properties_1_3.s_type = vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
-                let mut properties_1_2: vk::PhysicalDeviceVulkan12Properties = Default::default();
-                properties_1_2.s_type = vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
-                properties_1_2.p_next = &mut properties_1_3 as *mut _ as *mut c_void;
-                let mut properties_1_1: vk::PhysicalDeviceVulkan11Properties = Default::default();
-                properties_1_1.s_type = vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
-                properties_1_1.p_next = &mut properties_1_2 as *mut _ as *mut c_void;
-                let mut properties: vk::PhysicalDeviceProperties2 = vk::PhysicalDeviceProperties2 {
-                    s_type: vk::StructureType::PHYSICAL_DEVICE_PROPERTIES_2,
-                    p_next: &mut properties_1_1 as *mut _ as *mut c_void,
-                    properties: Default::default(),
-                    _marker: Default::default(),
-                };
-                instance.get_physical_device_properties2(physical_device, &mut properties);
-                let mut queue_family_properties: Vec<vk::QueueFamilyProperties2> = vec![Default::default(); instance.get_physical_device_queue_family_properties2_len(physical_device)];
-                instance.get_physical_device_queue_family_properties2(physical_device, &mut queue_family_properties);
-                PhysicalDeviceInfo {
-                    physical_device,
-                    properties_1_3,
-                    properties_1_2,
-                    properties_1_1,
-                    properties,
-                    queue_family_properties,
-                    heuristic: 0,
-                    extensions: Vec::new(),
-                    queues: Vec::new(),
-                }
-            }).collect::<Vec<PhysicalDeviceInfo>>();
+            let physical_devices: Vec<PhysicalDeviceInfo> = instance
+                .enumerate_physical_devices()?
+                .into_iter()
+                .map(|physical_device| {
+                    // Get device properties
+                    let mut properties_1_3: vk::PhysicalDeviceVulkan13Properties =
+                        Default::default();
+                    properties_1_3.s_type =
+                        vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES;
+                    let mut properties_1_2: vk::PhysicalDeviceVulkan12Properties =
+                        Default::default();
+                    properties_1_2.s_type =
+                        vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+                    properties_1_2.p_next = &mut properties_1_3 as *mut _ as *mut c_void;
+                    let mut properties_1_1: vk::PhysicalDeviceVulkan11Properties =
+                        Default::default();
+                    properties_1_1.s_type =
+                        vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
+                    properties_1_1.p_next = &mut properties_1_2 as *mut _ as *mut c_void;
+                    let mut properties: vk::PhysicalDeviceProperties2 =
+                        vk::PhysicalDeviceProperties2 {
+                            s_type: vk::StructureType::PHYSICAL_DEVICE_PROPERTIES_2,
+                            p_next: &mut properties_1_1 as *mut _ as *mut c_void,
+                            properties: Default::default(),
+                            _marker: Default::default(),
+                        };
+                    instance.get_physical_device_properties2(physical_device, &mut properties);
+                    let mut queue_family_properties: Vec<vk::QueueFamilyProperties2> =
+                        vec![
+                            Default::default();
+                            instance
+                                .get_physical_device_queue_family_properties2_len(physical_device)
+                        ];
+                    instance.get_physical_device_queue_family_properties2(
+                        physical_device,
+                        &mut queue_family_properties,
+                    );
+                    PhysicalDeviceInfo {
+                        physical_device,
+                        properties_1_3,
+                        properties_1_2,
+                        properties_1_1,
+                        properties,
+                        queue_family_properties,
+                        heuristic: 0,
+                        extensions: Vec::new(),
+                        queues: Vec::new(),
+                    }
+                })
+                .collect::<Vec<PhysicalDeviceInfo>>();
 
             physical_devices
                 .into_iter()
@@ -198,7 +218,8 @@ impl PhysicalDevice {
                             // Try to find **one** family that can satisfy all needed queues
                             // for this request in a single family. If found, allocate them.
                             let mut allocated = false;
-                            for (fam_idx, fam_props) in pd.queue_family_properties.iter().enumerate()
+                            for (fam_idx, fam_props) in
+                                pd.queue_family_properties.iter().enumerate()
                             {
                                 // Must match required flags
                                 if !queue_req.contains_required(fam_props) {
@@ -213,7 +234,9 @@ impl PhysicalDevice {
                                             family_index: fam_idx as u32,
                                             index: queue_index,
                                             strict: queue_req.strict,
-                                            queue_flags: fam_props.queue_family_properties.queue_flags,
+                                            queue_flags: fam_props
+                                                .queue_family_properties
+                                                .queue_flags,
                                             can_present: false,
                                         });
                                     }
@@ -235,7 +258,8 @@ impl PhysicalDevice {
                         if let Expected::Preferred(needed) = queue_req.count {
                             let mut remaining = needed;
                             // We allow partial allocation across multiple families
-                            for (fam_idx, fam_props) in pd.queue_family_properties.iter().enumerate()
+                            for (fam_idx, fam_props) in
+                                pd.queue_family_properties.iter().enumerate()
                             {
                                 if remaining == 0 {
                                     break;

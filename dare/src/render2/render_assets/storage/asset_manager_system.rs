@@ -1,12 +1,17 @@
-use bevy_ecs::prelude::*;
-use glm::intBitsToFloat;
-use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
-use dagal::ash::vk;
 use crate::asset2::server::AssetServerDelta;
 use crate::prelude as dare;
+use bevy_ecs::prelude::*;
+use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
+use dagal::ash::vk;
+use glm::intBitsToFloat;
 
-pub fn asset_manager_system(rt: Res<dare::concurrent::BevyTokioRunTime>, render_context: Res<dare::render::contexts::RenderContext>,mut buffer_storage: ResMut<super::RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>>>) {
-
+pub fn asset_manager_system(
+    rt: Res<dare::concurrent::BevyTokioRunTime>,
+    render_context: Res<dare::render::contexts::RenderContext>,
+    mut buffer_storage: ResMut<
+        super::RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>>,
+    >,
+) {
     rt.runtime.block_on(async move {
         for delta in buffer_storage.asset_server.get_deltas() {
             match delta {

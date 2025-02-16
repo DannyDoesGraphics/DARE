@@ -1,7 +1,7 @@
-use std::sync::Mutex;
 /// Concerning components of Mute x
 pub use super::lockable::*;
 use crate::DagalError::PoisonError;
+use std::sync::Mutex;
 
 impl<T> Lockable for std::sync::Mutex<T> {
     type Lock<'a> = std::sync::MutexGuard<'a, T>
@@ -88,7 +88,6 @@ impl<T> AsyncLockable for futures::lock::Mutex<T> {
     fn blocking_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         Ok(self.blocking_lock()?)
     }
-
 }
 
 #[cfg(feature = "async-std")]
@@ -121,5 +120,4 @@ impl<T> AsyncLockable for async_std::sync::Mutex<T> {
     fn blocking_lock(&self) -> anyhow::Result<Self::Lock<'_>> {
         Ok(self.blocking_lock()?)
     }
-
 }

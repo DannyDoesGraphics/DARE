@@ -34,8 +34,8 @@ impl<T: asset::Asset> PartialEq for AssetHandle<T> {
         match (self, other) {
             (AssetHandle::Strong(a), AssetHandle::Strong(b)) => a.id == b.id,
             (AssetHandle::Weak { id, .. }, AssetHandle::Weak { id: id_b, .. }) => id == id_b,
-            (AssetHandle::Strong(a), AssetHandle::Weak {id, ..}) => a.id == id.as_untyped_id(),
-            (AssetHandle::Weak{id, ..}, AssetHandle::Strong(b)) => id.as_untyped_id() == b.id,
+            (AssetHandle::Strong(a), AssetHandle::Weak { id, .. }) => a.id == id.as_untyped_id(),
+            (AssetHandle::Weak { id, .. }, AssetHandle::Strong(b)) => id.as_untyped_id() == b.id,
         }
     }
 }
@@ -186,12 +186,8 @@ impl AssetHandleUntyped {
 
     pub fn get_id(&self) -> asset::AssetIdUntyped {
         match self {
-            AssetHandleUntyped::Strong(arc) => {
-                arc.id.clone()
-            }
-            AssetHandleUntyped::Weak { id, .. } => {
-                id.clone()
-            }
+            AssetHandleUntyped::Strong(arc) => arc.id.clone(),
+            AssetHandleUntyped::Weak { id, .. } => id.clone(),
         }
     }
 
@@ -242,15 +238,13 @@ mod tests {
 
     impl Eq for TestAssetMetadata {}
 
-    impl asset::AssetLoaded for TestAssetMetadata {
-
-    }
+    impl asset::AssetLoaded for TestAssetMetadata {}
 
     impl asset::loaders::MetaDataLoad for TestAssetMetadata {
         type Loaded = TestAssetLoaded;
         type LoadInfo<'a>
         where
-            Self: 'a
+            Self: 'a,
         = ();
 
         async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
@@ -278,7 +272,10 @@ mod tests {
     fn test_hashing_consistency() {
         let (tx, _rx) = crossbeam_channel::unbounded();
 
-        let typed_id: asset::AssetId<TestAsset> = asset::AssetId::Generation { id: 42, generation: 1 };
+        let typed_id: asset::AssetId<TestAsset> = asset::AssetId::Generation {
+            id: 42,
+            generation: 1,
+        };
         let untyped_id = typed_id.as_untyped_id();
 
         let strong_untyped = StrongAssetHandleUntyped {
@@ -294,10 +291,19 @@ mod tests {
         let downgraded = strong_typed_handle.clone().downgrade();
         let downgraded_hash = hash_handle(&downgraded);
 
-        let upgraded = downgraded.clone().upgrade().expect("Should be able to upgrade");
+        let upgraded = downgraded
+            .clone()
+            .upgrade()
+            .expect("Should be able to upgrade");
         let upgraded_hash = hash_handle(&upgraded);
 
-        assert_eq!(initial_hash, downgraded_hash, "Hash should remain the same after downgrade");
-        assert_eq!(initial_hash, upgraded_hash, "Hash should remain the same after upgrade");
+        assert_eq!(
+            initial_hash, downgraded_hash,
+            "Hash should remain the same after downgrade"
+        );
+        assert_eq!(
+            initial_hash, upgraded_hash,
+            "Hash should remain the same after upgrade"
+        );
     }
 }

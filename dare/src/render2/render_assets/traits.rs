@@ -1,7 +1,7 @@
 use crate::prelude as dare;
 use dare::asset2 as asset;
-use std::fmt::Debug;
 use futures_core::future::BoxFuture;
+use std::fmt::Debug;
 
 pub trait MetaDataRenderAsset: 'static {
     type Loaded: Send;

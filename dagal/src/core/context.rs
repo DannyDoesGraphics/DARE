@@ -7,4 +7,3 @@ pub struct Context {
     pub physical_device: crate::device::PhysicalDevice,
     pub device: Arc<crate::device::LogicalDevice>,
 }
-

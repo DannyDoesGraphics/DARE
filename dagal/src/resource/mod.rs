@@ -10,4 +10,6 @@ pub mod acceleration_structure;
 pub mod buffer;
 pub mod image_view;
 pub mod sampler;
+mod test;
 pub mod traits;
+pub mod virtual_resources;

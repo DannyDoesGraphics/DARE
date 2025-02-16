@@ -44,9 +44,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 BufferCreateInfo::NewEmptyBuffer { memory_type, .. } => memory_type.clone(),
             },
             usage_flags: match &handle_ci {
-                BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
-                    usage_flags.clone()
-                }
+                BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => usage_flags.clone(),
             },
             handle: Some(Arc::new(dagal::resource::Buffer::new(handle_ci)?)),
         })
@@ -178,7 +176,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                                 _marker: Default::default(),
                             },
                         );
-                }).await?;
+                })
+                .await?;
             self.size = (self.size as i128 + dl) as vk::DeviceSize;
             self.handle = Some(Arc::new(new_buffer));
             Ok(())
@@ -327,7 +326,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                     p_next: ptr::null(),
                     src_stage_mask: vk::PipelineStageFlags2::COPY,
                     src_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
-                    dst_stage_mask: vk::PipelineStageFlags2::VERTEX_SHADER | vk::PipelineStageFlags2::COMPUTE_SHADER,
+                    dst_stage_mask: vk::PipelineStageFlags2::VERTEX_SHADER
+                        | vk::PipelineStageFlags2::COMPUTE_SHADER,
                     dst_access_mask: vk::AccessFlags2::SHADER_READ,
                     src_queue_family_index: immediate_submit.get_queue_family_index(),
                     dst_queue_family_index: queue_index,
@@ -352,9 +352,10 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                             image_memory_barrier_count: 0,
                             p_image_memory_barriers: ptr::null(),
                             _marker: Default::default(),
-                        }
+                        },
                     )
-            }).await?;
+            })
+            .await?;
 
         Ok(())
     }
