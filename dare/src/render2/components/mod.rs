@@ -1,11 +1,9 @@
 #![allow(unused_imports)]
 
 pub mod bounding_box;
+pub mod buffer;
+pub mod image;
 pub mod camera;
-/// Represent rendering entities
-pub mod material;
-pub mod mesh;
-pub mod surface;
-pub mod texture;
-
 pub use bounding_box::BoundingBox;
+pub use buffer::*;
+pub use image::*;

@@ -1,5 +1,4 @@
 pub mod assets;
-pub mod components;
 pub mod gpu_stream;
 pub mod packets;
 pub mod storage;

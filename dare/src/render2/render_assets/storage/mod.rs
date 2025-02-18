@@ -306,13 +306,13 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
 
 impl
     RenderAssetManagerStorage<
-        dare::render::render_assets::components::buffer::RenderBuffer<GPUAllocatorImpl>,
+        dare::render::components::RenderBuffer<GPUAllocatorImpl>,
     >
 {
     pub fn get_bda(
         &self,
         handle: &RenderAssetHandle<
-            dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
     ) -> Option<vk::DeviceAddress> {
         self.internal_loaded

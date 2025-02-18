@@ -104,7 +104,7 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
         }
     }
 }
-impl RenderAssetsStorage<super::components::RenderBuffer<GPUAllocatorImpl>> {
+impl RenderAssetsStorage<super::super::components::RenderBuffer<GPUAllocatorImpl>> {
     /// Get bda
     pub fn get_bda(
         &self,

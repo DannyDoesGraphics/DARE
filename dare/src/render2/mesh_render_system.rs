@@ -46,7 +46,7 @@ pub fn build_instancing_data(
         ),
     >,
     buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-        dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+        dare::render::components::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) -> (
     Vec<dare::engine::components::Surface>,
@@ -204,7 +204,7 @@ pub async fn mesh_render(
     buffers: Res<
         '_,
         dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
         >,
     >,
 ) {

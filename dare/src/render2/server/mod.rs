@@ -100,7 +100,7 @@ impl RenderServer {
                 world.insert_resource(IrRecv(ir_recv));
                 // rendering
                 world.insert_resource(render::render_assets::RenderAssetsStorage::<
-                    render::render_assets::components::RenderBuffer<GPUAllocatorImpl>,
+                    render::components::RenderBuffer<GPUAllocatorImpl>,
                 >::default());
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();

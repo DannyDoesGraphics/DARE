@@ -27,7 +27,7 @@ pub fn asset_manager_system(
                                 tracing::trace!("Loading incoming handle {:?}", asset_id);
                                 if let Some(asset_storage_handle) = buffer_storage.get_storage_handle(&handle) {
                                     if let Some(buffer_metadata) = buffer_storage.asset_server.get_metadata(&handle) {
-                                        buffer_storage.load(&asset_storage_handle, dare::render::render_assets::components::BufferPrepareInfo {
+                                        buffer_storage.load(&asset_storage_handle, dare::render::components::BufferPrepareInfo {
                                             allocator: render_context.inner.allocator.clone(),
                                             handle,
                                             transfer_pool: render_context.transfer_pool(),
