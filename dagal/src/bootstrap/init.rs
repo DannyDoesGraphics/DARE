@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::bootstrap::app_info::{AppSettings, Expected, QueueRequest};
 use crate::traits::AsRaw;
@@ -7,6 +6,7 @@ use ash::vk;
 use gpu_allocator::vulkan::AllocatorCreateDesc;
 use gpu_allocator::AllocatorDebugSettings;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
 use std::marker::PhantomData;
 use std::ptr;
@@ -113,10 +113,12 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
         if settings.debug_utils {
             extensions.push(
                 CString::new(
-                ash::ext::debug_utils::NAME
-                    .to_string_lossy()
-                    .to_string().as_str()
-                ).unwrap()
+                    ash::ext::debug_utils::NAME
+                        .to_string_lossy()
+                        .to_string()
+                        .as_str(),
+                )
+                .unwrap(),
             )
         }
 
@@ -196,15 +198,19 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             let mut family_hashmap: HashMap<u32, vk::DeviceQueueCreateInfo> = HashMap::new();
             for mut queue in active_queues {
                 let count = queue.queue_count;
-                family_hashmap.entry(
-                    queue.queue_family_index
-                ).or_insert_with(|| {
-                    queue.queue_count = 0;
-                    queue
-                }).queue_count += count;
+                family_hashmap
+                    .entry(queue.queue_family_index)
+                    .or_insert_with(|| {
+                        queue.queue_count = 0;
+                        queue
+                    })
+                    .queue_count += count;
             }
             family_hashmap
-        }.into_iter().map(|(_, q)| q).collect::<Vec<vk::DeviceQueueCreateInfo>>();
+        }
+        .into_iter()
+        .map(|(_, q)| q)
+        .collect::<Vec<vk::DeviceQueueCreateInfo>>();
         let logical_device =
             crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
                 instance: instance.get_instance(),

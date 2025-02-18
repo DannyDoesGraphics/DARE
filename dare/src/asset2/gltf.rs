@@ -192,8 +192,12 @@ impl GLTFLoader {
                 };
                 let asset_handle: dare::asset2::AssetHandle<dare::asset2::assets::Image> =
                     asset_server.entry(texture);
-                if asset_server.get_state(&asset_handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
-                    if let Err(e) = asset_server.transition_loading(&asset_handle.clone().into_untyped_handle()) {
+                if asset_server.get_state(&asset_handle.clone().into_untyped_handle())
+                    == Some(crate::asset2::asset_state::AssetState::Unloaded)
+                {
+                    if let Err(e) =
+                        asset_server.transition_loading(&asset_handle.clone().into_untyped_handle())
+                    {
                         panic!("Failed to load: {e}");
                     }
                 }

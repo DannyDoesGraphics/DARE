@@ -233,7 +233,8 @@ impl App {
         let (transform_link_send, transform_link_recv) =
             dare::util::entity_linker::ComponentsLinker::default();
         let (bb_link_send, bb_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
-        let (texture_link_send, texture_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
+        let (texture_link_send, texture_link_recv) =
+            dare::util::entity_linker::ComponentsLinker::default();
         Ok(Self {
             window: None,
             engine_server: None,

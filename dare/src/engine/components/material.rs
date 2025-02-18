@@ -1,10 +1,10 @@
-use std::cmp::Ordering;
 use crate::prelude as dare;
 use crate::render2::c::CMaterial;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
-use std::hash::{Hash, Hasher};
 use gltf::material::AlphaMode;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq, becs::Component)]
 pub struct Material {
@@ -24,18 +24,10 @@ impl Hash for Material {
 impl PartialOrd for Material {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.alpha_mode, other.alpha_mode) {
-            (AlphaMode::Opaque, AlphaMode::Opaque) => {
-                Some(Ordering::Equal)
-            }
-            (AlphaMode::Opaque, _) => {
-                Some(Ordering::Greater)
-            }
-            (_, AlphaMode::Opaque) => {
-                Some(Ordering::Less)
-            }
-            (_, _) => {
-                Some(Ordering::Equal)
-            }
+            (AlphaMode::Opaque, AlphaMode::Opaque) => Some(Ordering::Equal),
+            (AlphaMode::Opaque, _) => Some(Ordering::Greater),
+            (_, AlphaMode::Opaque) => Some(Ordering::Less),
+            (_, _) => Some(Ordering::Equal),
         }
     }
 }

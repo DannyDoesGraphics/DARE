@@ -319,7 +319,7 @@ pub async fn mesh_render(
                             .inner
                             .window_context
                             .present_queue
-                            .get_family_index()
+                            .get_family_index(),
                     )
                     .await
                     .unwrap();

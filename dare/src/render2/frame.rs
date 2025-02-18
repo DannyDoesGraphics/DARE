@@ -200,7 +200,10 @@ impl Frame {
             material_buffer: dare::render::util::GrowableBuffer::new(
                 dagal::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
-                    name: Some(String::from(format!("Material buffer {}", image_number.as_ref().unwrap_or(&0)))),
+                    name: Some(String::from(format!(
+                        "Material buffer {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    ))),
                     allocator: &mut allocator,
                     size: (size_of::<crate::render2::c::CMaterial>() * 64) as vk::DeviceSize,
                     memory_type: MemoryLocation::GpuOnly,
@@ -208,7 +211,7 @@ impl Frame {
                         | vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                }
+                },
             )?,
             indirect_buffer: dare::render::util::GrowableBuffer::new(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {

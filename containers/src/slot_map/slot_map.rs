@@ -21,7 +21,6 @@ impl<T> Default for SlotMap<T> {
 }
 
 impl<T> SlotMap<T> {
-
     pub fn insert(&mut self, element: T) -> Slot<T> {
         // find the next free slot for indirect
         let mut slots_len = self.slots.len();
@@ -30,7 +29,7 @@ impl<T> SlotMap<T> {
             free_slot_index = index;
             self.slots.get_mut(index).unwrap()
         } else {
-            let slot = Slot::new(0,0 );
+            let slot = Slot::new(0, 0);
             free_slot_index = self.slots.len();
             self.slots.push(slot);
             slots_len += 1;
@@ -49,30 +48,30 @@ impl<T> SlotMap<T> {
     pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
         if let Some(mut proxy_slot) = self.slots.get_mut(slot.id).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
-                return Err(ContainerErrors::GenerationMismatch)
+                return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
             proxy_slot.generation += 1;
             Ok::<Slot<T>, ContainerErrors>(proxy_slot.clone())
         }) {
             let proxy_slot = proxy_slot?;
-                // swap (if needed) data before popping
-                if self.data.len() > 0 && proxy_slot.id != self.data.len() - 1 {
-                    let proxy_slot_data_index = proxy_slot.id;
-                    let last_index = self.data.len() - 1;
-                    // swap with the last
-                    self.data.swap(last_index, proxy_slot_data_index);
-                    // update the indirect slot
-                    let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
-                    // since we swapped, we must update to the indirect to point to the data index
-                    self.slots
-                        .get_mut(swapped_proxy)
-                        .map(|slot| slot.id = proxy_slot_data_index);
-                }
-                // to be removed must be last in data and slots
-                let data = self.data.pop().unwrap();
-                self.free_list.push(slot.id);
-                Ok(data.0)
+            // swap (if needed) data before popping
+            if self.data.len() > 0 && proxy_slot.id != self.data.len() - 1 {
+                let proxy_slot_data_index = proxy_slot.id;
+                let last_index = self.data.len() - 1;
+                // swap with the last
+                self.data.swap(last_index, proxy_slot_data_index);
+                // update the indirect slot
+                let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
+                // since we swapped, we must update to the indirect to point to the data index
+                self.slots
+                    .get_mut(swapped_proxy)
+                    .map(|slot| slot.id = proxy_slot_data_index);
+            }
+            // to be removed must be last in data and slots
+            let data = self.data.pop().unwrap();
+            self.free_list.push(slot.id);
+            Ok(data.0)
         } else {
             Err(ContainerErrors::NonexistentSlot)
         }

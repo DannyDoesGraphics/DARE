@@ -56,13 +56,16 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
         queue_flags: vk::QueueFlags,
         count: usize,
     ) -> Result<Vec<dagal::device::Queue<M>>, QueueAllocatorError> {
-        let exclude: HashSet<(u32, u32)> = exclusion_mask.iter().map(|(a,b)| (*a,*b)) .collect();
+        let exclude: HashSet<(u32, u32)> = exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect();
         let mut n: usize = 0;
         let v: Vec<dagal::device::Queue<M>> = self
             .queues
             .iter()
             .filter_map(|queue| {
-                if n < count && !exclude.contains(&(queue.get_index(), queue.get_family_index())) && queue.get_queue_flags().contains(queue_flags) {
+                if n < count
+                    && !exclude.contains(&(queue.get_index(), queue.get_family_index()))
+                    && queue.get_queue_flags().contains(queue_flags)
+                {
                     n += 1;
                     Some(queue.clone())
                 } else {
@@ -80,13 +83,18 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
     /// Find as many queues that are "fit" the requirements
     ///
     /// To apply the exclusion mask, it assumes an array pair u32s (index, family_index)
-    pub fn matching_queues(&self, exclusion_mask: &[(u32, u32)], queue_flags: vk::QueueFlags) -> usize {
-        let exclude: HashSet<(u32, u32)> = exclusion_mask.iter().map(|(a,b)| (*a,*b)) .collect();
-        self
-            .queues
+    pub fn matching_queues(
+        &self,
+        exclusion_mask: &[(u32, u32)],
+        queue_flags: vk::QueueFlags,
+    ) -> usize {
+        let exclude: HashSet<(u32, u32)> = exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect();
+        self.queues
             .iter()
             .filter_map(|queue| {
-                if !exclude.contains(&(queue.get_index(), queue.get_family_index())) && queue.get_queue_flags() & queue_flags == queue_flags {
+                if !exclude.contains(&(queue.get_index(), queue.get_family_index()))
+                    && queue.get_queue_flags() & queue_flags == queue_flags
+                {
                     Some(queue.clone())
                 } else {
                     None

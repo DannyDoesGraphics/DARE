@@ -60,11 +60,13 @@ impl SurfaceContext {
             ));
         }
         // make instances
-        let surface = window_context_ci.surface.unwrap_or(dagal::wsi::Surface::new(
-            window_context_ci.instance.get_entry(),
-            window_context_ci.instance.get_instance(),
-            window_context_ci.window,
-        )?);
+        let surface = window_context_ci
+            .surface
+            .unwrap_or(dagal::wsi::Surface::new(
+                window_context_ci.instance.get_entry(),
+                window_context_ci.instance.get_instance(),
+                window_context_ci.window,
+            )?);
         let surface =
             surface.query_details(unsafe { *window_context_ci.physical_device.as_raw() })?;
         let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface);

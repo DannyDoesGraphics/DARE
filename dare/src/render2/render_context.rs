@@ -1,5 +1,6 @@
 use crate::prelude as dare;
 use crate::render2::c::CPushConstant;
+use crate::render2::surface_context::InnerSurfaceContextCreateInfo;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -11,15 +12,14 @@ use dagal::pipelines::PipelineBuilder;
 use dagal::raw_window_handle::HasRawDisplayHandle;
 use dagal::traits::AsRaw;
 use dagal::winit;
+use futures::StreamExt;
 use std::ffi::{c_void, CStr, CString};
 use std::marker::PhantomData;
 use std::mem::{take, ManuallyDrop};
 use std::ptr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use futures::StreamExt;
 use tokio::sync::RwLock;
-use crate::render2::surface_context::InnerSurfaceContextCreateInfo;
 
 pub struct RenderContextCreateInfo {
     pub(crate) window: Arc<winit::window::Window>,
@@ -91,8 +91,8 @@ impl RenderContext {
                     gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
                         dedicated: Expected::Required(true),
                         features: vk::PhysicalDeviceFeatures {
-                                shader_int64: vk::TRUE,
-                                ..Default::default()
+                            shader_int64: vk::TRUE,
+                            ..Default::default()
                         },
                         features_1: vk::PhysicalDeviceVulkan11Features {
                             s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -126,13 +126,14 @@ impl RenderContext {
                             Expected::Required(
                                 dagal::ash::khr::swapchain::NAME
                                     .to_string_lossy()
-                                    .to_string()
+                                    .to_string(),
                             ),
                             Expected::Preferred(
-                            dagal::ash::ext::debug_utils::NAME
-                                .to_string_lossy()
-                                .to_string(),
-                        )],
+                                dagal::ash::ext::debug_utils::NAME
+                                    .to_string_lossy()
+                                    .to_string(),
+                            ),
+                        ],
                         queues: vec![
                             QueueRequest {
                                 strict: false,
@@ -155,39 +156,58 @@ impl RenderContext {
                 },
             )?;
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from({
-            physical_device.get_active_queues().iter().map(|queue_info| unsafe {
-                device.get_queue(&vk::DeviceQueueInfo2 {
-                    s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-                    p_next: ptr::null(),
-                    flags: vk::DeviceQueueCreateFlags::empty(),
-                    queue_family_index: queue_info.family_index,
-                    queue_index: queue_info.index,
-                    _marker: Default::default(),
-                }, queue_info.queue_flags, queue_info.strict, queue_info.can_present)
-            })
+            physical_device
+                .get_active_queues()
+                .iter()
+                .map(|queue_info| unsafe {
+                    device.get_queue(
+                        &vk::DeviceQueueInfo2 {
+                            s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                            p_next: ptr::null(),
+                            flags: vk::DeviceQueueCreateFlags::empty(),
+                            queue_family_index: queue_info.family_index,
+                            queue_index: queue_info.index,
+                            _marker: Default::default(),
+                        },
+                        queue_info.queue_flags,
+                        queue_info.strict,
+                        queue_info.can_present,
+                    )
+                })
                 .collect::<Vec<dagal::device::Queue>>()
         });
         // pq
-        let mut graphics_queue = queue_allocator.retrieve_queues(&[], vk::QueueFlags::GRAPHICS, 2)?;
-        let queues = graphics_queue.iter().map(|queue| (queue.get_index(), queue.get_family_index())).collect::<Vec<(u32,u32)>>();
-        let transfer_queues = queue_allocator.retrieve_queues(&queues, vk::QueueFlags::TRANSFER, queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER))?;
+        let mut graphics_queue =
+            queue_allocator.retrieve_queues(&[], vk::QueueFlags::GRAPHICS, 2)?;
+        let queues = graphics_queue
+            .iter()
+            .map(|queue| (queue.get_index(), queue.get_family_index()))
+            .collect::<Vec<(u32, u32)>>();
+        let transfer_queues = queue_allocator.retrieve_queues(
+            &queues,
+            vk::QueueFlags::TRANSFER,
+            queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER),
+        )?;
         let mut present_queue = graphics_queue.pop().unwrap();
         let immediate_queue = graphics_queue.pop().unwrap();
         let immediate_submit =
             dare::render::util::ImmediateSubmit::new(device.clone(), immediate_queue)?;
 
         let window_context = super::window_context::WindowContext::new(
-            super::window_context::WindowContextCreateInfo { present_queue: present_queue.clone(), surface: Some(dare::render::contexts::SurfaceContext::new(
-                InnerSurfaceContextCreateInfo {
-                    instance: &instance,
-                    surface,
-                    physical_device: &physical_device,
-                    allocator: allocator.clone(),
-                    present_queue,
-                    window: &ci.window,
-                    frames_in_flight: Some(3),
-                }
-            )?) },
+            super::window_context::WindowContextCreateInfo {
+                present_queue: present_queue.clone(),
+                surface: Some(dare::render::contexts::SurfaceContext::new(
+                    InnerSurfaceContextCreateInfo {
+                        instance: &instance,
+                        surface,
+                        physical_device: &physical_device,
+                        allocator: allocator.clone(),
+                        present_queue,
+                        window: &ci.window,
+                        frames_in_flight: Some(3),
+                    },
+                )?),
+            },
         );
         let gpu_rt = dare::render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
             device.clone(),

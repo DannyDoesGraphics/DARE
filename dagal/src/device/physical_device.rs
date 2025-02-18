@@ -157,8 +157,7 @@ impl PhysicalDevice {
                             _marker: Default::default(),
                         };
                     instance.get_physical_device_properties2(physical_device, &mut properties);
-                    let mut queue_family_properties: Vec<vk::QueueFamilyProperties2> =
-                        vec![
+                    let mut queue_family_properties: Vec<vk::QueueFamilyProperties2> = vec![
                             Default::default();
                             instance
                                 .get_physical_device_queue_family_properties2_len(physical_device)
@@ -207,19 +206,30 @@ impl PhysicalDevice {
 
                     // Check extensions
                     {
-                        let device_extensions: Vec<String> = instance.enumerate_device_extension_properties(pd.physical_device).unwrap().iter().map(|ep|  {
-                            crate::util::wrap_c_str(ep.extension_name.as_ptr()).into_string().unwrap()
-                        }).collect();
+                        let device_extensions: Vec<String> = instance
+                            .enumerate_device_extension_properties(pd.physical_device)
+                            .unwrap()
+                            .iter()
+                            .map(|ep| {
+                                crate::util::wrap_c_str(ep.extension_name.as_ptr())
+                                    .into_string()
+                                    .unwrap()
+                            })
+                            .collect();
                         for requirement in settings.gpu_requirements.device_extensions.iter() {
                             match requirement {
-                                Expected::Required(name) => if !device_extensions.contains(name) {
-                                    return None
-                                } else {
-                                    pd.extensions.push(name.clone());
+                                Expected::Required(name) => {
+                                    if !device_extensions.contains(name) {
+                                        return None;
+                                    } else {
+                                        pd.extensions.push(name.clone());
+                                    }
                                 }
-                                Expected::Preferred(name) => if device_extensions.contains(name) {
-                                    pd.heuristic += 1;
-                                    pd.extensions.push(name.clone());
+                                Expected::Preferred(name) => {
+                                    if device_extensions.contains(name) {
+                                        pd.heuristic += 1;
+                                        pd.extensions.push(name.clone());
+                                    }
                                 }
                             }
                         }
@@ -286,7 +296,11 @@ impl PhysicalDevice {
                                 }
                                 // Must at least match the "required" portion of the request
                                 if !queue_req.contains_required(fam_props) {
-                                    println!("{:?} : {:?}", queue_req.queue_type, fam_props.queue_family_properties.queue_flags);
+                                    println!(
+                                        "{:?} : {:?}",
+                                        queue_req.queue_type,
+                                        fam_props.queue_family_properties.queue_flags
+                                    );
                                     continue;
                                 }
 

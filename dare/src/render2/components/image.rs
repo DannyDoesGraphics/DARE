@@ -73,10 +73,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                     name: name.as_deref(),
                 })
             }?;
-            Ok(Self {
-                image,
-                handle,
-            })
+            Ok(Self { image, handle })
         })
     }
 }

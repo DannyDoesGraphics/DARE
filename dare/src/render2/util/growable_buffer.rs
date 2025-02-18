@@ -30,7 +30,13 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         // sanity check
         match &handle_ci {
             BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
-                assert!(usage_flags.contains(vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST), "Expected to find TRANSFER_SRC | TRANSFER_DST, got {:?}", usage_flags);
+                assert!(
+                    usage_flags.contains(
+                        vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST
+                    ),
+                    "Expected to find TRANSFER_SRC | TRANSFER_DST, got {:?}",
+                    usage_flags
+                );
             }
         }
         Ok(Self {

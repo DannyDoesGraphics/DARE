@@ -1,6 +1,7 @@
 use crate::prelude as dare;
 use crate::prelude::render;
 use crate::prelude::render::components::RenderBuffer;
+use crate::render2::components::RenderImage;
 use crate::render2::render_assets::RenderAssetsStorage;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
@@ -15,7 +16,6 @@ use std::ptr::write;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::MutexGuard;
-use crate::render2::components::RenderImage;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(

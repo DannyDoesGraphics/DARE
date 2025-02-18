@@ -62,10 +62,8 @@ impl QueueRequest {
         if self.strict && required_flags != family_properties.queue_family_properties.queue_flags {
             false
         } else if !self.strict
-            && family_properties
-                .queue_family_properties
-                .queue_flags
-                & required_flags != required_flags
+            && family_properties.queue_family_properties.queue_flags & required_flags
+                != required_flags
         {
             false
         } else {
@@ -126,5 +124,5 @@ pub struct AppSettings<'a, Window: crate::wsi::DagalWindow> {
     /// Preferred present mode, ordered from most preferred to least
     pub present_mode: Option<Expected<vk::PresentModeKHR>>,
     /// Minimum requirements the GPU should be expected to have
-    pub gpu_requirements: GPURequirements
+    pub gpu_requirements: GPURequirements,
 }

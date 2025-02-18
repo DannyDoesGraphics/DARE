@@ -52,7 +52,8 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         // update id
         self.slots[free_slot_index].id = position_in_vec;
 
-        self.data.insert(position_in_vec, (element, free_slot_index));
+        self.data
+            .insert(position_in_vec, (element, free_slot_index));
         // update all mappings after
         let updates: Vec<(usize, usize)> = self
             .data
@@ -75,7 +76,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
     pub fn insertion_removal(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
         if let Some(mut proxy_slot) = self.slots.get_mut(slot.id).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
-                return Err(ContainerErrors::GenerationMismatch)
+                return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
             proxy_slot.generation += 1;
