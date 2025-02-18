@@ -150,7 +150,7 @@ impl LogicalDevice {
             .physical_device
             .get_active_queues()
             .iter()
-            .map(|q| {println!("What?? {}", q.family_index); q.family_index})
+            .map(|q| q.family_index)
             .collect::<HashSet<u32>>()
             .into_iter()
             .collect();

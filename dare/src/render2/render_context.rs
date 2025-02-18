@@ -13,10 +13,11 @@ use dagal::traits::AsRaw;
 use dagal::winit;
 use std::ffi::{c_void, CStr, CString};
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use std::mem::{take, ManuallyDrop};
 use std::ptr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use futures::StreamExt;
 use tokio::sync::RwLock;
 use crate::render2::surface_context::InnerSurfaceContextCreateInfo;
 
@@ -141,7 +142,7 @@ impl RenderContext {
                                         | vk::QueueFlags::COMPUTE,
                                 )]
                                 .into(),
-                                count: Expected::Required(1),
+                                count: Expected::Required(2),
                             },
                             QueueRequest {
                                 strict: false,
@@ -167,8 +168,9 @@ impl RenderContext {
                 .collect::<Vec<dagal::device::Queue>>()
         });
         // pq
-        let transfer_queues = queue_allocator.retrieve_queues(vk::QueueFlags::TRANSFER, 2)?;
-        let mut graphics_queue = queue_allocator.retrieve_queues(vk::QueueFlags::GRAPHICS, 2)?;
+        let mut graphics_queue = queue_allocator.retrieve_queues(&[], vk::QueueFlags::GRAPHICS, 2)?;
+        let queues = graphics_queue.iter().map(|queue| (queue.get_index(), queue.get_family_index())).collect::<Vec<(u32,u32)>>();
+        let transfer_queues = queue_allocator.retrieve_queues(&queues, vk::QueueFlags::TRANSFER, queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER))?;
         let mut present_queue = graphics_queue.pop().unwrap();
         let immediate_queue = graphics_queue.pop().unwrap();
         let immediate_submit =
@@ -253,7 +255,7 @@ impl RenderContext {
                 instance: &self.inner.instance,
                 physical_device: &self.inner.physical_device,
                 allocator: self.inner.allocator.clone(),
-                window: window,
+                window,
                 frames_in_flight: Some(self.inner.configuration.target_frames_in_flight),
             },
         )?;

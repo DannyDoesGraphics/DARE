@@ -319,7 +319,6 @@ impl PhysicalDevice {
                             pd.heuristic += allocated_preferred * 10;
                         }
                     }
-                    println!("{} - {}", pd.heuristic, pd.queues.len());
                     Some(pd)
                 })
                 .max_by_key(|pd| pd.heuristic)

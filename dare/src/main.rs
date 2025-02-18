@@ -37,7 +37,7 @@ async fn main() {
     let bevy_loop = World::new();
     */
     let mut app = app::App::new(render2::prelude::create_infos::RenderContextConfiguration {
-        target_frames_in_flight: 2,
+        target_frames_in_flight: 3,
         target_extent: vk::Extent2D {
             width: 800,
             height: 600,

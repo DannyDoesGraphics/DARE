@@ -128,7 +128,6 @@ impl SurfaceContext {
     /// Create frames for the window context
     pub fn create_frames(&mut self, present_queue: &dagal::device::Queue) -> Result<()> {
         let mut frames = Vec::with_capacity(self.frames_in_flight);
-        println!("Created {:?} fif", self.frames_in_flight);
         for frame_number in 0..self.frames_in_flight {
             frames.push(Mutex::new(super::frame::Frame::new(
                 self,

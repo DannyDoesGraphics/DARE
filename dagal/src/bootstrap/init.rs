@@ -205,7 +205,6 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             }
             family_hashmap
         }.into_iter().map(|(_, q)| q).collect::<Vec<vk::DeviceQueueCreateInfo>>();
-        println!("enabling: {:?}", enable_extensions);
         let logical_device =
             crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
                 instance: instance.get_instance(),
