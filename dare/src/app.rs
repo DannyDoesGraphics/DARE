@@ -29,6 +29,10 @@ pub struct App {
         dare::util::entity_linker::ComponentsLinkerReceiver<render::components::BoundingBox>,
     bb_link_send:
         dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
+    texture_link_recv:
+        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Texture>,
+    texture_link_send:
+        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Texture>,
 }
 
 impl winit::application::ApplicationHandler for App {
@@ -57,6 +61,7 @@ impl winit::application::ApplicationHandler for App {
                             configuration: config,
                         },
                         self.surface_link_recv.clone(),
+                        self.texture_link_recv.clone(),
                         self.transform_link_recv.clone(),
                         self.bb_link_recv.clone(),
                     );
@@ -75,6 +80,7 @@ impl winit::application::ApplicationHandler for App {
                     self.render_server.as_ref().cloned().unwrap().asset_server(),
                     self.render_server.as_ref().unwrap().get_inner_send(),
                     &self.surface_link_send,
+                    &self.texture_link_send,
                     &self.transform_link_send,
                     &self.bb_link_send,
                 )
@@ -227,6 +233,7 @@ impl App {
         let (transform_link_send, transform_link_recv) =
             dare::util::entity_linker::ComponentsLinker::default();
         let (bb_link_send, bb_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
+        let (texture_link_send, texture_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
         Ok(Self {
             window: None,
             engine_server: None,
@@ -240,6 +247,8 @@ impl App {
             transform_link_send,
             bb_link_recv,
             bb_link_send,
+            texture_link_recv,
+            texture_link_send,
         })
     }
 }

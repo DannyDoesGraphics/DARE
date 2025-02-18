@@ -59,6 +59,9 @@ impl RenderServer {
         surface_link: dare::util::entity_linker::ComponentsLinkerReceiver<
             dare::engine::components::Surface,
         >,
+        texture_link: dare::util::entity_linker::ComponentsLinkerReceiver<
+            dare::engine::components::Texture
+        >,
         transform_link: dare::util::entity_linker::ComponentsLinkerReceiver<
             dare::physics::components::Transform,
         >,
@@ -106,6 +109,7 @@ impl RenderServer {
                 let mut schedule = becs::Schedule::default();
                 // links
                 surface_link.attach_to_world(&mut world, &mut schedule);
+                texture_link.attach_to_world(&mut world, &mut schedule);
                 transform_link.attach_to_world(&mut world, &mut schedule);
                 bb_link.attach_to_world(&mut world, &mut schedule);
                 // misc

@@ -18,6 +18,7 @@ impl EngineServer {
         asset_server: dare::asset2::server::AssetServer,
         send: IrSend,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
+        texture_link_send: &ComponentsLinkerSender<dare::engine::components::Texture>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
         bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
     ) -> Result<Self> {
@@ -33,12 +34,14 @@ impl EngineServer {
         surface_link_send.attach_to_world(&mut init_schedule);
         transform_link_send.attach_to_world(&mut init_schedule);
         bb_link_send.attach_to_world(&mut init_schedule);
+        texture_link_send.attach_to_world(&mut init_schedule);
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();
         surface_link_send.attach_to_world(&mut scheduler);
         transform_link_send.attach_to_world(&mut scheduler);
         bb_link_send.attach_to_world(&mut scheduler);
+        texture_link_send.attach_to_world(&mut scheduler);
 
         let (send, mut recv) = tokio::sync::mpsc::channel::<()>(32);
         let thread = rt.runtime.spawn_blocking(move || {
