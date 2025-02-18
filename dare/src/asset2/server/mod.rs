@@ -111,11 +111,6 @@ impl AssetServer {
                 id: id_untyped,
                 drop_send: self.inner.drop_send.clone(),
             });
-            println!("Was forced to make: {:?} = {}", metadata, {
-                let mut hasher = std::hash::DefaultHasher::default();
-                metadata.hash(&mut hasher);
-                hasher.finish()
-            });
             self.infos
                 .states
                 .insert(id_untyped, asset_info::AssetInfo::new::<T>(&arc, metadata));
