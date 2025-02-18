@@ -1,7 +1,7 @@
 /// Describes implementation of various components
 #[allow(unused_imports)]
 pub mod buffer;
-mod texture;
+mod image;
 
 pub use buffer::*;
-pub use texture::*;
+pub use image::*;

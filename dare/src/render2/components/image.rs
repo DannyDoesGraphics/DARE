@@ -11,13 +11,13 @@ use std::ptr;
 use tracing::instrument::WithSubscriber;
 
 #[derive(Debug, Component)]
-pub struct Image<A: Allocator + 'static> {
+pub struct RenderImage<A: Allocator + 'static> {
     pub image: dagal::resource::Image<A>,
     pub handle: dare::asset2::AssetHandle<dare::asset2::assets::Image>,
 }
 
-impl<A: Allocator + 'static> MetaDataRenderAsset for Image<A> {
-    type Loaded = Image<A>;
+impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
+    type Loaded = RenderImage<A>;
     type Asset = dare::asset2::assets::Image;
     type PrepareInfo = (
         dagal::device::LogicalDevice,
