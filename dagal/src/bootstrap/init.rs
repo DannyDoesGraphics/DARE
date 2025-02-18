@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use crate::bootstrap::app_info::{AppSettings, Expected, QueueRequest};
 use crate::traits::AsRaw;
@@ -109,6 +110,15 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
                 extensions.push(crate::util::wrap_c_str(*ext));
             }
         }
+        if settings.debug_utils {
+            extensions.push(
+                CString::new(
+                ash::ext::debug_utils::NAME
+                    .to_string_lossy()
+                    .to_string().as_str()
+                ).unwrap()
+            )
+        }
 
         let layers_ptr: Vec<*const c_char> = layers.iter().map(|s| s.as_ptr()).collect();
         let extensions_ptr: Vec<*const c_char> = extensions.iter().map(|s| s.as_ptr()).collect();
@@ -143,10 +153,22 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             } else {
                 None
             };
-        let device_features = settings.gpu_requirements.features.clone();
+
+        let mut features_3 = settings.gpu_requirements.features_3.clone();
+        let mut features_2 = settings.gpu_requirements.features_2.clone();
+        features_2.p_next = &mut features_3 as *mut _ as *mut c_void;
+        let mut features_1 = settings.gpu_requirements.features_1.clone();
+        features_1.p_next = &mut features_2 as *mut _ as *mut c_void;
+        let features2 = vk::PhysicalDeviceFeatures2 {
+            s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
+            p_next: &mut features_1 as *mut _ as *mut c_void,
+            features: settings.gpu_requirements.features.clone(),
+            _marker: Default::default(),
+        };
+        let debug_utils = settings.debug_utils;
         let physical_device =
             crate::device::PhysicalDevice::select(&instance, surface.as_ref(), settings)?;
-        let queue_priorities: Vec<f32> = vec![1.0f32];
+        let queue_priorities: Vec<f32> = vec![1.0f32; physical_device.get_active_queues().len()];
         let active_queues: Vec<vk::DeviceQueueCreateInfo> = physical_device
             .get_active_queues()
             .iter()
@@ -168,16 +190,32 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             .collect();
         let p_enable_extension: Vec<*const c_char> =
             enable_extensions.iter().map(|s| s.as_ptr()).collect();
+
+        // ensure our queue families are unique (merge same queue families together)
+        let queue_cis: Vec<vk::DeviceQueueCreateInfo> = {
+            let mut family_hashmap: HashMap<u32, vk::DeviceQueueCreateInfo> = HashMap::new();
+            for mut queue in active_queues {
+                let count = queue.queue_count;
+                family_hashmap.entry(
+                    queue.queue_family_index
+                ).or_insert_with(|| {
+                    queue.queue_count = 0;
+                    queue
+                }).queue_count += count;
+            }
+            family_hashmap
+        }.into_iter().map(|(_, q)| q).collect::<Vec<vk::DeviceQueueCreateInfo>>();
+        println!("enabling: {:?}", enable_extensions);
         let logical_device =
             crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
                 instance: instance.get_instance(),
                 physical_device: physical_device.clone(),
                 device_ci: vk::DeviceCreateInfo {
                     s_type: vk::StructureType::DEVICE_CREATE_INFO,
-                    p_next: &device_features as *const _ as *const c_void,
+                    p_next: &features2 as *const _ as *const c_void,
                     flags: vk::DeviceCreateFlags::empty(),
-                    queue_create_info_count: active_queues.len() as u32,
-                    p_queue_create_infos: active_queues.as_ptr(),
+                    queue_create_info_count: queue_cis.len() as u32,
+                    p_queue_create_infos: queue_cis.as_ptr(),
                     enabled_layer_count: 0,
                     pp_enabled_layer_names: ptr::null(),
                     enabled_extension_count: p_enable_extension.len() as u32,
@@ -185,7 +223,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
                     p_enabled_features: ptr::null(),
                     _marker: Default::default(),
                 },
-                debug_utils: false,
+                debug_utils,
             })?;
 
         // Now we create an execution manager using all queues

@@ -20,9 +20,10 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
     type Loaded = RenderImage<A>;
     type Asset = dare::asset2::assets::Image;
     type PrepareInfo = (
-        dagal::device::LogicalDevice,
         dagal::allocators::ArcAllocator<A>,
+        dare::asset2::AssetHandle<dare::asset2::assets::Image>,
         dare::render::util::TransferPool<A>,
+        Option<String>,
         u32,
     );
 
@@ -39,11 +40,11 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
         load_info: <<Self::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'_>,
     ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>> {
         Box::pin(async move {
-            let (device, mut allocator, transfer_pool, queue_family) = prepare_info;
+            let (mut allocator, handle, transfer_pool, name, queue_family) = prepare_info;
             let image_loaded = metadata.load(()).await?;
             let image = unsafe {
                 dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
-                    device,
+                    device: allocator.device(),
                     queue_family: Some(0),
                     allocator: &mut allocator,
                     location: MemoryLocation::GpuOnly,
@@ -69,10 +70,13 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                         initial_layout: vk::ImageLayout::UNDEFINED,
                         _marker: Default::default(),
                     },
-                    name: None,
+                    name: name.as_deref(),
                 })
-            };
-            todo!()
+            }?;
+            Ok(Self {
+                image,
+                handle,
+            })
         })
     }
 }

@@ -11,20 +11,25 @@ pub fn asset_manager_system(
     mut buffer_storage: ResMut<
         super::RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>>,
     >,
+    mut image_storage: ResMut<
+        super::RenderAssetManagerStorage<dare::render::components::RenderImage<GPUAllocatorImpl>>,
+    >
 ) {
-    rt.runtime.block_on(async move {
+    rt.runtime.block_on(
+        async move {
         for delta in buffer_storage.asset_server.get_deltas() {
             match delta {
                 AssetServerDelta::HandleCreated(untyped_handle) => {}
                 AssetServerDelta::HandleLoading(untyped_handle) => {
                     let asset_id = untyped_handle.get_id();
-                    if let Some(handle) = untyped_handle.into_typed_handle::<dare::asset2::assets::Buffer>() {
-                        match buffer_storage.insert(handle.clone()).map_err(|e| {
-                            tracing::error!("Failed to insert handle {e}")
-                        }) {
-                            Err(e) => {},
+                    if let Some(handle) = untyped_handle.clone().into_typed_handle::<dare::asset2::assets::Buffer>() {
+                        match buffer_storage.insert(handle.clone()) {
+                            Err(e) => {
+                                tracing::error!("Failed to load buffer handle: {e}");
+                            },
                             Ok(_) => {
-                                tracing::trace!("Loading incoming handle {:?}", asset_id);
+                                //#[cfg(feature = "tracing")]
+                                //tracing::trace!("Loading incoming buffer handle {:?}", asset_id);
                                 if let Some(asset_storage_handle) = buffer_storage.get_storage_handle(&handle) {
                                     if let Some(buffer_metadata) = buffer_storage.asset_server.get_metadata(&handle) {
                                         buffer_storage.load(&asset_storage_handle, dare::render::components::BufferPrepareInfo {
@@ -39,6 +44,30 @@ pub fn asset_manager_system(
                                         });
                                     }
                                 }
+                            }
+                        }
+                    } else if let Some(handle) = untyped_handle.into_typed_handle::<dare::asset2::assets::Image>() {
+                        match image_storage.insert(handle.clone()) {
+                            Ok(_) => {
+                                #[cfg(feature = "tracing")]
+                                tracing::trace!("Loading incoming image handle {:?}", asset_id);
+
+                                if let Some(asset_storage_handle) = image_storage.get_storage_handle(&handle) {
+                                    if let Some(image_metadata) = image_storage.asset_server.get_metadata(&handle) {
+                                        image_storage.load(&asset_storage_handle, (
+                                            render_context.inner.allocator.clone(),
+                                            handle,
+                                            render_context.transfer_pool(),
+                                            Some(image_metadata.name),
+                                            render_context.inner.window_context.present_queue.get_family_index()
+                                            ), ());
+                                    }
+                                } else {
+                                    tracing::warn!("Expected `Some`, got `None` for handle {:?}", handle);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to insert handle {e}");
                             }
                         }
                     }
@@ -58,5 +87,6 @@ pub fn asset_manager_system(
         }
         // finish awaiting load tasks
         buffer_storage.process_queue();
+            image_storage.process_queue();
     });
 }

@@ -7,6 +7,8 @@ use derivative::Derivative;
 pub struct Mesh {
     pub surface: super::Surface,
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
+    pub material: super::Material,
+    #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub bounding_box: dare::render::components::bounding_box::BoundingBox,
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub name: dare::engine::components::Name,

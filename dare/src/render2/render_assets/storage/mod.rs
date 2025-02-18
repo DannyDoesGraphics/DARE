@@ -171,7 +171,6 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
         {
             let mut hasher = DefaultHasher::new();
             handle.hash(&mut hasher);
-            println!("adding {:?} - {:?}", hasher.finish(), handle);
         }
         Ok(RenderAssetHandle::Strong {
             handle: slot,
@@ -227,7 +226,6 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
             }
             let mut hasher = DefaultHasher::new();
             handle.hash(&mut hasher);
-            panic!("getting: {:?} - {:?}", handle.clone().downgrade(), handle);
         }
         self.slot_mappings.get(&handle.clone().downgrade()).cloned()
     }

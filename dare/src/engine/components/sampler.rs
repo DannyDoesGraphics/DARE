@@ -1,6 +1,6 @@
 use crate::prelude as dare;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Sampler {
     /// Wrapping mode (s,t)
     pub wrapping_mode: (

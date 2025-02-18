@@ -38,6 +38,7 @@ pub struct SurfaceContextUpdateInfo<'a> {
 /// Information to create a window context
 pub(super) struct InnerSurfaceContextCreateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
+    pub surface: Option<dagal::wsi::Surface>,
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub present_queue: dagal::device::Queue,
@@ -59,11 +60,11 @@ impl SurfaceContext {
             ));
         }
         // make instances
-        let surface = dagal::wsi::Surface::new(
+        let surface = window_context_ci.surface.unwrap_or(dagal::wsi::Surface::new(
             window_context_ci.instance.get_entry(),
             window_context_ci.instance.get_instance(),
             window_context_ci.window,
-        )?;
+        )?);
         let surface =
             surface.query_details(unsafe { *window_context_ci.physical_device.as_raw() })?;
         let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface);
@@ -110,7 +111,6 @@ impl SurfaceContext {
                 .into_boxed_slice();
         let frames_in_flight =
             frames_in_flight.unwrap_or(surface.get_capabilities().min_image_count) as usize;
-        println!("Surface made");
         Ok(SurfaceContext {
             surface,
             swapchain,

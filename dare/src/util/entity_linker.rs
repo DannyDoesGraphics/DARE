@@ -61,7 +61,6 @@ impl<T: Component + Clone> ComponentsLinkerReceiver<T> {
                 while let Ok(delta) = queue.try_recv() {
                     match delta {
                         ComponentsLinkerDelta::Add { entity, component } => {
-                            println!("ADDED-GOT!!! {:?}", std::any::TypeId::of::<T>());
                             match mappings.get(&entity) {
                                 None => {
                                     // Mapping does not exist
@@ -99,7 +98,6 @@ impl<T: Component + Clone> ComponentsLinkerSender<T> {
         let queue = self.send.clone();
         send_world.add_systems(move |query: Query<(Entity, &T), Added<T>>| {
             for (entity, component) in query.iter() {
-                println!("ADDED!!! {:?}", std::any::TypeId::of::<T>());
                 queue
                     .send(ComponentsLinkerDelta::Add {
                         entity,

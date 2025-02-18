@@ -86,12 +86,14 @@ pub struct CMaterial {
     pub normal_sampler_id: u32,
 }
 impl CMaterial {
-    pub fn from_material(material: dare::engine::components::Material) -> Option<Self> {
+    pub fn from_material(textures: &dare::render::render_assets::storage::RenderAssetManagerStorage<
+        dare::render::components::RenderImage<GPUAllocatorImpl>,
+    >, material: dare::engine::components::Material) -> Option<Self> {
         Some(Self {
             bit_flag: 0,
             _padding: 0,
             color_factor: material.albedo_factor.to_array(),
-            albedo_texture_id: 0,
+            albedo_texture_id: material.albedo_texture.map(|t| textures.get_storage_handle(&t.asset_handle).map(|h| h.id())).flatten().unwrap_or(0) as u32,
             albedo_sampler_id: 0,
             normal_texture_id: 0,
             normal_sampler_id: 0,

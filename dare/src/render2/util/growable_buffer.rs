@@ -27,6 +27,12 @@ pub struct GrowableBuffer<A: Allocator + 'static> {
 
 impl<A: Allocator + 'static> GrowableBuffer<A> {
     pub fn new<'a>(handle_ci: dagal::resource::BufferCreateInfo<'a, A>) -> anyhow::Result<Self> {
+        // sanity check
+        match &handle_ci {
+            BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => {
+                assert!(usage_flags.contains(vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST), "Expected to find TRANSFER_SRC | TRANSFER_DST, got {:?}", usage_flags);
+            }
+        }
         Ok(Self {
             device: match &handle_ci {
                 BufferCreateInfo::NewEmptyBuffer { device, .. } => device.clone(),

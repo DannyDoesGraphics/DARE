@@ -12,7 +12,7 @@ mod render2;
 mod util;
 mod window;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;

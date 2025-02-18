@@ -146,18 +146,18 @@ impl LogicalDevice {
                 &device,
             ));
         }
-
+        let queue_families: Vec<u32> = device_ci
+            .physical_device
+            .get_active_queues()
+            .iter()
+            .map(|q| {println!("What?? {}", q.family_index); q.family_index})
+            .collect::<HashSet<u32>>()
+            .into_iter()
+            .collect();
         Ok(Self {
             inner: Arc::new(LogicalDeviceInner {
                 handle: device,
-                queue_families: device_ci
-                    .physical_device
-                    .get_active_queues()
-                    .iter()
-                    .map(|q| q.family_index)
-                    .collect::<HashSet<u32>>()
-                    .into_iter()
-                    .collect(),
+                queue_families,
                 enabled_extensions: device_ci.physical_device.get_extensions().to_vec(),
                 debug_utils,
                 acceleration_structure,
@@ -206,6 +206,7 @@ impl LogicalDevice {
     }
 
     pub fn get_used_queue_families(&self) -> &[u32] {
+        assert!(self.inner.queue_families.len() > 0);
         self.inner.queue_families.as_slice()
     }
 

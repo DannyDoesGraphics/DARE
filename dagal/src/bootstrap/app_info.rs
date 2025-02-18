@@ -65,7 +65,7 @@ impl QueueRequest {
             && family_properties
                 .queue_family_properties
                 .queue_flags
-                .contains(required_flags)
+                & required_flags != required_flags
         {
             false
         } else {
@@ -89,11 +89,14 @@ impl QueueRequest {
 }
 
 #[derive(Debug)]
-pub struct GPURequirements<'a> {
+pub struct GPURequirements {
     /// Whether a dedicated GPU is required
     pub dedicated: Expected<bool>,
     /// Features expected of a GPU
-    pub features: vk::PhysicalDeviceFeatures2<'a>,
+    pub features: vk::PhysicalDeviceFeatures,
+    pub features_1: vk::PhysicalDeviceVulkan11Features<'static>,
+    pub features_2: vk::PhysicalDeviceVulkan12Features<'static>,
+    pub features_3: vk::PhysicalDeviceVulkan13Features<'static>,
     /// Device extensions that should be enabled on the GPU
     pub device_extensions: Vec<Expected<String>>,
     /// Queues expected of a device
@@ -114,6 +117,8 @@ pub struct AppSettings<'a, Window: crate::wsi::DagalWindow> {
     pub api_version: (u32, u32, u32, u32),
     /// Enable validation layers
     pub enable_validation: bool,
+    /// Enable debug utils
+    pub debug_utils: bool,
     /// Optional window reference
     pub window: Option<&'a Window>,
     /// Surface formats expected
@@ -121,5 +126,5 @@ pub struct AppSettings<'a, Window: crate::wsi::DagalWindow> {
     /// Preferred present mode, ordered from most preferred to least
     pub present_mode: Option<Expected<vk::PresentModeKHR>>,
     /// Minimum requirements the GPU should be expected to have
-    pub gpu_requirements: GPURequirements<'a>,
+    pub gpu_requirements: GPURequirements
 }

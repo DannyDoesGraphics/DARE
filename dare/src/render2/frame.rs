@@ -26,6 +26,8 @@ pub struct Frame {
 
     /// any resources binded for the current frame
     pub resources: HashSet<dare::asset2::AssetHandleUntyped>,
+    /// any material buffers
+    pub material_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold indirect commands
     pub indirect_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold instanced information
@@ -195,6 +197,19 @@ impl Frame {
             image_extent: surface_context.image_extent,
 
             resources: HashSet::default(),
+            material_buffer: dare::render::util::GrowableBuffer::new(
+                dagal::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(String::from(format!("Material buffer {}", image_number.as_ref().unwrap_or(&0)))),
+                    allocator: &mut allocator,
+                    size: (size_of::<crate::render2::c::CMaterial>() * 64) as vk::DeviceSize,
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                }
+            )?,
             indirect_buffer: dare::render::util::GrowableBuffer::new(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
@@ -206,6 +221,7 @@ impl Frame {
                     size: 128_000,
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::TRANSFER_SRC
                         | vk::BufferUsageFlags::INDIRECT_BUFFER
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -222,6 +238,7 @@ impl Frame {
                     size: 128_000,
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_SRC
                         | vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -240,6 +257,7 @@ impl Frame {
                         memory_type: MemoryLocation::GpuOnly,
                         usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
                             | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::TRANSFER_SRC
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                             | vk::BufferUsageFlags::VERTEX_BUFFER,
                     },
@@ -257,6 +275,7 @@ impl Frame {
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::TRANSFER_SRC
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },

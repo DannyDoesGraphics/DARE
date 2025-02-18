@@ -15,6 +15,7 @@ use std::ptr::write;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::MutexGuard;
+use crate::render2::components::RenderImage;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
@@ -31,6 +32,10 @@ pub fn present_system_begin(
             &render::components::BoundingBox,
             &dare::physics::components::Transform,
         ),
+    >,
+    textures: becs::Res<
+        '_,
+        render::render_assets::storage::RenderAssetManagerStorage<RenderImage<GPUAllocatorImpl>>,
     >,
     buffers: becs::Res<
         '_,
@@ -142,6 +147,7 @@ pub fn present_system_begin(
                     &camera,
                     frame,
                     surfaces,
+                    textures,
                     buffers,
                 )
                 .await;

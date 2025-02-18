@@ -24,7 +24,6 @@ impl<T> SlotMap<T> {
 
     pub fn insert(&mut self, element: T) -> Slot<T> {
         // find the next free slot for indirect
-        println!("List: {:?}", self.free_list);
         let mut slots_len = self.slots.len();
         let mut free_slot_index = 0;
         let mut free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {

@@ -132,7 +132,7 @@ impl Hash for StrongAssetHandleUntyped {
 }
 
 /// Untyped asset handles, keeps track of asset usage
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum AssetHandleUntyped {
     Strong(Arc<StrongAssetHandleUntyped>),
     Weak {
@@ -175,12 +175,16 @@ impl Deref for AssetHandleUntyped {
 }
 impl AssetHandleUntyped {
     pub fn into_typed_handle<T: asset::Asset>(self) -> Option<AssetHandle<T>> {
-        match self {
-            AssetHandleUntyped::Strong(arc) => Some(AssetHandle::Strong(arc)),
-            AssetHandleUntyped::Weak { id, weak_ref } => Some(AssetHandle::Weak {
-                id: id.into_typed_id()?,
-                weak_ref,
-            }),
+        if self.is_type::<T>() {
+            match self {
+                AssetHandleUntyped::Strong(arc) => Some(AssetHandle::Strong(arc)),
+                AssetHandleUntyped::Weak { id, weak_ref } => Some(AssetHandle::Weak {
+                    id: id.into_typed_id()?,
+                    weak_ref,
+                }),
+            }
+        } else {
+            None
         }
     }
 

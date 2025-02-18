@@ -45,6 +45,9 @@ pub fn build_instancing_data(
             &dare::physics::components::Transform,
         ),
     >,
+    textures: &dare::render::render_assets::storage::RenderAssetManagerStorage<
+        dare::render::components::RenderImage<GPUAllocatorImpl>,
+    >,
     buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
         dare::render::components::RenderBuffer<GPUAllocatorImpl>,
     >,
@@ -73,7 +76,6 @@ pub fn build_instancing_data(
         normal_sampler_id: 0,
     }];
     for (index, (entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
-        let c_surface_success: bool = false;
         // check if it even exists in frame
         if !bounding_box.visible_in_frustum(transform.get_transform_matrix(), view_proj) {
             continue;
@@ -90,20 +92,18 @@ pub fn build_instancing_data(
                 None
             }
         });
-        // skip if we could not process the surface
-        if !c_surface_success {
-            continue;
-        }
         material_map
             .entry(material.cloned().unwrap_or({
                 dare::engine::components::Material {
                     albedo_factor: glam::Vec4::ONE,
+                    albedo_texture: None,
+                    alpha_mode: gltf::material::AlphaMode::Opaque,
                 }
             }))
             .or_insert_with(|| {
                 let id: usize = unique_materials.len();
                 if let Some(material) = material.cloned() {
-                    match dare::render::c::CMaterial::from_material(material) {
+                    match dare::render::c::CMaterial::from_material(textures, material) {
                         None => 0,
                         Some(material) => {
                             unique_materials.push(material);
@@ -172,9 +172,6 @@ pub fn build_instancing_data(
             panic!("Not equivalent?");
         }
     }
-    instancing_information.sort_by(|a, b| {
-        asset_unique_surfaces[a.surface as usize].cmp(&asset_unique_surfaces[b.surface as usize])
-    });
 
     (
         asset_unique_surfaces,
@@ -201,6 +198,12 @@ pub async fn mesh_render(
             &dare::physics::components::Transform,
         ),
     >,
+    textures: Res<
+        '_,
+        dare::render::render_assets::storage::RenderAssetManagerStorage<
+            dare::render::components::RenderImage<GPUAllocatorImpl>,
+        >,
+    >,
     buffers: Res<
         '_,
         dare::render::render_assets::storage::RenderAssetManagerStorage<
@@ -220,10 +223,12 @@ pub async fn mesh_render(
                     let view_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     ) * camera.get_view_matrix();
-                    build_instancing_data(view_proj, &surfaces, &buffers)
+                    build_instancing_data(view_proj, &surfaces, &textures, &buffers)
                 };
                 // check for empty surfaces, before going
                 if instancing_information.is_empty() {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!("No instances found, skipping render.");
                     return;
                 }
 
@@ -296,6 +301,25 @@ pub async fn mesh_render(
                             .window_context
                             .present_queue
                             .get_family_index(),
+                    )
+                    .await
+                    .unwrap();
+                // upload material information
+                frame
+                    .material_buffer
+                    .upload_to_buffer(
+                        &render_context.inner.immediate_submit,
+                        materials
+                            .iter()
+                            .flat_map(|material| bytemuck::bytes_of(material))
+                            .copied()
+                            .collect::<Vec<u8>>()
+                            .as_slice(),
+                        render_context
+                            .inner
+                            .window_context
+                            .present_queue
+                            .get_family_index()
                     )
                     .await
                     .unwrap();

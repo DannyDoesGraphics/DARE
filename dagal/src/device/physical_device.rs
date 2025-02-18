@@ -205,6 +205,26 @@ impl PhysicalDevice {
                         }
                     }
 
+                    // Check extensions
+                    {
+                        let device_extensions: Vec<String> = instance.enumerate_device_extension_properties(pd.physical_device).unwrap().iter().map(|ep|  {
+                            crate::util::wrap_c_str(ep.extension_name.as_ptr()).into_string().unwrap()
+                        }).collect();
+                        for requirement in settings.gpu_requirements.device_extensions.iter() {
+                            match requirement {
+                                Expected::Required(name) => if !device_extensions.contains(name) {
+                                    return None
+                                } else {
+                                    pd.extensions.push(name.clone());
+                                }
+                                Expected::Preferred(name) => if device_extensions.contains(name) {
+                                    pd.heuristic += 1;
+                                    pd.extensions.push(name.clone());
+                                }
+                            }
+                        }
+                    }
+
                     // Attempt to allocate all queues
                     let mut family_capacity: Vec<u32> = pd
                         .queue_family_properties
@@ -266,6 +286,7 @@ impl PhysicalDevice {
                                 }
                                 // Must at least match the "required" portion of the request
                                 if !queue_req.contains_required(fam_props) {
+                                    println!("{:?} : {:?}", queue_req.queue_type, fam_props.queue_family_properties.queue_flags);
                                     continue;
                                 }
 
@@ -298,11 +319,11 @@ impl PhysicalDevice {
                             pd.heuristic += allocated_preferred * 10;
                         }
                     }
+                    println!("{} - {}", pd.heuristic, pd.queues.len());
                     Some(pd)
                 })
                 .max_by_key(|pd| pd.heuristic)
         };
-
         suitable_device
             .map(|pd| {
                 PhysicalDevice::new(

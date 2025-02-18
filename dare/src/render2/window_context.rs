@@ -13,12 +13,13 @@ pub struct WindowContext {
 #[derive(Debug)]
 pub struct WindowContextCreateInfo {
     pub(crate) present_queue: dagal::device::Queue,
+    pub(crate) surface: Option<SurfaceContext>,
 }
 
 impl WindowContext {
     pub fn new(ci: WindowContextCreateInfo) -> Self {
         Self {
-            surface_context: RwLock::new(None),
+            surface_context: RwLock::new(ci.surface),
             present_queue: ci.present_queue,
         }
     }
@@ -35,6 +36,7 @@ impl WindowContext {
             *surface_guard = Some(SurfaceContext::new(
                 super::surface_context::InnerSurfaceContextCreateInfo {
                     instance: &ci.instance,
+                    surface: None,
                     physical_device: &ci.physical_device,
                     allocator: ci.allocator,
                     present_queue: self.present_queue.clone(),

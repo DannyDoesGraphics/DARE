@@ -18,7 +18,7 @@ impl EngineServer {
         asset_server: dare::asset2::server::AssetServer,
         send: IrSend,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
-        texture_link_send: &ComponentsLinkerSender<dare::engine::components::Texture>,
+        texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
         bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
     ) -> Result<Self> {

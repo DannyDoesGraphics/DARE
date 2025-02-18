@@ -30,9 +30,9 @@ pub struct App {
     bb_link_send:
         dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
     texture_link_recv:
-        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Texture>,
+        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Material>,
     texture_link_send:
-        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Texture>,
+        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Material>,
 }
 
 impl winit::application::ApplicationHandler for App {

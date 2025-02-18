@@ -160,11 +160,12 @@ impl GLTFLoader {
             .map(|(index, texture)| {
                 let location = match texture.source().source() {
                     gltf::image::Source::Uri { uri, .. } => {
-                        dare::asset2::MetaDataLocation::FilePath(std::path::PathBuf::from(uri))
+                        let parent = path.parent().unwrap();
+                        dare::asset2::MetaDataLocation::FilePath(parent.join(uri))
                     }
                     _ => unimplemented!(),
                 };
-                let sampler = dare::engine::components::Sampler {
+                let sampler = engine::components::Sampler {
                     wrapping_mode: (
                         dare::render::util::WrappingMode::from(texture.sampler().wrap_s()),
                         dare::render::util::WrappingMode::from(texture.sampler().wrap_s()),
@@ -191,13 +192,17 @@ impl GLTFLoader {
                 };
                 let asset_handle: dare::asset2::AssetHandle<dare::asset2::assets::Image> =
                     asset_server.entry(texture);
+                if asset_server.get_state(&asset_handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                    if let Err(e) = asset_server.transition_loading(&asset_handle.clone().into_untyped_handle()) {
+                        panic!("Failed to load: {e}");
+                    }
+                }
                 engine::components::Texture {
                     asset_handle,
                     sampler,
                 }
             })
             .collect::<Vec<engine::components::Texture>>();
-        commands.spawn_batch(textures.into_iter().map(|t| (t)));
         let mut mesh_count: usize = 0;
         let meshes: Vec<engine::components::Mesh> = meshes
             .into_iter()
@@ -263,8 +268,10 @@ impl GLTFLoader {
                                             );
                                             m.name.push_str(&format!("Index buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                             let handle = asset_server.entry(m.clone());
-                                            if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
-                                                tracing::warn!("Failed to load: {e}");
+                                            if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                    tracing::warn!("Failed to load: {e}");
+                                                }
                                             }
                                             handle
                                         },
@@ -300,8 +307,10 @@ impl GLTFLoader {
                                                     m.name.push_str(&format!("Vertex buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                                     accessor.name().map(|name| m.name.push_str(name));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
-                                                        tracing::warn!("Failed to load: {e}");
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                        if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                            tracing::warn!("Failed to load: {e}");
+                                                        }
                                                     }
                                                     handle
                                                 });
@@ -344,8 +353,10 @@ impl GLTFLoader {
 
                                                     accessor.name().map(|name| m.name.push_str(name));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
-                                                        tracing::warn!("Failed to load: {e}");
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                        if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                            tracing::warn!("Failed to load: {e}");
+                                                        }
                                                     }
                                                     handle
                                                 });
@@ -366,8 +377,10 @@ impl GLTFLoader {
                                                     );
                                                     m.name.push_str(&format!("Tangent buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
-                                                        tracing::warn!("Failed to load: {e}");
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                        if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
+                                                            tracing::warn!("Failed to load: {e}");
+                                                        }
                                                     }
                                                     handle
                                                 });
@@ -402,6 +415,13 @@ impl GLTFLoader {
                     let primitive_name = format!("{mesh_name} primitive {mesh_count}");
                     surfaces.push(engine::components::Mesh {
                         surface,
+                        material: engine::components::Material {
+                            albedo_factor: glam::Vec4::ONE,
+                            albedo_texture: primitive.material().pbr_metallic_roughness().base_color_texture().map(|texture| {
+                                 textures[texture.texture().index()].clone()
+                            }),
+                            alpha_mode: primitive.material().alpha_mode(),
+                        },
                         bounding_box: bounding_box.unwrap_or(dare::render::components::bounding_box::BoundingBox::new(
                             glam::Vec3::from(primitive.bounding_box().min),
                             glam::Vec3::from(primitive.bounding_box().max),

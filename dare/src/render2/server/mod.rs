@@ -60,7 +60,7 @@ impl RenderServer {
             dare::engine::components::Surface,
         >,
         texture_link: dare::util::entity_linker::ComponentsLinkerReceiver<
-            dare::engine::components::Texture
+            dare::engine::components::Material
         >,
         transform_link: dare::util::entity_linker::ComponentsLinkerReceiver<
             dare::physics::components::Transform,
@@ -100,11 +100,10 @@ impl RenderServer {
                 world.insert_resource(RenderAssetManagerStorage::<
                     render::components::RenderBuffer<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
+                world.insert_resource(RenderAssetManagerStorage::<
+                    render::components::RenderImage<GPUAllocatorImpl>
+                    >::new(asset_server.clone()));
                 world.insert_resource(IrRecv(ir_recv));
-                // rendering
-                world.insert_resource(render::render_assets::RenderAssetsStorage::<
-                    render::components::RenderBuffer<GPUAllocatorImpl>,
-                >::default());
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();
                 // links

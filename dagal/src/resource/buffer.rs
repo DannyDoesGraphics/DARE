@@ -155,18 +155,18 @@ impl<A: Allocator> Resource for Buffer<A> {
                             flags: vk::BufferCreateFlags::empty(),
                             size,
                             usage: usage_flags,
-                            sharing_mode: if device.get_used_queue_families().len() == 1 {
+                            sharing_mode: if device.get_used_queue_families().len() <= 1 {
                                 vk::SharingMode::EXCLUSIVE
                             } else {
                                 vk::SharingMode::CONCURRENT
                             },
-                            queue_family_index_count: if device.get_used_queue_families().len() == 1
+                            queue_family_index_count: if device.get_used_queue_families().len() <= 1
                             {
                                 0
                             } else {
                                 device.get_used_queue_families().len() as u32
                             },
-                            p_queue_family_indices: if device.get_used_queue_families().len() == 1 {
+                            p_queue_family_indices: if device.get_used_queue_families().len() <= 1 {
                                 ptr::null()
                             } else {
                                 device.get_used_queue_families().as_ptr()
