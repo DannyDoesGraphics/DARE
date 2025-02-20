@@ -105,11 +105,13 @@ pub enum ImageViewCreateInfo<'a> {
     FromCreateInfo {
         device: crate::device::LogicalDevice,
         create_info: vk::ImageViewCreateInfo<'a>,
+        name: Option<String>,
     },
     /// Create a VkImageView from an existing one
     FromVk {
         device: crate::device::LogicalDevice,
         image_view: vk::ImageView,
+        name: Option<String>,
     },
 }
 
@@ -125,24 +127,31 @@ impl Resource for ImageView {
     where
         Self: Sized,
     {
-        match create_info {
+        let mut view = match create_info {
             ImageViewCreateInfo::FromCreateInfo {
                 device,
-                create_info,
+                create_info, name,
             } => {
                 let handle = unsafe { device.get_handle().create_image_view(&create_info, None)? };
-                Ok(Self {
+                anyhow::Ok(Self {
                     handle,
                     device,
-                    name: None,
+                    name,
                 })
             }
-            ImageViewCreateInfo::FromVk { device, image_view } => Ok(Self {
+            ImageViewCreateInfo::FromVk { device, image_view, name } => Ok(Self {
                 handle: image_view,
                 device,
-                name: None,
+                name,
             }),
+        }?;
+        if let Some(debug_utils) = view.device.clone().get_debug_utils() {
+            if let Some(name) = view.name.clone().as_ref() {
+                view.set_name(debug_utils, name)?;
+            }
         }
+
+        Ok(view)
     }
 
     fn get_device(&self) -> &crate::device::LogicalDevice {

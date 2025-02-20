@@ -144,7 +144,6 @@ impl SurfaceContext {
 
 impl Drop for SurfaceContext {
     fn drop(&mut self) {
-        use std::ptr;
         let mut vk_fences: Vec<vk::Fence> = Vec::new();
         while vk_fences.len() != self.frames.len() {
             vk_fences.clear();

@@ -92,15 +92,23 @@ impl CMaterial {
         >,
         material: dare::engine::components::Material,
     ) -> Option<Self> {
+        let albedo_texture_id = material
+            .albedo_texture
+            .map(|t| textures.get_storage_handle(&t.asset_handle).map(|h| h.id() as u32))
+            .flatten();
+
+        let mut bit_flag = MaterialFlags::NONE;
+        if albedo_texture_id.is_some() {
+            bit_flag |= MaterialFlags::ALBEDO;
+        } else {
+            panic!("WE FAILED!!");
+        }
+
         Some(Self {
-            bit_flag: 0,
+            bit_flag: bit_flag.bits(),
             _padding: 0,
             color_factor: material.albedo_factor.to_array(),
-            albedo_texture_id: material
-                .albedo_texture
-                .map(|t| textures.get_storage_handle(&t.asset_handle).map(|h| h.id()))
-                .flatten()
-                .unwrap_or(0) as u32,
+            albedo_texture_id: albedo_texture_id.unwrap_or(0),
             albedo_sampler_id: 0,
             normal_texture_id: 0,
             normal_sampler_id: 0,

@@ -55,7 +55,6 @@ impl Frame {
         let draw_image =
             dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                 device: surface_context.allocator.device(),
-                queue_family: Some(present_queue.get_family_index()),
                 allocator: &mut allocator,
                 location: MemoryLocation::GpuOnly,
                 image_ci: vk::ImageCreateInfo {
@@ -108,14 +107,14 @@ impl Frame {
                         ),
                     _marker: Default::default(),
                 },
+                name: None,
             },
         )?;
         let depth_image =
             dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                 device: surface_context.allocator.device(),
-                queue_family: Some(present_queue.get_family_index()),
                 allocator: &mut allocator,
-                location: dagal::allocators::MemoryLocation::GpuOnly,
+                location: MemoryLocation::GpuOnly,
                 image_ci: vk::ImageCreateInfo {
                     s_type: vk::StructureType::IMAGE_CREATE_INFO,
                     p_next: ptr::null(),
@@ -163,6 +162,7 @@ impl Frame {
                         ),
                     _marker: Default::default(),
                 },
+                name: None,
             },
         )?;
         let render_semaphore = dagal::sync::BinarySemaphore::new(

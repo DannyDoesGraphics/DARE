@@ -30,8 +30,7 @@ pub fn asset_manager_system(
                                 tracing::error!("Failed to load buffer handle: {e}");
                             }
                             Ok(_) => {
-                                //#[cfg(feature = "tracing")]
-                                //tracing::trace!("Loading incoming buffer handle {:?}", asset_id);
+                                tracing::trace!("Loading incoming buffer handle {:?}", asset_id);
                                 if let Some(asset_storage_handle) =
                                     buffer_storage.get_storage_handle(&handle)
                                 {
@@ -69,7 +68,6 @@ pub fn asset_manager_system(
                     {
                         match image_storage.insert(handle.clone()) {
                             Ok(_) => {
-                                #[cfg(feature = "tracing")]
                                 tracing::trace!("Loading incoming image handle {:?}", asset_id);
 
                                 if let Some(asset_storage_handle) =
@@ -84,12 +82,7 @@ pub fn asset_manager_system(
                                                 render_context.inner.allocator.clone(),
                                                 handle,
                                                 render_context.transfer_pool(),
-                                                Some(image_metadata.name),
-                                                render_context
-                                                    .inner
-                                                    .window_context
-                                                    .present_queue
-                                                    .get_family_index(),
+                                                Some(format!("[Image] {}", image_metadata.name)),
                                             ),
                                             (),
                                         );

@@ -1,6 +1,6 @@
 use crate::util::either::Either;
 use anyhow::Result;
-use dagal::allocators::{Allocator, ArcAllocator};
+use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::{Handle, Queue};
 use dagal::command::command_buffer::CmdBuffer;
@@ -24,6 +24,8 @@ pub enum TransferRequest<A: Allocator> {
         length: vk::DeviceSize,
     },
     Image {
+        src_layout: vk::ImageLayout,
+        dst_layout: vk::ImageLayout,
         src_buffer: resource::Buffer<A>,
         src_offset: vk::DeviceSize,
         src_length: vk::DeviceSize,
@@ -44,6 +46,8 @@ pub enum TransferRequestRaw {
         length: vk::DeviceSize,
     },
     Image {
+        src_layout: vk::ImageLayout,
+        dst_layout: vk::ImageLayout,
         src_buffer: vk::Buffer,
         src_offset: vk::DeviceSize,
         src_length: vk::DeviceSize,
@@ -423,6 +427,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             );
                         }
                         TransferRequestRaw::Image {
+                            src_layout,
+                            dst_layout,
                             src_buffer,
                             src_offset,
                             src_length,
@@ -431,6 +437,36 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             dst_offset,
                             dst_length,
                         } => {
+                            processor.device.get_handle().cmd_pipeline_barrier2(
+                                command_buffer.handle(),
+                                &vk::DependencyInfo {
+                                    s_type: vk::StructureType::DEPENDENCY_INFO,
+                                    p_next: ptr::null(),
+                                    dependency_flags: vk::DependencyFlags::empty(),
+                                    memory_barrier_count: 0,
+                                    p_memory_barriers: ptr::null(),
+                                    buffer_memory_barrier_count: 0,
+                                    p_buffer_memory_barriers: ptr::null(),
+                                    image_memory_barrier_count: 1,
+                                    p_image_memory_barriers: &vk::ImageMemoryBarrier2 {
+                                        s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                                        p_next: ptr::null(),
+                                        src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                                        src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+                                        dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                                        dst_access_mask: vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ,
+                                        old_layout: *src_layout,
+                                        new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                                        src_queue_family_index: processor.queues[index].get_index(),
+                                        dst_queue_family_index: processor.queues[index].get_index(),
+                                        image: *dst_image,
+                                        subresource_range: resource::Image::<GPUAllocatorImpl>::image_subresource_range(vk::ImageAspectFlags::COLOR),
+                                        _marker: Default::default(),
+                                    },
+                                    _marker: Default::default(),
+                                }
+                            );
+
                             processor.device.get_handle().cmd_copy_buffer_to_image2(
                                 command_buffer.handle(),
                                 &vk::CopyBufferToImageInfo2 {
@@ -438,7 +474,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                     p_next: ptr::null(),
                                     src_buffer: *src_buffer,
                                     dst_image: *dst_image,
-                                    dst_image_layout: vk::ImageLayout::UNDEFINED,
+                                    dst_image_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                                     region_count: 1,
                                     p_regions: &vk::BufferImageCopy2 {
                                         s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
@@ -458,6 +494,36 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                     },
                                     _marker: Default::default(),
                                 },
+                            );
+
+                            processor.device.get_handle().cmd_pipeline_barrier2(
+                                command_buffer.handle(),
+                                &vk::DependencyInfo {
+                                    s_type: vk::StructureType::DEPENDENCY_INFO,
+                                    p_next: ptr::null(),
+                                    dependency_flags: vk::DependencyFlags::empty(),
+                                    memory_barrier_count: 0,
+                                    p_memory_barriers: ptr::null(),
+                                    buffer_memory_barrier_count: 0,
+                                    p_buffer_memory_barriers: ptr::null(),
+                                    image_memory_barrier_count: 1,
+                                    p_image_memory_barriers: &vk::ImageMemoryBarrier2 {
+                                        s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
+                                        p_next: ptr::null(),
+                                        src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                                        src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+                                        dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                                        dst_access_mask: vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ,
+                                        old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                                        new_layout: *dst_layout,
+                                        src_queue_family_index: processor.queues[index].get_index(),
+                                        dst_queue_family_index: processor.queues[index].get_index(),
+                                        image: *dst_image,
+                                        subresource_range: resource::Image::<GPUAllocatorImpl>::image_subresource_range(vk::ImageAspectFlags::COLOR),
+                                        _marker: Default::default(),
+                                    },
+                                    _marker: Default::default(),
+                                }
                             );
                         }
                     }
@@ -528,6 +594,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         length: *length,
                     },
                     TransferRequest::Image {
+                        src_layout,
+                        dst_layout,
                         src_buffer,
                         src_offset,
                         src_length,
@@ -536,6 +604,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         dst_offset,
                         dst_length,
                     } => TransferRequestRaw::Image {
+                        src_layout: *src_layout,
+                        dst_layout: *dst_layout,
                         src_buffer: *src_buffer.as_raw(),
                         src_offset: *src_offset,
                         src_length: *src_length,

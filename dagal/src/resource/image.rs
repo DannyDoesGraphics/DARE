@@ -18,7 +18,8 @@ pub struct Image<A: Allocator> {
     format: vk::Format,
     extent: vk::Extent3D,
     mip_levels: u32,
-    queue_family: Option<u32>,
+    /// Queue families for concurrent access only
+    concurrent_queue_families: Option<Box<[u32]>>,
     layout: vk::ImageLayout,
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
@@ -49,7 +50,6 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     FromVkNotManaged {
         device: crate::device::LogicalDevice,
         image: vk::Image,
-        queue_family: Option<u32>,
         layout: vk::ImageLayout,
         format: vk::Format,
         extent: vk::Extent3D,
@@ -61,14 +61,12 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image without any allocation made
     NewUnallocated {
         device: crate::device::LogicalDevice,
-        queue_family: Option<u32>,
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
     /// Create a new image that has allocated memory
     NewAllocated {
         device: crate::device::LogicalDevice,
-        queue_family: Option<u32>,
         allocator: &'a mut ArcAllocator<A>,
         location: crate::allocators::MemoryLocation,
         image_ci: vk::ImageCreateInfo<'a>,
@@ -105,8 +103,6 @@ impl<A: Allocator> Image<A> {
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
-        self.layout = new_layout;
-        self.queue_family = Some(queue.get_family_index());
         unsafe { Self::raw_transition(*self.as_raw(), cmd, queue, current_layout, new_layout) }
     }
 
@@ -216,83 +212,50 @@ impl<A: Allocator> Image<A> {
         }
     }
 
-    /// Acquires a full image view
-    pub fn acquire_full_image_view(&self) -> VkResult<vk::ImageView> {
-        let aspect_flag: vk::ImageAspectFlags = if self.usage_flags
-            & vk::ImageUsageFlags::COLOR_ATTACHMENT
-            == vk::ImageUsageFlags::COLOR_ATTACHMENT
-        {
-            vk::ImageAspectFlags::COLOR
-        } else if self.usage_flags & vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
-            == vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+    /// Create a new [`crate::resource::ImageView`] that covers the entire current [`Self`]
+    pub fn acquire_full_image_view(&self) -> Result<crate::resource::ImageView> {
+        let aspect_flag = if self.usage_flags.contains(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
         {
             vk::ImageAspectFlags::DEPTH
         } else {
-            unimplemented!()
+            vk::ImageAspectFlags::COLOR
         };
-        unsafe {
-            self.device.get_handle().create_image_view(
-                &vk::ImageViewCreateInfo {
-                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags: vk::ImageViewCreateFlags::empty(),
-                    image: self.handle,
-                    view_type: if self.image_type == vk::ImageType::TYPE_2D {
-                        vk::ImageViewType::TYPE_2D
-                    } else if self.image_type == vk::ImageType::TYPE_1D {
-                        vk::ImageViewType::TYPE_1D
-                    } else if self.image_type == vk::ImageType::TYPE_3D {
-                        vk::ImageViewType::TYPE_3D
-                    } else {
-                        unimplemented!()
-                    },
-                    format: self.format,
-                    components: Default::default(),
-                    subresource_range: Image::<A>::image_subresource_range(aspect_flag),
-                    _marker: Default::default(),
-                },
-                None,
-            )
-        }
-    }
 
-    pub fn transition_ownership(&mut self, new_queue: &crate::device::Queue) -> Result<()> {
-        if self
-            .queue_family
-            .map(|old_queue| old_queue == new_queue.get_family_index())
-            .unwrap_or(true)
-        {
-            return Ok(());
-        }
-        unsafe {
-            let image_barrier = vk::ImageMemoryBarrier2 {
-                s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
-                p_next: ptr::null(),
-                src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                dst_access_mask: vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ,
-                old_layout: self.layout,
-                new_layout: self.layout,
-                src_queue_family_index: self.queue_family.unwrap_or(vk::QUEUE_FAMILY_IGNORED),
-                dst_queue_family_index: new_queue.get_family_index(),
-                image: self.handle,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: if self.layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
-                        vk::ImageAspectFlags::DEPTH
-                    } else {
-                        vk::ImageAspectFlags::COLOR
-                    },
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
+        crate::resource::ImageView::new(
+            crate::resource::ImageViewCreateInfo::FromCreateInfo {
+                device: self.device.clone(),
+                create_info: unsafe {
+                    vk::ImageViewCreateInfo {
+                        s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                        p_next: ptr::null(),
+                        flags: vk::ImageViewCreateFlags::empty(),
+                        image: *self.as_raw(),
+                        view_type: if self.image_type == vk::ImageType::TYPE_1D {
+                            vk::ImageViewType::TYPE_1D
+                        } else if self.image_type == vk::ImageType::TYPE_2D {
+                            vk::ImageViewType::TYPE_2D
+                        } else if self.image_type == vk::ImageType::TYPE_3D {
+                            vk::ImageViewType::TYPE_3D
+                        } else {
+                            unimplemented!()
+                        },
+                        format: self.format,
+                        components: Default::default(),
+                        subresource_range: Image::<A>::image_subresource_range(aspect_flag),
+                        _marker: Default::default(),
+                    }
                 },
-                _marker: Default::default(),
-            };
-        }
-        self.queue_family = Some(new_queue.get_family_index());
-        Ok(())
+                name: None,
+            }
+        )?;
+
+        crate::resource::ImageView::new(
+            crate::resource::ImageViewCreateInfo::FromVk {
+                device: self.device.clone(),
+                image_view: unsafe { self.acquire_full_raw_image_view()? },
+                name: None,
+            }
+        )
     }
 }
 
@@ -410,7 +373,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
                 device,
-                queue_family,
                 layout,
                 image,
                 usage_flags,
@@ -426,19 +388,18 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format,
                     extent,
                     mip_levels,
-                    queue_family,
                     layout,
                     usage_flags,
                     image_type,
                     allocation: None,
                     image_managed: false,
+                    concurrent_queue_families: None,
                 };
                 crate::resource::traits::update_name(&mut res, name).unwrap_or(Ok(()))?;
                 Ok(res)
             }
             ImageCreateInfo::NewUnallocated {
                 device,
-                queue_family,
                 image_ci,
                 name,
             } => {
@@ -451,13 +412,21 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format: image_ci.format,
                     extent: image_ci.extent,
                     mip_levels: image_ci.mip_levels,
-                    queue_family,
                     layout: image_ci.initial_layout,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
                     device,
                     allocation: None,
                     image_managed: true,
+                    concurrent_queue_families: if image_ci.sharing_mode == vk::SharingMode::CONCURRENT {
+                        unsafe {
+                            Some(
+                                std::slice::from_raw_parts(image_ci.p_queue_family_indices, image_ci.queue_family_index_count as usize).to_owned().into_boxed_slice()
+                            )
+                        }
+                    } else {
+                        None
+                    },
                 };
                 crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
 
@@ -465,7 +434,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
             }
             ImageCreateInfo::NewAllocated {
                 device,
-                queue_family,
                 allocator,
                 location,
                 image_ci,
@@ -473,7 +441,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
             } => {
                 let mut image = Self::new(ImageCreateInfo::NewUnallocated {
                     device,
-                    queue_family,
                     image_ci,
                     name,
                 })?;
