@@ -3,7 +3,7 @@ use crate::resource::virtual_resources::VirtualResource;
 use std::any::Any;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tracing::Instrument;
 
 pub struct NoEvictionPolicy {}
@@ -138,6 +138,8 @@ impl EvictionPolicy for ArcEvictionPolicy {
 pub struct DeletionQueueEvictionPolicy {
     arc_eviction_policy: ArcEvictionPolicy,
     handle_map: HashMap<VirtualResource, (Arc<VirtualResourceDrop>, usize)>,
+    // if a handle is accessed, it may still exist and as such we can still recover it
+    handle_map_weak: HashMap<VirtualResource, Weak<VirtualResourceDrop>>,
     lifetime: usize,
 }
 impl DeletionQueueEvictionPolicy {
@@ -145,6 +147,7 @@ impl DeletionQueueEvictionPolicy {
         Self {
             arc_eviction_policy: ArcEvictionPolicy::new(),
             handle_map: Default::default(),
+            handle_map_weak: Default::default(),
             lifetime,
         }
     }
@@ -159,21 +162,37 @@ impl EvictionPolicy for DeletionQueueEvictionPolicy {
     }
 
     fn on_access(&mut self, key: &VirtualResource) {
-        // on every access we need to update the lifetime
-        self.handle_map.get_mut(key).unwrap().1 = self.lifetime;
+        match self.handle_map.get_mut(key) {
+            None => {
+                match self.handle_map_weak.remove(key).map(|handle| handle.upgrade()).flatten() {
+                    None => {
+                        // cannot access
+                    }
+                    Some(drop) => {
+                        // recover back
+                        self.handle_map.insert(*key, (
+                            drop, self.lifetime
+                        ));
+                    }
+                }
+            }
+            Some((_, lifetime)) => {
+                *lifetime = self.lifetime;
+            }
+        }
     }
 
     fn evict(&mut self, storage: &mut HashMap<VirtualResource, Box<dyn Any>>) {
-        // decrement by 1
-        for (_, mut time) in self.handle_map.iter_mut() {
-            time.1 -= 1;
-        }
-        self.handle_map.retain(|k, time| {
-            if (storage.contains_key(k) && time.1 != 0) == false {
-                storage.remove(k);
-                false
-            } else {
+        // remove from internal map in hopes that we reduce rc -> 0 to induce a removal
+        self.handle_map.retain(|_, (handle, lifetime)| {
+            *lifetime = lifetime.saturating_sub(1);
+            let vr: VirtualResource = handle.resource;
+            if *lifetime == 0 {
+                // if lifetime is zero, downgrade drop handle
+                self.handle_map_weak.insert(vr, Arc::downgrade(handle));
                 true
+            } else {
+                false
             }
         });
         self.arc_eviction_policy.evict(storage);
