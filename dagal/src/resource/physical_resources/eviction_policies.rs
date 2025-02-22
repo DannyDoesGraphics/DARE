@@ -1,10 +1,10 @@
-use crate::resource::virtual_resources::traits::EvictionPolicy;
 use crate::resource::virtual_resources::VirtualResource;
 use std::any::Any;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use tracing::Instrument;
+use crate::resource::physical_resources::EvictionPolicy;
 
 pub struct NoEvictionPolicy {}
 impl NoEvictionPolicy {
@@ -204,11 +204,11 @@ mod test {
     use super::*;
     use crate::resource::test::TestResource;
     use crate::resource::traits::Resource;
-    use crate::resource::virtual_resources::VirtualResourceStorage;
+    use crate::resource::physical_resources::PhysicalResourceBindings;
 
     #[test]
     pub fn no_eviction_policy() {
-        let mut map = VirtualResourceStorage::new(NoEvictionPolicy::new());
+        let mut map = PhysicalResourceBindings::new(NoEvictionPolicy::new());
 
         let r = TestResource::new(1).unwrap();
         let handle = map.insert(r.clone()).unwrap();
