@@ -24,7 +24,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
 
     fn insert(&mut self, element: T) -> Self::Slot {
         let next_free_slot = self.free_list.pop().unwrap_or_else(|| {
-            let slot = Slot::new(self.data.len(), 0);
+            let slot = Slot::new(self.data.len() as u64, 0);
             self.data.push(SlotUnion {
                 slot: slot.clone(),
                 data: None,
@@ -32,7 +32,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
             slot
         });
         self.data
-            .get_mut(next_free_slot.id())
+            .get_mut(next_free_slot.id() as usize)
             .as_mut()
             .unwrap()
             .data = Some(element);
@@ -41,14 +41,14 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
 
     fn is_valid(&self, slot: &Self::Slot) -> bool {
         self.data
-            .get(slot.id())
+            .get(slot.id() as usize)
             .map(|data| data.slot == *slot && data.data.is_some())
             .unwrap_or(false)
     }
 
     fn remove(&mut self, slot: Self::Slot) -> anyhow::Result<T> {
         self.data
-            .get_mut(slot.id())
+            .get_mut(slot.id() as usize)
             .map(|slot_union| {
                 slot_union.slot = Slot::new(slot.id(), slot.generation() + 1);
                 self.free_list.push(slot_union.slot.clone());
@@ -63,7 +63,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
 
     fn with_slot<R, F: FnOnce(&T) -> R>(&self, slot: &Self::Slot, func: F) -> anyhow::Result<R> {
         self.data
-            .get(slot.id())
+            .get(slot.id() as usize)
             .and_then(|slot_union| slot_union.data.as_ref().map(|data| Ok(func(data))))
             .unwrap_or(Err(anyhow::Error::from(ContainerErrors::NonexistentSlot)))
     }
@@ -74,7 +74,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
         func: F,
     ) -> anyhow::Result<R> {
         self.data
-            .get_mut(slot.id())
+            .get_mut(slot.id() as usize)
             .and_then(|slot_union| slot_union.data.as_mut().map(|data| Ok(func(data))))
             .unwrap_or(Err(anyhow::Error::from(ContainerErrors::NonexistentSlot)))
     }

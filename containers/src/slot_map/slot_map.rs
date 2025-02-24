@@ -6,9 +6,9 @@ use std::slice::{Iter, IterMut};
 #[derive(Debug, PartialEq, Eq)]
 pub struct SlotMap<T> {
     // usize is a reference to the proxy slot index
-    pub(crate) data: Vec<(T, usize)>,
+    pub(crate) data: Vec<(T, u64)>,
     pub(crate) slots: Vec<Slot<T>>,
-    pub(crate) free_list: Vec<usize>,
+    pub(crate) free_list: Vec<u64>,
 }
 impl<T> Default for SlotMap<T> {
     fn default() -> Self {
@@ -27,26 +27,26 @@ impl<T> SlotMap<T> {
         let mut free_slot_index = 0;
         let mut free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {
             free_slot_index = index;
-            self.slots.get_mut(index).unwrap()
+            self.slots.get_mut(index as usize).unwrap()
         } else {
             let slot = Slot::new(0, 0);
-            free_slot_index = self.slots.len();
+            free_slot_index = self.slots.len() as u64;
             self.slots.push(slot);
             slots_len += 1;
             self.slots.last_mut().unwrap()
         };
         // update index the inner slot will point to
-        free_slot.id = self.data.len();
+        free_slot.id = self.data.len() as u64;
         // push data into data vec
         self.data.push((element, free_slot_index));
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index, free_slot.generation);
+        let out_slot = Slot::new(free_slot_index as u64, free_slot.generation);
         out_slot
     }
 
     pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
-        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id).map(|proxy_slot| {
+        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }
@@ -56,16 +56,16 @@ impl<T> SlotMap<T> {
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
-            if self.data.len() > 0 && proxy_slot.id != self.data.len() - 1 {
+            if self.data.len() > 0 && proxy_slot.id != (self.data.len() - 1) as u64 {
                 let proxy_slot_data_index = proxy_slot.id;
                 let last_index = self.data.len() - 1;
                 // swap with the last
-                self.data.swap(last_index, proxy_slot_data_index);
+                self.data.swap(last_index, proxy_slot_data_index as usize);
                 // update the indirect slot
-                let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
+                let swapped_proxy = self.data.get(proxy_slot_data_index as usize ).unwrap().1;
                 // since we swapped, we must update to the indirect to point to the data index
                 self.slots
-                    .get_mut(swapped_proxy)
+                    .get_mut(swapped_proxy as usize)
                     .map(|slot| slot.id = proxy_slot_data_index);
             }
             // to be removed must be last in data and slots
@@ -79,10 +79,10 @@ impl<T> SlotMap<T> {
 
     pub fn get(&self, slot: Slot<T>) -> Option<&T> {
         self.slots
-            .get(slot.id)
+            .get(slot.id as usize)
             .map(|proxy_slot| {
                 if proxy_slot.generation == slot.generation {
-                    self.data.get(proxy_slot.id).map(|data| &data.0)
+                    self.data.get(proxy_slot.id as usize).map(|data| &data.0)
                 } else {
                     None
                 }
@@ -92,10 +92,10 @@ impl<T> SlotMap<T> {
 
     pub fn get_mut(&mut self, slot: Slot<T>) -> Option<&mut T> {
         self.slots
-            .get(slot.id)
+            .get(slot.id as usize)
             .map(|proxy_slot| {
                 if proxy_slot.generation == slot.generation {
-                    self.data.get_mut(proxy_slot.id).map(|data| &mut data.0)
+                    self.data.get_mut(proxy_slot.id as usize).map(|data| &mut data.0)
                 } else {
                     None
                 }
@@ -103,11 +103,11 @@ impl<T> SlotMap<T> {
             .flatten()
     }
 
-    pub fn iter(&self) -> Iter<'_, (T, usize)> {
+    pub fn iter(&self) -> Iter<'_, (T, u64)> {
         self.data.iter()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<(T, usize)> {
+    pub fn iter_mut(&mut self) -> IterMut<(T, u64)> {
         self.data.iter_mut()
     }
 }

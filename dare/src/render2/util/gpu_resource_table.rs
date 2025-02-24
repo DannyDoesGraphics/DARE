@@ -492,7 +492,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let buffer_address = buffer.address();
                 let handle = self.buffers.write().await.insert(RTSlot::Slot(buffer));
                 self.inner.write().await.address_buffer.write(
-                    (mem::size_of::<vk::DeviceMemory>() * handle.id()) as vk::DeviceSize,
+                    (mem::size_of::<vk::DeviceMemory>() * handle.id() as usize) as vk::DeviceSize,
                     &[buffer_address],
                 )?;
                 Ok(GPUSlot::Slot(handle.clone()))
@@ -531,7 +531,7 @@ impl<A: Allocator> GPUResourceTable<A> {
                 let buffer_address = buffer.address();
                 let handle = self.buffers.write().await.insert(RTSlot::Slot(buffer));
                 self.inner.write().await.address_buffer.write(
-                    (mem::size_of::<vk::DeviceMemory>() * handle.id()) as vk::DeviceSize,
+                    (mem::size_of::<vk::DeviceMemory>() * handle.id() as usize) as vk::DeviceSize,
                     &[buffer_address],
                 )?;
                 Ok(GPUSlot::Slot(handle.clone()))

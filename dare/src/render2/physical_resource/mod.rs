@@ -6,7 +6,7 @@ use crate::asset2::prelude::AssetHandle;
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 
-pub fn slot_to_virtual_handle<T>(slot: containers::Slot<T>) -> dagal::resource::VirtualResource {
+pub fn slot_to_virtual_handle<T: 'static>(slot: containers::Slot<T>) -> dagal::resource::VirtualResource {
     dagal::resource::VirtualResource {
         uid: slot.id(),
         gen: slot.generation(),
@@ -34,6 +34,27 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     pub fn get_virtual_handle(&mut self) -> dagal::resource::VirtualResource {
         let slot = self.slot.insert(None);
         let virtual_resource = slot_to_virtual_handle(slot);
+        virtual_resource
+    }
 
+    /// Insert a physical resource to back a virtual resource
+    pub fn alias(&mut self, virtual_resource: dagal::resource::VirtualResource, physical_resource: T::Loaded) -> Option<T::Loaded> {
+        self.slot.get_mut(containers::Slot::new(virtual_resource.uid, virtual_resource.gen)).map(|option| {
+            option.replace(physical_resource)
+        }).flatten()
+    }
+
+    /// Insert a physical resource to back a new virtual resource
+    pub fn insert_physical(&mut self, physical_resource: T::Loaded) -> dagal::resource::VirtualResource {
+        let virt = self.get_virtual_handle();
+        self.alias(virt, physical_resource);
+        virt
+    }
+
+    /// Attempt to resolve a virtual resource
+    pub fn resolve(&self, virtual_resource: dagal::resource::VirtualResource) -> Option<&T::Loaded> {
+        self.slot.get(containers::Slot::new(virtual_resource.uid, virtual_resource.gen))
+            .map(|option| option.as_ref())
+            .flatten()
     }
 }

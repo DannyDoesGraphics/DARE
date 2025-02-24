@@ -43,19 +43,19 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
             .unwrap_or_else(|e| e);
 
         // get next free slot
-        let free_slot_index = if let Some(index) = self.free_list.pop() {
+        let free_slot_index: usize = if let Some(index) = self.free_list.pop() {
             index
         } else {
             self.slots.push(Slot::new(0, 0));
-            self.slots.len() - 1
-        };
+            (self.slots.len() - 1) as u64
+        } as usize;
         // update id
         self.slots[free_slot_index].id = position_in_vec as u64;
 
         self.data
-            .insert(position_in_vec, (element, free_slot_index));
+            .insert(position_in_vec, (element, free_slot_index as u64));
         // update all mappings after
-        let updates: Vec<(usize, usize)> = self
+        let updates: Vec<(u64, usize)> = self
             .data
             .iter()
             .enumerate()
@@ -64,7 +64,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
             .collect();
 
         for (slot_index, new_id) in updates {
-            self.slots[slot_index].id = new_id as u64;
+            self.slots[slot_index as usize].id = new_id as u64;
         }
 
         // produce and out slot from mapping to the proxy slot
@@ -90,15 +90,15 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
                 // swap with the last
                 self.data.swap(last_index, proxy_slot_data_index as usize);
                 // update the indirect slot
-                let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
+                let swapped_proxy = self.data.get(proxy_slot_data_index as usize).unwrap().1;
                 // since we swapped, we must update to the indirect to point to the data index
                 self.slots
-                    .get_mut(swapped_proxy)
+                    .get_mut(swapped_proxy as usize)
                     .map(|slot| slot.id = proxy_slot_data_index);
             }
             // to be removed must be last in data and slots
             let data = self.data.pop().unwrap();
-            self.free_list.push(slot.id as usize);
+            self.free_list.push(slot.id);
             Ok(data.0)
         } else {
             Err(ContainerErrors::NonexistentSlot)
