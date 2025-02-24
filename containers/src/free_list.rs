@@ -24,20 +24,20 @@ impl<T: 'static> Container<T> for FreeList<T> {
     fn insert(&mut self, element: T) -> Slot<T> {
         let next_free_slot = self.free_list.pop().unwrap_or_else(|| {
             self.data.push(None);
-            Slot::new(self.data.len(), 0)
+            Slot::new(self.data.len() as u64, 0)
         });
         self.data.push(Some(element));
         next_free_slot
     }
 
     fn is_valid(&self, slot: &Self::Slot) -> bool {
-        self.data.get(slot.id()).is_some()
+        self.data.get(slot.id() as usize).is_some()
     }
 
     fn remove(&mut self, slot: Self::Slot) -> Result<T> {
         self.free_list.push(slot.clone());
         self.data
-            .remove(slot.id())
+            .remove(slot.id() as usize)
             .ok_or(anyhow::Error::from(ContainerErrors::NonexistentSlot))
     }
 
@@ -47,7 +47,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
 
     fn with_slot<R, F: FnOnce(&T) -> R>(&self, slot: &Self::Slot, func: F) -> Result<R> {
         self.data
-            .get(slot.id())
+            .get(slot.id() as usize)
             .and_then(|data| data.as_ref())
             .map_or(
                 Err(anyhow::Error::from(ContainerErrors::NonexistentSlot)),
@@ -61,7 +61,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
         func: F,
     ) -> anyhow::Result<R> {
         self.data
-            .get_mut(slot.id())
+            .get_mut(slot.id() as usize)
             .and_then(|data| data.as_mut())
             .map_or(
                 Err(anyhow::Error::from(ContainerErrors::NonexistentSlot)),
@@ -71,7 +71,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
 
     fn iter(&self) -> impl Iterator<Item = SlotUnion<T>> {
         self.data.iter().enumerate().map(|(index, data)| SlotUnion {
-            slot: Slot::new(index, 0),
+            slot: Slot::new(index as u64, 0),
             data: data.as_ref(),
         })
     }
@@ -81,7 +81,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
             .iter_mut()
             .enumerate()
             .map(|(index, data)| SlotUnionMut {
-                slot: Slot::new(index, 0),
+                slot: Slot::new(index as u64, 0),
                 data: data.as_mut(),
             })
     }

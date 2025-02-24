@@ -21,7 +21,6 @@ use tokio::sync::mpsc::error::TryRecvError;
 pub struct RenderServerInner {
     input_send: dare::util::event::EventSender<dare::winit::input::Input>,
     thread: tokio::task::JoinHandle<()>,
-    ir_send: crossbeam_channel::Sender<render::InnerRenderServerRequest>,
     /// Order a new window be created
     new_sender: tokio::sync::mpsc::UnboundedSender<RenderServerPacket>,
 }
@@ -43,11 +42,6 @@ pub struct RenderServer {
     /// A ref to render context
     render_context: render::contexts::RenderContext,
 }
-#[derive(becs::Resource)]
-pub struct IrRecv(pub(crate) crossbeam_channel::Receiver<render::InnerRenderServerRequest>);
-
-#[derive(becs::Resource, Clone)]
-pub struct IrSend(pub(crate) crossbeam_channel::Sender<render::InnerRenderServerRequest>);
 
 impl RenderServer {
     pub fn input_send(&self) -> &dare::util::event::EventSender<dare::winit::input::Input> {
@@ -72,7 +66,6 @@ impl RenderServer {
         let (new_send, mut new_recv) = tokio::sync::mpsc::unbounded_channel::<RenderServerPacket>();
         let asset_server = dare::asset2::server::AssetServer::default();
         let render_context = super::render_context::RenderContext::new(ci).unwrap();
-        let (ir_send, ir_recv) = crossbeam_channel::unbounded::<render::InnerRenderServerRequest>();
         let mut world = dare::util::world::World::new();
         let input_send = world.add_event::<dare::winit::input::Input>();
         let thread = {
@@ -103,7 +96,6 @@ impl RenderServer {
                 world.insert_resource(RenderAssetManagerStorage::<
                     render::components::RenderImage<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
-                world.insert_resource(IrRecv(ir_recv));
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();
                 // links
@@ -150,18 +142,9 @@ impl RenderServer {
             inner: Arc::new(RenderServerInner {
                 new_sender: new_send,
                 thread,
-                ir_send,
                 input_send,
             }),
         }
-    }
-
-    pub fn send_inner(&self, request: render::InnerRenderServerRequest) {
-        self.inner.ir_send.send(request).unwrap();
-    }
-
-    pub fn get_inner_send(&self) -> IrSend {
-        IrSend(self.inner.ir_send.clone())
     }
 
     pub async fn send(

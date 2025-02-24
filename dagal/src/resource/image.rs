@@ -247,14 +247,6 @@ impl<A: Allocator> Image<A> {
                 },
                 name: None,
             }
-        )?;
-
-        crate::resource::ImageView::new(
-            crate::resource::ImageViewCreateInfo::FromVk {
-                device: self.device.clone(),
-                image_view: unsafe { self.acquire_full_raw_image_view()? },
-                name: None,
-            }
         )
     }
 }

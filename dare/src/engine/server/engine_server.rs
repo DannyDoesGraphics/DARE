@@ -1,5 +1,4 @@
 use crate::prelude as dare;
-use crate::render2::server::IrSend;
 use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
@@ -16,7 +15,6 @@ unsafe impl Sync for EngineServer {}
 impl EngineServer {
     pub fn new(
         asset_server: dare::asset2::server::AssetServer,
-        send: IrSend,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
         texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
@@ -27,7 +25,6 @@ impl EngineServer {
         let mut world = becs::World::new();
         world.insert_resource(rt.clone());
         world.insert_resource(asset_server);
-        world.insert_resource(send);
 
         let mut init_schedule = becs::Schedule::default();
         init_schedule.add_systems(super::super::init_assets::init_assets);

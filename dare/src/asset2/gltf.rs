@@ -1,9 +1,6 @@
 use crate::prelude as dare;
 use crate::prelude::engine;
-use crate::prelude::render::InnerRenderServerRequest::Delta;
 use crate::prelude::render::RenderServerAssetRelationDelta;
-use crate::render2::prelude::InnerRenderServerRequest;
-use crate::render2::server::IrSend;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
@@ -13,6 +10,7 @@ use gltf::accessor::DataType;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use gltf::texture::{MagFilter, MinFilter};
 
 /// This is similar to [`gltf::Semantic`], but includes the Index
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -50,7 +48,6 @@ impl GLTFLoader {
     pub fn load(
         commands: &mut becs::Commands,
         asset_server: &dare::asset2::server::AssetServer,
-        send: IrSend,
         path: std::path::PathBuf,
     ) -> Result<()> {
         let gltf: gltf::Gltf = gltf::Gltf::open(path.clone())?;
@@ -153,6 +150,67 @@ impl GLTFLoader {
                 }
             }
         }
+        let sampler: Vec<engine::components::Sampler> = gltf
+            .document
+            .samplers()
+            .map(|sampler| {
+                use gltf::json::texture::WrappingMode;
+                engine::components::Sampler {
+                    wrapping_mode: (
+                        match sampler.wrap_s() {
+                            WrappingMode::ClampToEdge => {
+                                crate::render2::util::WrappingMode::ClampToEdge
+                            }
+                            WrappingMode::MirroredRepeat => {
+                                crate::render2::util::WrappingMode::MirroredRepeat
+                            }
+                            WrappingMode::Repeat => {
+                                crate::render2::util::WrappingMode::Repeat
+                            }
+                        },
+                        match sampler.wrap_t() {
+                            WrappingMode::ClampToEdge => {
+                                crate::render2::util::WrappingMode::ClampToEdge
+                            }
+                            WrappingMode::MirroredRepeat => {
+                                crate::render2::util::WrappingMode::MirroredRepeat
+                            }
+                            WrappingMode::Repeat => {
+                                crate::render2::util::WrappingMode::Repeat
+                            }
+                        }
+                    ),
+                    min_filter: match sampler.min_filter() {
+                        None => {
+                            dare::render::util::ImageFilter::Linear
+                        }
+                        Some(v) => {
+                            match v {
+                                MinFilter::Nearest | MinFilter::NearestMipmapNearest | MinFilter::NearestMipmapLinear | MinFilter::LinearMipmapNearest => {
+                                    dare::render::util::ImageFilter::Nearest
+                                }
+                                MinFilter::Linear | MinFilter::LinearMipmapLinear => {
+                                    dare::render::util::ImageFilter::Linear
+                                }
+                            }
+                        }
+                    },
+                    mag_filter: match sampler.mag_filter() {
+                        None => {
+                            dare::render::util::ImageFilter::Linear
+                        }
+                        Some(v) => match v {
+                            MagFilter::Nearest => {
+                                dare::render::util::ImageFilter::Nearest
+                            }
+                            MagFilter::Linear => {
+                                dare::render::util::ImageFilter::Linear
+                            }
+                        }
+                    },
+                }
+            }).collect::<Vec<_>>();
+
         let textures: Vec<engine::components::Texture> = gltf
             .document
             .textures()
@@ -174,13 +232,13 @@ impl GLTFLoader {
                         texture
                             .sampler()
                             .min_filter()
-                            .unwrap_or(gltf::texture::MinFilter::Nearest),
+                            .unwrap_or(MinFilter::Nearest),
                     ),
                     mag_filter: dare::render::util::ImageFilter::from(
                         texture
                             .sampler()
                             .mag_filter()
-                            .unwrap_or(gltf::texture::MagFilter::Nearest),
+                            .unwrap_or(MagFilter::Nearest),
                     ),
                 };
                 let texture = dare::asset2::assets::ImageMetaData {

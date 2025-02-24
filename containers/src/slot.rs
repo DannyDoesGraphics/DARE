@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 #[derive(Derivative)]
 #[derivative(Debug, PartialEq, Eq, Hash)]
 pub struct Slot<T> {
-    pub(crate) id: usize,
-    pub(crate) generation: usize,
+    pub(crate) id: u64,
+    pub(crate) generation: u64,
     #[derivative(Debug = "ignore", PartialEq = "ignore", Hash = "ignore")]
     _marker: PhantomData<T>,
 }
@@ -22,7 +22,7 @@ impl<T> Clone for Slot<T> {
 }
 
 impl<T> Slot<T> {
-    pub fn new(id: usize, generation: usize) -> Self {
+    pub fn new(id: u64, generation: u64) -> Self {
         Self {
             id,
             generation,
@@ -30,11 +30,11 @@ impl<T> Slot<T> {
         }
     }
 
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> u64 {
         self.id
     }
 
-    pub fn generation(&self) -> usize {
+    pub fn generation(&self) -> u64 {
         self.generation
     }
 

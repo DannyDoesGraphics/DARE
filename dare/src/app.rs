@@ -78,7 +78,6 @@ impl winit::application::ApplicationHandler for App {
             self.engine_server = Some(
                 engine::server::EngineServer::new(
                     self.render_server.as_ref().cloned().unwrap().asset_server(),
-                    self.render_server.as_ref().unwrap().get_inner_send(),
                     &self.surface_link_send,
                     &self.texture_link_send,
                     &self.transform_link_send,
@@ -154,7 +153,7 @@ impl winit::application::ApplicationHandler for App {
                 if let Some(rs) = self.render_server.as_ref().cloned() {
                     if let Some(window) = self.window.as_ref() {
                         if window.inner_size().width != 0 && window.inner_size().height != 0 {
-                            rs.update_surface(window);
+                            rs.update_surface(window).unwrap();
                             rs.set_new_surface_flag(false);
                         } else {
                             rs.set_new_surface_flag(true);

@@ -13,3 +13,4 @@ pub mod sampler;
 mod test;
 pub mod traits;
 pub mod virtual_resources;
+pub use virtual_resources::*;

@@ -50,7 +50,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
             self.slots.len() - 1
         };
         // update id
-        self.slots[free_slot_index].id = position_in_vec;
+        self.slots[free_slot_index].id = position_in_vec as u64;
 
         self.data
             .insert(position_in_vec, (element, free_slot_index));
@@ -64,17 +64,17 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
             .collect();
 
         for (slot_index, new_id) in updates {
-            self.slots[slot_index].id = new_id;
+            self.slots[slot_index].id = new_id as u64;
         }
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index, self.slots[free_slot_index].generation);
+        let out_slot = Slot::new(free_slot_index as u64, self.slots[free_slot_index].generation);
         Ok(out_slot)
     }
 
     /// Removes a slot as according to insertion removal
     pub fn insertion_removal(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
-        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id).map(|proxy_slot| {
+        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }
@@ -84,11 +84,11 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
-            if self.data.len() > 0 && proxy_slot.id != self.data.len() - 1 {
+            if self.data.len() > 0 && proxy_slot.id != (self.data.len() - 1) as u64 {
                 let proxy_slot_data_index = proxy_slot.id;
                 let last_index = self.data.len() - 1;
                 // swap with the last
-                self.data.swap(last_index, proxy_slot_data_index);
+                self.data.swap(last_index, proxy_slot_data_index as usize);
                 // update the indirect slot
                 let swapped_proxy = self.data.get(proxy_slot_data_index).unwrap().1;
                 // since we swapped, we must update to the indirect to point to the data index
@@ -98,7 +98,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
             }
             // to be removed must be last in data and slots
             let data = self.data.pop().unwrap();
-            self.free_list.push(slot.id);
+            self.free_list.push(slot.id as usize);
             Ok(data.0)
         } else {
             Err(ContainerErrors::NonexistentSlot)

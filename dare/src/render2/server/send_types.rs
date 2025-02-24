@@ -15,10 +15,6 @@ pub enum RenderServerNoCallbackRequest {
     /// Stops the manager
     Stop,
 }
-#[derive(Debug)]
-pub enum InnerRenderServerRequest {
-    Delta(RenderServerAssetRelationDelta),
-}
 
 #[derive(Debug)]
 pub struct RenderServerPacket {
