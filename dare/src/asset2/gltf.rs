@@ -7,10 +7,10 @@ use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dare::asset2 as asset;
 use gltf;
 use gltf::accessor::DataType;
+use gltf::texture::{MagFilter, MinFilter};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use gltf::texture::{MagFilter, MinFilter};
 
 /// This is similar to [`gltf::Semantic`], but includes the Index
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -164,9 +164,7 @@ impl GLTFLoader {
                             WrappingMode::MirroredRepeat => {
                                 crate::render2::util::WrappingMode::MirroredRepeat
                             }
-                            WrappingMode::Repeat => {
-                                crate::render2::util::WrappingMode::Repeat
-                            }
+                            WrappingMode::Repeat => crate::render2::util::WrappingMode::Repeat,
                         },
                         match sampler.wrap_t() {
                             WrappingMode::ClampToEdge => {
@@ -175,41 +173,33 @@ impl GLTFLoader {
                             WrappingMode::MirroredRepeat => {
                                 crate::render2::util::WrappingMode::MirroredRepeat
                             }
-                            WrappingMode::Repeat => {
-                                crate::render2::util::WrappingMode::Repeat
-                            }
-                        }
+                            WrappingMode::Repeat => crate::render2::util::WrappingMode::Repeat,
+                        },
                     ),
                     min_filter: match sampler.min_filter() {
-                        None => {
-                            dare::render::util::ImageFilter::Linear
-                        }
-                        Some(v) => {
-                            match v {
-                                MinFilter::Nearest | MinFilter::NearestMipmapNearest | MinFilter::NearestMipmapLinear | MinFilter::LinearMipmapNearest => {
-                                    dare::render::util::ImageFilter::Nearest
-                                }
-                                MinFilter::Linear | MinFilter::LinearMipmapLinear => {
-                                    dare::render::util::ImageFilter::Linear
-                                }
-                            }
-                        }
-                    },
-                    mag_filter: match sampler.mag_filter() {
-                        None => {
-                            dare::render::util::ImageFilter::Linear
-                        }
+                        None => dare::render::util::ImageFilter::Linear,
                         Some(v) => match v {
-                            MagFilter::Nearest => {
+                            MinFilter::Nearest
+                            | MinFilter::NearestMipmapNearest
+                            | MinFilter::NearestMipmapLinear
+                            | MinFilter::LinearMipmapNearest => {
                                 dare::render::util::ImageFilter::Nearest
                             }
-                            MagFilter::Linear => {
+                            MinFilter::Linear | MinFilter::LinearMipmapLinear => {
                                 dare::render::util::ImageFilter::Linear
                             }
-                        }
+                        },
+                    },
+                    mag_filter: match sampler.mag_filter() {
+                        None => dare::render::util::ImageFilter::Linear,
+                        Some(v) => match v {
+                            MagFilter::Nearest => dare::render::util::ImageFilter::Nearest,
+                            MagFilter::Linear => dare::render::util::ImageFilter::Linear,
+                        },
                     },
                 }
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         let textures: Vec<engine::components::Texture> = gltf
             .document
@@ -229,16 +219,10 @@ impl GLTFLoader {
                         dare::render::util::WrappingMode::from(texture.sampler().wrap_s()),
                     ),
                     min_filter: dare::render::util::ImageFilter::from(
-                        texture
-                            .sampler()
-                            .min_filter()
-                            .unwrap_or(MinFilter::Nearest),
+                        texture.sampler().min_filter().unwrap_or(MinFilter::Nearest),
                     ),
                     mag_filter: dare::render::util::ImageFilter::from(
-                        texture
-                            .sampler()
-                            .mag_filter()
-                            .unwrap_or(MagFilter::Nearest),
+                        texture.sampler().mag_filter().unwrap_or(MagFilter::Nearest),
                     ),
                 };
                 let texture = dare::asset2::assets::ImageMetaData {

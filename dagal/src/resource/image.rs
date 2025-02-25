@@ -214,40 +214,40 @@ impl<A: Allocator> Image<A> {
 
     /// Create a new [`crate::resource::ImageView`] that covers the entire current [`Self`]
     pub fn acquire_full_image_view(&self) -> Result<crate::resource::ImageView> {
-        let aspect_flag = if self.usage_flags.contains(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+        let aspect_flag = if self
+            .usage_flags
+            .contains(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
         {
             vk::ImageAspectFlags::DEPTH
         } else {
             vk::ImageAspectFlags::COLOR
         };
 
-        crate::resource::ImageView::new(
-            crate::resource::ImageViewCreateInfo::FromCreateInfo {
-                device: self.device.clone(),
-                create_info: unsafe {
-                    vk::ImageViewCreateInfo {
-                        s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                        p_next: ptr::null(),
-                        flags: vk::ImageViewCreateFlags::empty(),
-                        image: *self.as_raw(),
-                        view_type: if self.image_type == vk::ImageType::TYPE_1D {
-                            vk::ImageViewType::TYPE_1D
-                        } else if self.image_type == vk::ImageType::TYPE_2D {
-                            vk::ImageViewType::TYPE_2D
-                        } else if self.image_type == vk::ImageType::TYPE_3D {
-                            vk::ImageViewType::TYPE_3D
-                        } else {
-                            unimplemented!()
-                        },
-                        format: self.format,
-                        components: Default::default(),
-                        subresource_range: Image::<A>::image_subresource_range(aspect_flag),
-                        _marker: Default::default(),
-                    }
-                },
-                name: None,
-            }
-        )
+        crate::resource::ImageView::new(crate::resource::ImageViewCreateInfo::FromCreateInfo {
+            device: self.device.clone(),
+            create_info: unsafe {
+                vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: vk::ImageViewCreateFlags::empty(),
+                    image: *self.as_raw(),
+                    view_type: if self.image_type == vk::ImageType::TYPE_1D {
+                        vk::ImageViewType::TYPE_1D
+                    } else if self.image_type == vk::ImageType::TYPE_2D {
+                        vk::ImageViewType::TYPE_2D
+                    } else if self.image_type == vk::ImageType::TYPE_3D {
+                        vk::ImageViewType::TYPE_3D
+                    } else {
+                        unimplemented!()
+                    },
+                    format: self.format,
+                    components: Default::default(),
+                    subresource_range: Image::<A>::image_subresource_range(aspect_flag),
+                    _marker: Default::default(),
+                }
+            },
+            name: None,
+        })
     }
 }
 
@@ -410,10 +410,17 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     device,
                     allocation: None,
                     image_managed: true,
-                    concurrent_queue_families: if image_ci.sharing_mode == vk::SharingMode::CONCURRENT {
+                    concurrent_queue_families: if image_ci.sharing_mode
+                        == vk::SharingMode::CONCURRENT
+                    {
                         unsafe {
                             Some(
-                                std::slice::from_raw_parts(image_ci.p_queue_family_indices, image_ci.queue_family_index_count as usize).to_owned().into_boxed_slice()
+                                std::slice::from_raw_parts(
+                                    image_ci.p_queue_family_indices,
+                                    image_ci.queue_family_index_count as usize,
+                                )
+                                .to_owned()
+                                .into_boxed_slice(),
                             )
                         }
                     } else {

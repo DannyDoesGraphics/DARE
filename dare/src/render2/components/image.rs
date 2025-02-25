@@ -1,17 +1,17 @@
-use std::io::Read;
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude::Asset;
 use crate::prelude as dare;
+use crate::prelude::render::util::{TransferRequest, TransferRequestCallback};
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
+use dagal::traits::AsRaw;
 use futures_core::future::BoxFuture;
+use std::io::Read;
 use std::ptr;
 use tracing::instrument::WithSubscriber;
-use dagal::traits::AsRaw;
-use crate::prelude::render::util::{TransferRequest, TransferRequestCallback};
 
 #[derive(Debug, Component)]
 pub struct RenderImage<A: Allocator + 'static> {
@@ -45,18 +45,21 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
         Box::pin(async move {
             let (mut allocator, handle, transfer_pool, name) = prepare_info;
             let image_loaded = metadata.load(()).await?.image.to_rgba8();
-            let bytes: Vec<u8> = image_loaded.bytes().map(|b| b.unwrap()).collect::<Vec<u8>>();
+            let bytes: Vec<u8> = image_loaded
+                .bytes()
+                .map(|b| b.unwrap())
+                .collect::<Vec<u8>>();
             let device = allocator.device();
-            let mut staging_buffer = dagal::resource::Buffer::new(
-                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+            let mut staging_buffer =
+                dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: device.clone(),
                     name: name.clone(),
                     allocator: &mut allocator,
                     size: bytes.len() as vk::DeviceSize,
                     memory_type: MemoryLocation::CpuToGpu,
-                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
-                }
-            )?;
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST,
+                })?;
             staging_buffer.write(0, &bytes)?;
 
             let extent = vk::Extent3D {
@@ -80,7 +83,9 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                         array_layers: 1,
                         samples: vk::SampleCountFlags::TYPE_1,
                         tiling: vk::ImageTiling::OPTIMAL,
-                        usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                        usage: vk::ImageUsageFlags::TRANSFER_DST
+                            | vk::ImageUsageFlags::SAMPLED
+                            | vk::ImageUsageFlags::COLOR_ATTACHMENT,
                         sharing_mode: vk::SharingMode::CONCURRENT,
                         queue_family_index_count: device.get_used_queue_families().len() as u32,
                         p_queue_family_indices: device.get_used_queue_families().as_ptr(),
@@ -90,8 +95,8 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                     name: name.as_deref(),
                 })
             }?;
-            let image = match transfer_pool.transfer_gpu(
-                TransferRequest::Image {
+            let image = match transfer_pool
+                .transfer_gpu(TransferRequest::Image {
                     src_layout: vk::ImageLayout::UNDEFINED,
                     dst_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                     src_buffer: staging_buffer,
@@ -101,15 +106,20 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                     dst_image: image,
                     dst_offset: Default::default(),
                     dst_length: 0,
-                }
-            ).await? {
+                })
+                .await?
+            {
                 TransferRequestCallback::Buffer { .. } => unreachable!(),
                 TransferRequestCallback::Image { dst_image, .. } => dst_image,
             };
             let full_view = image.acquire_full_image_view()?;
 
             tracing::trace!("Loaded!");
-            Ok(Self { image, full_view, handle })
+            Ok(Self {
+                image,
+                full_view,
+                handle,
+            })
         })
     }
 }

@@ -68,7 +68,10 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         }
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index as u64, self.slots[free_slot_index].generation);
+        let out_slot = Slot::new(
+            free_slot_index as u64,
+            self.slots[free_slot_index].generation,
+        );
         Ok(out_slot)
     }
 

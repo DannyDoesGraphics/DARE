@@ -1,4 +1,3 @@
-
 use crate::resource::traits::Resource;
 /// # Virtual resources
 use std::any::{Any, TypeId};
@@ -30,12 +29,14 @@ impl Hash for VirtualResource {
 impl Drop for VirtualResource {
     fn drop(&mut self) {
         if let Some(drop_send) = &self.drop_send {
-            drop_send.send(Self {
-                uid: self.uid,
-                gen: self.gen,
-                drop_send: None,
-                type_id: self.type_id,
-            }).unwrap();
+            drop_send
+                .send(Self {
+                    uid: self.uid,
+                    gen: self.gen,
+                    drop_send: None,
+                    type_id: self.type_id,
+                })
+                .unwrap();
         }
     }
 }

@@ -94,7 +94,11 @@ impl CMaterial {
     ) -> Option<Self> {
         let albedo_texture_id = material
             .albedo_texture
-            .map(|t| textures.get_storage_handle(&t.asset_handle).map(|h| h.id() as u32))
+            .map(|t| {
+                textures
+                    .get_storage_handle(&t.asset_handle)
+                    .map(|h| h.id() as u32)
+            })
             .flatten();
 
         let mut bit_flag = MaterialFlags::NONE;

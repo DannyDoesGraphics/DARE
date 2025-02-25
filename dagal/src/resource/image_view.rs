@@ -130,7 +130,8 @@ impl Resource for ImageView {
         let mut view = match create_info {
             ImageViewCreateInfo::FromCreateInfo {
                 device,
-                create_info, name,
+                create_info,
+                name,
             } => {
                 let handle = unsafe { device.get_handle().create_image_view(&create_info, None)? };
                 anyhow::Ok(Self {
@@ -139,7 +140,11 @@ impl Resource for ImageView {
                     name,
                 })
             }
-            ImageViewCreateInfo::FromVk { device, image_view, name } => Ok(Self {
+            ImageViewCreateInfo::FromVk {
+                device,
+                image_view,
+                name,
+            } => Ok(Self {
                 handle: image_view,
                 device,
                 name,

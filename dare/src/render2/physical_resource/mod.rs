@@ -1,13 +1,16 @@
-use std::any::TypeId;
-use std::collections::HashMap;
-use std::sync::Arc;
-use dagal::resource::traits::Resource;
-use dare_containers::prelude as containers;
 use crate::asset2::prelude::AssetHandle;
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
+use dagal::resource::traits::Resource;
+use dare_containers::prelude as containers;
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-pub fn slot_to_virtual_handle<T: 'static>(slot: containers::Slot<T>, drop_send: Option<crossbeam_channel::Sender<dagal::resource::VirtualResource>>) -> dagal::resource::VirtualResource {
+pub fn slot_to_virtual_handle<T: 'static>(
+    slot: containers::Slot<T>,
+    drop_send: Option<crossbeam_channel::Sender<dagal::resource::VirtualResource>>,
+) -> dagal::resource::VirtualResource {
     dagal::resource::VirtualResource {
         uid: slot.id(),
         gen: slot.generation(),
@@ -76,42 +79,77 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     }
 
     /// Insert a physical resource to back a virtual resource
-    pub fn alias(&mut self, virtual_resource: dagal::resource::VirtualResource, physical_resource: T::Loaded) -> Option<T::Loaded> {
-        self.slot.get_mut(containers::Slot::new(virtual_resource.uid, virtual_resource.gen)).map(|option| {
-            option.replace(physical_resource)
-        }).flatten()
+    pub fn alias(
+        &mut self,
+        virtual_resource: dagal::resource::VirtualResource,
+        physical_resource: T::Loaded,
+    ) -> Option<T::Loaded> {
+        self.slot
+            .get_mut(containers::Slot::new(
+                virtual_resource.uid,
+                virtual_resource.gen,
+            ))
+            .map(|option| option.replace(physical_resource))
+            .flatten()
     }
 
     /// Alias an asset handle to a virtual resource
-    pub fn asset_alias(&mut self, virtual_resource: &dagal::resource::VirtualResource, handle: AssetHandle<T::Asset>) {
-        self.asset_mapping.insert(handle, virtual_resource.downgrade());
+    pub fn asset_alias(
+        &mut self,
+        virtual_resource: &dagal::resource::VirtualResource,
+        handle: AssetHandle<T::Asset>,
+    ) {
+        self.asset_mapping
+            .insert(handle, virtual_resource.downgrade());
     }
 
     /// Insert a deferred resource
-    pub fn alias_deferred(&mut self, virtual_resource: dagal::resource::VirtualResource, physical_resource: T::Loaded) -> Option<T::Loaded> {
-        self.slot.get_mut(containers::Slot::new(virtual_resource.uid, virtual_resource.gen)).map(|option| {
-            // reset lifetime
-            self.deferred_deletion.get_mut(&virtual_resource).map(|deferred| deferred.reset());
-            option.replace(physical_resource)
-        }).flatten()
+    pub fn alias_deferred(
+        &mut self,
+        virtual_resource: dagal::resource::VirtualResource,
+        physical_resource: T::Loaded,
+    ) -> Option<T::Loaded> {
+        self.slot
+            .get_mut(containers::Slot::new(
+                virtual_resource.uid,
+                virtual_resource.gen,
+            ))
+            .map(|option| {
+                // reset lifetime
+                self.deferred_deletion
+                    .get_mut(&virtual_resource)
+                    .map(|deferred| deferred.reset());
+                option.replace(physical_resource)
+            })
+            .flatten()
     }
 
     /// Insert a physical resource to back a new virtual resource
-    pub fn insert_physical(&mut self, physical_resource: T::Loaded) -> dagal::resource::VirtualResource {
+    pub fn insert_physical(
+        &mut self,
+        physical_resource: T::Loaded,
+    ) -> dagal::resource::VirtualResource {
         let virt = self.get_virtual_handle();
         self.alias(virt.clone(), physical_resource);
         virt
     }
 
     /// Insert a deferred physical resource back to a new virtual resource
-    pub fn insert_deferred_physical(&mut self, lifetime: u32, physical_resource: T::Loaded) -> Arc<dagal::resource::VirtualResource> {
+    pub fn insert_deferred_physical(
+        &mut self,
+        lifetime: u32,
+        physical_resource: T::Loaded,
+    ) -> Arc<dagal::resource::VirtualResource> {
         let virtual_handle = self.get_deferred_virtual_handle();
         if lifetime > 0 {
-            let mut deletion = self.deferred_deletion.entry(virtual_handle.downgrade()).or_insert(DeletionSlot {
-                lifetime,
-                current: lifetime,
-                virtual_resource: Some(virtual_handle.clone()),
-            });
+            let mut deletion = self
+                .deferred_deletion
+                .entry(virtual_handle.downgrade())
+                .or_insert(DeletionSlot {
+                    lifetime,
+                    current: lifetime,
+                    virtual_resource: Some(virtual_handle.clone()),
+                });
             deletion.reset();
             deletion.virtual_resource.replace(virtual_handle.clone());
         }
@@ -120,19 +158,30 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     }
 
     /// Acquire a channel to notify physical resource storage of successful asset loading
-    pub fn asset_loaded_queue(&self) -> crossbeam_channel::Sender<(dagal::resource::VirtualResource, T::Loaded)> {
+    pub fn asset_loaded_queue(
+        &self,
+    ) -> crossbeam_channel::Sender<(dagal::resource::VirtualResource, T::Loaded)> {
         self.loaded_send.clone()
     }
 
     /// Attempt to resolve a virtual resource
-    pub fn resolve(&mut self, virtual_resource: dagal::resource::VirtualResource) -> Option<&T::Loaded> {
-        self.slot.get(containers::Slot::new(virtual_resource.uid, virtual_resource.gen))
+    pub fn resolve(
+        &mut self,
+        virtual_resource: dagal::resource::VirtualResource,
+    ) -> Option<&T::Loaded> {
+        self.slot
+            .get(containers::Slot::new(
+                virtual_resource.uid,
+                virtual_resource.gen,
+            ))
             .map(|option| match option.as_ref() {
                 None => None,
                 Some(r) => {
-                    self.deferred_deletion.get_mut(&virtual_resource).map(|deferred| deferred.reset());
+                    self.deferred_deletion
+                        .get_mut(&virtual_resource)
+                        .map(|deferred| deferred.reset());
                     Some(r)
-                },
+                }
             })
             .flatten()
     }
@@ -142,7 +191,11 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         // handle inserts
 
         // decrement lifetimes
-        for deferred in self.deferred_deletion.values_mut().filter(|v| v.lifetime != 0) {
+        for deferred in self
+            .deferred_deletion
+            .values_mut()
+            .filter(|v| v.lifetime != 0)
+        {
             let _ = deferred.current.saturating_sub(1);
             if deferred.current == 0 {
                 // lifetime has reached zero, get rid of it
@@ -151,15 +204,24 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         }
         while let Ok((virtual_resource, asset)) = self.loaded_recv.recv() {
             // find each loaded, update virtual resource to reflect new asset
-            self.slot.get_mut(containers::Slot::new(
-                virtual_resource.uid,
-                virtual_resource.gen,
-            )).unwrap().replace(asset);
+            self.slot
+                .get_mut(containers::Slot::new(
+                    virtual_resource.uid,
+                    virtual_resource.gen,
+                ))
+                .unwrap()
+                .replace(asset);
         }
         // remove dropped
         while let Ok(virtual_resource) = self.drop_recv.recv() {
             // drop the physical resource
-            self.slot.get_mut(containers::Slot::new(virtual_resource.uid, virtual_resource.gen)).unwrap().take();
+            self.slot
+                .get_mut(containers::Slot::new(
+                    virtual_resource.uid,
+                    virtual_resource.gen,
+                ))
+                .unwrap()
+                .take();
         }
     }
 }

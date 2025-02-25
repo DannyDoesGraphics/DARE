@@ -62,7 +62,7 @@ impl<T> SlotMap<T> {
                 // swap with the last
                 self.data.swap(last_index, proxy_slot_data_index as usize);
                 // update the indirect slot
-                let swapped_proxy = self.data.get(proxy_slot_data_index as usize ).unwrap().1;
+                let swapped_proxy = self.data.get(proxy_slot_data_index as usize).unwrap().1;
                 // since we swapped, we must update to the indirect to point to the data index
                 self.slots
                     .get_mut(swapped_proxy as usize)
@@ -95,7 +95,9 @@ impl<T> SlotMap<T> {
             .get(slot.id as usize)
             .map(|proxy_slot| {
                 if proxy_slot.generation == slot.generation {
-                    self.data.get_mut(proxy_slot.id as usize).map(|data| &mut data.0)
+                    self.data
+                        .get_mut(proxy_slot.id as usize)
+                        .map(|data| &mut data.0)
                 } else {
                     None
                 }
