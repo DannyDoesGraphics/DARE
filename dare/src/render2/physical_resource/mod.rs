@@ -6,6 +6,8 @@ use dare_containers::prelude as containers;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
+pub mod gpu_stream;
+pub use gpu_stream::*;
 
 pub fn slot_to_virtual_handle<T: 'static>(
     slot: containers::Slot<T>,

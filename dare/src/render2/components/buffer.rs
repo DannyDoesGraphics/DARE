@@ -1,7 +1,7 @@
 use crate::asset2::loaders::MetaDataStreamable;
 use crate::prelude as dare;
+use crate::render2::physical_resource::gpu_buffer_stream;
 use crate::render2::prelude::util::TransferPool;
-use crate::render2::render_assets::gpu_stream::gpu_buffer_stream;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::Component;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};

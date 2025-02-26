@@ -3,7 +3,7 @@ pub mod components;
 pub mod frame;
 pub mod frame_number;
 pub mod mesh_render_system;
-mod physical_resource;
+pub mod physical_resource;
 pub mod prelude;
 pub mod present_system;
 pub mod render_assets;

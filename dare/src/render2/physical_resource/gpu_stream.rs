@@ -3,7 +3,7 @@ use crate::render2::prelude::util::TransferRequestCallback;
 use async_stream::stream;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use futures_core::Stream;
 
 pub fn gpu_buffer_stream<'a, T, A>(
