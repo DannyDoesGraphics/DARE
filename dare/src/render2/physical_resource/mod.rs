@@ -75,9 +75,25 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         slot_to_virtual_handle(slot, None)
     }
 
-    pub fn get_deferred_virtual_handle(&mut self) -> Arc<dagal::resource::VirtualResource> {
+    pub fn get_deferred_virtual_handle(
+        &mut self,
+        lifetime: u32,
+    ) -> Arc<dagal::resource::VirtualResource> {
         let slot = self.slot.insert(None);
-        Arc::new(slot_to_virtual_handle(slot, Some(self.drop_send.clone())))
+        let virtual_resource = slot_to_virtual_handle(slot, Some(self.drop_send.clone()));
+        self.deferred_deletion
+            .entry(virtual_resource.downgrade())
+            .or_insert(DeletionSlot {
+                lifetime: 0,
+                current: 0,
+                virtual_resource: None,
+            })
+            .and_modify(|deletion_slot| {
+                // reset lifetime if it exists
+                deletion_slot.lifetime = lifetime;
+                deletion_slot.reset();
+            });
+        Arc::new(virtual_resource)
     }
 
     /// Insert a physical resource to back a virtual resource
@@ -100,9 +116,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         &mut self,
         virtual_resource: &dagal::resource::VirtualResource,
         handle: AssetHandle<T::Asset>,
-    ) {
+    ) -> Option<T::Loaded> {
+        // reset counter (if it exists)
         self.asset_mapping
-            .insert(handle, virtual_resource.downgrade());
+            .insert(handle, virtual_resource.downgrade())
     }
 
     /// Insert a deferred resource
@@ -142,16 +159,9 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         lifetime: u32,
         physical_resource: T::Loaded,
     ) -> Arc<dagal::resource::VirtualResource> {
-        let virtual_handle = self.get_deferred_virtual_handle();
+        let virtual_handle = self.get_deferred_virtual_handle(lifetime);
         if lifetime > 0 {
-            let mut deletion = self
-                .deferred_deletion
-                .entry(virtual_handle.downgrade())
-                .or_insert(DeletionSlot {
-                    lifetime,
-                    current: lifetime,
-                    virtual_resource: Some(virtual_handle.clone()),
-                });
+            let mut deletion = self.deferred_deletion.get_mut(&virtual_handle).unwrap(); // unwrap should be *fine* here, since [`Self::get_deferred_virtual_handle`] properly sets up the deletion entry.
             deletion.reset();
             deletion.virtual_resource.replace(virtual_handle.clone());
         }
@@ -191,7 +201,9 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     /// Process loaded assets
     pub fn update(&mut self) {
         // handle inserts
-
+        for (virtual_resource, physical_resource) in self.loaded_recv.recv() {
+            self.asset_alias(&virtual_resource, physical_resource);
+        }
         // decrement lifetimes
         for deferred in self
             .deferred_deletion
