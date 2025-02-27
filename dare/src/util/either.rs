@@ -96,3 +96,21 @@ where
         }
     }
 }
+
+impl<C: ?Sized, A: AsRef<C>, B: AsRef<C>> AsRef<C> for Either<A, B> {
+    fn as_ref(&self) -> &C {
+        match self {
+            Either::Left(a) => a.as_ref(),
+            Either::Right(b) => b.as_ref(),
+        }
+    }
+}
+
+impl<C: ?Sized, A: AsMut<C>, B: AsMut<C>> AsMut<C> for Either<A, B> {
+    fn as_mut(&mut self) -> &mut C {
+        match self {
+            Either::Left(a) => a.as_mut(),
+            Either::Right(b) => b.as_mut(),
+        }
+    }
+}
