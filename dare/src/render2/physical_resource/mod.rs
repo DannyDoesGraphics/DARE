@@ -1,16 +1,22 @@
-use crate::asset2::prelude::AssetHandle;
+use crate::asset2::prelude::{AssetHandle, AssetMetadata};
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use dagal::resource::traits::Resource;
 use dare_containers::prelude as containers;
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::Arc;
+use bevy_ecs::query::Has;
+use futures::TryFutureExt;
+
 pub mod gpu_stream;
 pub use gpu_stream::*;
 pub mod handle;
-use crate::asset2::AssetServer;
 pub use handle::*;
+use crate::asset2::loaders::MetaDataLoad;
+use crate::asset2::server::asset_info::AssetInfo;
+use crate::asset2::server::AssetServer;
 
 pub fn slot_to_virtual_handle<T: 'static>(
     slot: containers::Slot<T>,
@@ -40,7 +46,8 @@ pub struct PhysicalResourceStorage<T: MetaDataRenderAsset> {
     pub asset_server: AssetServer,
     pub slot: containers::SlotMap<Option<T::Loaded>>,
     /// Map asset handles to virtual resource handles
-    pub asset_mapping: HashMap<AssetHandle<T::Asset>, VirtualResource>,
+    asset_mapping: HashMap<AssetHandle<T::Asset>, VirtualResource>,
+    asset_mapping_reverse: HashMap<VirtualResource, AssetHandle<T::Asset>>,
     /// for asset loading
     loaded_send: crossbeam_channel::Sender<(VirtualResource, T::Loaded)>,
     loaded_recv: crossbeam_channel::Receiver<(VirtualResource, T::Loaded)>,
@@ -60,6 +67,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
             asset_server,
             slot: Default::default(),
             asset_mapping: Default::default(),
+            asset_mapping_reverse: Default::default(),
             loaded_send,
             loaded_recv,
             drop_send,
@@ -111,8 +119,13 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         handle: AssetHandle<T::Asset>,
     ) -> Option<VirtualResource> {
         // reset counter (if it exists)
+        self.asset_mapping_reverse
+            .insert(
+                virtual_resource.downgrade(),
+                handle.clone().downgrade(),
+            );
         self.asset_mapping
-            .insert(handle, virtual_resource.downgrade())
+            .insert(handle.downgrade(), virtual_resource.downgrade())
     }
 
     /// Insert a deferred resource
@@ -222,5 +235,27 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
                 .unwrap()
                 .take();
         }
+    }
+
+    /// If an asset has an associated asset handle already, we can use that to automatically load it
+    /// from a different thread
+    pub fn load_asset_handle(&mut self, virtual_resource: VirtualResource, prepare_info: T::PrepareInfo, load_info: <<T::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'static> ) {
+        let finished_queue = self.loaded_send.clone();
+        self.asset_mapping_reverse.get(&virtual_resource).map(|asset_handle| {
+                self.asset_server.get_metadata(&asset_handle).map(|metadata| {
+                    tokio::spawn(async move {
+                        T::load_asset(
+                            metadata,
+                            prepare_info,
+                            load_info,
+                        ).and_then(|v| async move {
+                            if let Err(e) = finished_queue.send((virtual_resource, v)) {
+                                tracing::error!("Physical resource storage failed to send loaded resource");
+                            };
+                            Ok(())
+                        }).await
+                    });
+                });
+        });
     }
 }

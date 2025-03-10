@@ -12,7 +12,3 @@ pub mod prelude;
 pub mod server;
 pub mod traits;
 
-#[derive(Resource)]
-pub struct AssetServer {
-    pub servers: dare_containers::erased_storage::FlashMapErasedStorage,
-}

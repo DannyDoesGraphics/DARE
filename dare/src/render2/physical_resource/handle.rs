@@ -1,0 +1,120 @@
+use std::any::TypeId;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Weak};
+use std::sync::atomic::AtomicU64;
+use crate::util::either::Either;
+
+/// Responsible to dealing with dropping of virtual resources
+#[derive(Debug, Clone)]
+struct VirtualResourceDrop {
+    /// Internal weak reference
+    weak: VirtualResource,
+    /// Send to a channel to indicate drop
+    send: crossbeam_channel::Sender<VirtualResource>,
+}
+impl Drop for VirtualResourceDrop {
+    fn drop(&mut self) {
+        self.send.send(self.weak.clone()).unwrap();
+    }
+}
+impl PartialEq for VirtualResourceDrop {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+impl Eq for VirtualResourceDrop {}
+impl Hash for VirtualResourceDrop {
+    fn hash<H: Hasher>(&self, _: &mut H) {
+        // do nothing
+    }
+}
+
+/// Internalized virtual resource handles
+#[derive(Debug, Clone)]
+pub struct VirtualResource {
+    pub uid: u64,
+    pub gen: u64,
+    /// determines if current handle is considered to be a strong handle and should ref count
+    pub ref_count: Option<Either<Weak<VirtualResourceDrop>, Arc<VirtualResourceDrop>>>,
+    pub type_id: TypeId,
+}
+impl Hash for VirtualResource {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.uid.hash(state);
+        self.gen.hash(state);
+        self.type_id.hash(state);
+    }
+}
+impl PartialEq for VirtualResource {
+    fn eq(&self, other: &Self) -> bool {
+        self.uid == other.uid && self.gen == other.gen && self.type_id == other.type_id
+    }
+}
+impl Eq for VirtualResource {}
+
+impl VirtualResource {
+    pub fn new(uid: u64, gen: u64, send: Option<crossbeam_channel::Sender<VirtualResource>>, type_id: TypeId) -> Self {
+        Self {
+            uid,
+            gen,
+            ref_count: send.map(|send| Either::Right(Arc::new(
+                VirtualResourceDrop {
+                    weak: VirtualResource {
+                        uid,
+                        gen,
+                        ref_count: None,
+                        type_id,
+                    },
+                    send,
+                }
+            ))),
+            type_id,
+        }
+    }
+
+    pub fn get_uid(&self) -> u64 {
+        self.uid
+    }
+    pub fn get_gen(&self) -> u64 {
+        self.gen
+    }
+    pub fn get_type_id(&self) -> TypeId {
+        self.type_id
+    }
+
+    /// Downgrade a virtual resource to not ref count
+    pub fn downgrade(&self) -> Self {
+        Self {
+            uid: self.uid,
+            gen: self.gen,
+            ref_count: self.ref_count.as_ref().map(|either| match either {
+                Either::Left(weak) => Either::Left(weak.clone()),
+                Either::Right(strong) => Either::Left(Arc::downgrade(strong)),
+            }),
+            type_id: self.type_id,
+        }
+    }
+
+    /// Update a virtual resource to begin ref counting
+    pub fn upgrade(&self) -> Option<Self> {
+        self.ref_count.clone().map(|ref_count|
+            {
+                let ref_count =  match ref_count {
+                    Either::Left(weak) => {
+                        let v = weak.upgrade()?;
+                        Some(Either::Right(v))
+                    }
+                    Either::Right(strong) => {
+                        Some(Either::Right(strong))
+                    }
+                };
+                Some(Self {
+                    uid: self.uid,
+                    gen: self.gen,
+                    ref_count,
+                    type_id: self.type_id,
+                })
+            }
+        ).flatten()
+    }
+}

@@ -11,6 +11,7 @@ pub use render_asset_state::*;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use crate::render2::render_assets::traits::MetaDataRenderAsset;
 
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 pub enum AssetServerErrors {
