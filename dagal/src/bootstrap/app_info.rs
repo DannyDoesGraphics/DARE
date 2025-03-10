@@ -1,6 +1,4 @@
-use crate::device::queue::QueueInfo;
 use ash::vk;
-use std::ffi::CString;
 use std::fmt::Debug;
 
 /// Indicates what the expectation of such an input
@@ -61,13 +59,10 @@ impl QueueRequest {
 
         if self.strict && required_flags != family_properties.queue_family_properties.queue_flags {
             false
-        } else if !self.strict
-            && family_properties.queue_family_properties.queue_flags & required_flags
-                != required_flags
-        {
-            false
         } else {
-            true
+            !(!self.strict
+                && family_properties.queue_family_properties.queue_flags & required_flags
+                    != required_flags)
         }
     }
 

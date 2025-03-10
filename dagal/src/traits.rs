@@ -1,7 +1,3 @@
-use ash::RawPtr;
-use std::any::Any;
-use std::hash::{Hash, Hasher};
-
 /// Describes Vulkan resources which can be destroyed
 pub trait Destructible {
     /// Destroy the resource

@@ -3,7 +3,6 @@ use crate::device::QueueInfo;
 use crate::traits::AsRaw;
 use ash;
 use ash::vk;
-use std::cmp::Ordering;
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
@@ -48,8 +47,7 @@ fn allocated_preferred_queues(
         }
     }
 
-    let allocated = needed - remaining;
-    allocated
+    needed - remaining
 }
 
 impl PhysicalDevice {
@@ -109,7 +107,7 @@ impl PhysicalDevice {
     pub fn select<Window: crate::wsi::DagalWindow>(
         instance: &crate::core::Instance,
         surface: Option<&crate::wsi::Surface>,
-        mut settings: crate::bootstrap::app_info::AppSettings<Window>,
+        settings: crate::bootstrap::app_info::AppSettings<Window>,
     ) -> anyhow::Result<Self> {
         use std::ffi::c_void;
 

@@ -26,14 +26,14 @@ pub struct QueueInfo {
     pub can_present: bool,
 }
 
-impl<'a> Into<vk::DeviceQueueInfo2<'a>> for QueueInfo {
-    fn into(self) -> vk::DeviceQueueInfo2<'a> {
+impl<'a> From<QueueInfo> for vk::DeviceQueueInfo2<'a> {
+    fn from(val: QueueInfo) -> Self {
         vk::DeviceQueueInfo2 {
             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
             p_next: ptr::null(),
             flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: self.family_index,
-            queue_index: self.index,
+            queue_family_index: val.family_index,
+            queue_index: val.index,
             _marker: Default::default(),
         }
     }

@@ -1,4 +1,3 @@
-use crate::bootstrap::app_info::{Expected, QueueRequest};
 use crate::concurrency::DEFAULT_LOCKABLE;
 use ash::vk;
 use std::ptr;

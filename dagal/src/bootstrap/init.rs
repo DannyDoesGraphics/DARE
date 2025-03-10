@@ -1,10 +1,8 @@
 use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
-use crate::bootstrap::app_info::{AppSettings, Expected, QueueRequest};
+use crate::bootstrap::app_info::AppSettings;
 use crate::traits::AsRaw;
-use anyhow::ensure;
 use ash::vk;
 use gpu_allocator::vulkan::AllocatorCreateDesc;
-use gpu_allocator::AllocatorDebugSettings;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
@@ -77,7 +75,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
         crate::device::execution_manager::ExecutionManager,
     );
 
-    fn init(mut settings: AppSettings<W>) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
+    fn init(settings: AppSettings<W>) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         let application_name: CString = CString::new(settings.name.clone())?;
         let engine_name: CString = CString::new(settings.engine_name.clone())?;
         let application_info = unsafe {
@@ -106,7 +104,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
         let mut extensions: Vec<CString> = Vec::new();
         if let Some(display_handle) = display_handle.clone() {
             let display_handle = display_handle?;
-            for ext in ash_window::enumerate_required_extensions(display_handle.clone())? {
+            for ext in ash_window::enumerate_required_extensions(display_handle)? {
                 extensions.push(crate::util::wrap_c_str(*ext));
             }
         }
@@ -150,21 +148,21 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
                         tracing::error!("Failed to construct surface: {:?}", err);
                         None
                     },
-                    |surface| Some(surface),
+                    Some,
                 )
             } else {
                 None
             };
 
-        let mut features_3 = settings.gpu_requirements.features_3.clone();
-        let mut features_2 = settings.gpu_requirements.features_2.clone();
+        let mut features_3 = settings.gpu_requirements.features_3;
+        let mut features_2 = settings.gpu_requirements.features_2;
         features_2.p_next = &mut features_3 as *mut _ as *mut c_void;
-        let mut features_1 = settings.gpu_requirements.features_1.clone();
+        let mut features_1 = settings.gpu_requirements.features_1;
         features_1.p_next = &mut features_2 as *mut _ as *mut c_void;
         let features2 = vk::PhysicalDeviceFeatures2 {
             s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
             p_next: &mut features_1 as *mut _ as *mut c_void,
-            features: settings.gpu_requirements.features.clone(),
+            features: settings.gpu_requirements.features,
             _marker: Default::default(),
         };
         let debug_utils = settings.debug_utils;
@@ -208,8 +206,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             }
             family_hashmap
         }
-        .into_iter()
-        .map(|(_, q)| q)
+        .into_values()
         .collect::<Vec<vk::DeviceQueueCreateInfo>>();
         let logical_device =
             crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {

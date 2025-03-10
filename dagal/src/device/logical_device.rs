@@ -1,7 +1,7 @@
 use crate::device::physical_device::PhysicalDevice;
 use crate::device::QueueInfo;
 use crate::resource::traits::Resource;
-use crate::traits::{AsRaw, Destructible};
+use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
 use ash::vk;
@@ -206,7 +206,7 @@ impl LogicalDevice {
     }
 
     pub fn get_used_queue_families(&self) -> &[u32] {
-        assert!(self.inner.queue_families.len() > 0);
+        assert!(!self.inner.queue_families.is_empty());
         self.inner.queue_families.as_slice()
     }
 

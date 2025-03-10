@@ -1,9 +1,6 @@
-use crate::resource::traits::Resource;
 /// # Virtual resources
 use std::any::{Any, TypeId};
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use std::ops::Deref;
 
 /// Represents a virtual_resources resource
 #[derive(Debug, Clone)]

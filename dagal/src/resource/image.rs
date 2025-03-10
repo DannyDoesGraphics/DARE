@@ -6,7 +6,6 @@ use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
-use ash::prelude::VkResult;
 use ash::vk;
 use ash::vk::Handle;
 use derivative::Derivative;

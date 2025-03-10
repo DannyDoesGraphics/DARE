@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_void, CString};
 use std::ptr;
 
-use crate::device::QueueInfo;
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
