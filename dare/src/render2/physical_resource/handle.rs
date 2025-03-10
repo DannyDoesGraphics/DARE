@@ -1,8 +1,8 @@
+use crate::util::either::Either;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Weak};
 use std::sync::atomic::AtomicU64;
-use crate::util::either::Either;
+use std::sync::{Arc, Weak};
 
 /// Responsible to dealing with dropping of virtual resources
 #[derive(Debug, Clone)]
@@ -53,12 +53,17 @@ impl PartialEq for VirtualResource {
 impl Eq for VirtualResource {}
 
 impl VirtualResource {
-    pub fn new(uid: u64, gen: u64, send: Option<crossbeam_channel::Sender<VirtualResource>>, type_id: TypeId) -> Self {
+    pub fn new(
+        uid: u64,
+        gen: u64,
+        send: Option<crossbeam_channel::Sender<VirtualResource>>,
+        type_id: TypeId,
+    ) -> Self {
         Self {
             uid,
             gen,
-            ref_count: send.map(|send| Either::Right(Arc::new(
-                VirtualResourceDrop {
+            ref_count: send.map(|send| {
+                Either::Right(Arc::new(VirtualResourceDrop {
                     weak: VirtualResource {
                         uid,
                         gen,
@@ -66,8 +71,8 @@ impl VirtualResource {
                         type_id,
                     },
                     send,
-                }
-            ))),
+                }))
+            }),
             type_id,
         }
     }
@@ -97,16 +102,15 @@ impl VirtualResource {
 
     /// Update a virtual resource to begin ref counting
     pub fn upgrade(&self) -> Option<Self> {
-        self.ref_count.clone().map(|ref_count|
-            {
-                let ref_count =  match ref_count {
+        self.ref_count
+            .clone()
+            .map(|ref_count| {
+                let ref_count = match ref_count {
                     Either::Left(weak) => {
                         let v = weak.upgrade()?;
                         Some(Either::Right(v))
                     }
-                    Either::Right(strong) => {
-                        Some(Either::Right(strong))
-                    }
+                    Either::Right(strong) => Some(Either::Right(strong)),
                 };
                 Some(Self {
                     uid: self.uid,
@@ -114,7 +118,7 @@ impl VirtualResource {
                     ref_count,
                     type_id: self.type_id,
                 })
-            }
-        ).flatten()
+            })
+            .flatten()
     }
 }

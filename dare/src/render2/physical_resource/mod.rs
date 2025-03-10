@@ -1,22 +1,22 @@
 use crate::asset2::prelude::{AssetHandle, AssetMetadata};
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
+use bevy_ecs::query::Has;
 use dagal::resource::traits::Resource;
 use dare_containers::prelude as containers;
+use futures::TryFutureExt;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
-use bevy_ecs::query::Has;
-use futures::TryFutureExt;
 
 pub mod gpu_stream;
 pub use gpu_stream::*;
 pub mod handle;
-pub use handle::*;
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::server::asset_info::AssetInfo;
 use crate::asset2::server::AssetServer;
+pub use handle::*;
 
 pub fn slot_to_virtual_handle<T: 'static>(
     slot: containers::Slot<T>,
@@ -120,10 +120,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     ) -> Option<VirtualResource> {
         // reset counter (if it exists)
         self.asset_mapping_reverse
-            .insert(
-                virtual_resource.downgrade(),
-                handle.clone().downgrade(),
-            );
+            .insert(virtual_resource.downgrade(), handle.clone().downgrade());
         self.asset_mapping
             .insert(handle.downgrade(), virtual_resource.downgrade())
     }
@@ -239,7 +236,12 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
 
     /// If an asset has an associated asset handle already, we can use that to automatically load it
     /// from a different thread
-    pub fn load_asset_handle(&mut self, virtual_resource: VirtualResource, prepare_info: T::PrepareInfo, load_info: <<T::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'static> ) {
+    pub fn load_asset_handle(
+        &mut self,
+        virtual_resource: VirtualResource,
+        prepare_info: T::PrepareInfo,
+        load_info: <<T::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'static>,
+    ) {
         let finished_queue = self.loaded_send.clone();
         self.asset_mapping_reverse.get(&virtual_resource).map(|asset_handle| {
                 self.asset_server.get_metadata(&asset_handle).map(|metadata| {
