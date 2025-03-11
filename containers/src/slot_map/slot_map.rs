@@ -23,16 +23,14 @@ impl<T> Default for SlotMap<T> {
 impl<T> SlotMap<T> {
     pub fn insert(&mut self, element: T) -> Slot<T> {
         // find the next free slot for indirect
-        let mut slots_len = self.slots.len();
-        let mut free_slot_index = 0;
-        let mut free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {
+        let free_slot_index;
+        let free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {
             free_slot_index = index;
             self.slots.get_mut(index as usize).unwrap()
         } else {
             let slot = Slot::new(0, 0);
             free_slot_index = self.slots.len() as u64;
             self.slots.push(slot);
-            slots_len += 1;
             self.slots.last_mut().unwrap()
         };
         // update index the inner slot will point to
@@ -41,12 +39,12 @@ impl<T> SlotMap<T> {
         self.data.push((element, free_slot_index));
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index as u64, free_slot.generation);
+        let out_slot = Slot::new(free_slot_index, free_slot.generation);
         out_slot
     }
 
     pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
-        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
+        if let Some(proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }

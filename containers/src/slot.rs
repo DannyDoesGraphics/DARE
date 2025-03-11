@@ -1,5 +1,4 @@
 use derivative::Derivative;
-use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 #[derive(Derivative)]
