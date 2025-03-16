@@ -23,33 +23,6 @@ pub struct PhysicalDevice {
     available_queue_families: Vec<vk::QueueFamilyProperties>,
 }
 
-fn allocated_preferred_queues(
-    families_cap: &mut [u32],
-    family_infos: &[vk::QueueFamilyProperties2],
-    request: &QueueRequest,
-    needed: u32,
-) -> u32 {
-    let mut remaining = needed;
-
-    for (i, family) in family_infos.iter().enumerate() {
-        if remaining == 0 {
-            break;
-        }
-        if !request.contains_required(family) {
-            continue;
-        }
-
-        let available = families_cap[i];
-        let to_take = available.min(remaining);
-        if to_take > 0 {
-            families_cap[i] -= to_take;
-            remaining -= to_take;
-        }
-    }
-
-    needed - remaining
-}
-
 impl PhysicalDevice {
     /// References the underlying [`VkPhysicalDevice`](vk::PhysicalDevice)
     pub fn get_handle(&self) -> &vk::PhysicalDevice {
@@ -127,7 +100,7 @@ impl PhysicalDevice {
         }
 
         let suitable_device: Option<PhysicalDeviceInfo> = unsafe {
-            /// Find all physical devices
+            // Find all physical devices
             let physical_devices: Vec<PhysicalDeviceInfo> = instance
                 .enumerate_physical_devices()?
                 .into_iter()

@@ -30,6 +30,6 @@ pub use winit;
 pub use {ash, ash_window, raw_window_handle};
 
 #[cfg(all(feature = "gpu-allocator", not(feature = "vk-mem-rs")))]
-type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
+pub type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
 #[cfg(all(feature = "vk-mem-rs", not(feature = "gpu-allocator")))]
-type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
+pub type DEFAULT_ALLOCATOR = allocators::GpuAllocation;

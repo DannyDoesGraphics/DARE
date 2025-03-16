@@ -11,29 +11,59 @@ pub struct CommandPool {
     device: crate::device::LogicalDevice,
 }
 
-impl CommandPool {
-    pub fn new(
+pub enum CommandPoolCreateInfo<'a> {
+    WithQueue {
         device: crate::device::LogicalDevice,
-        queue: &crate::device::Queue,
         flags: vk::CommandPoolCreateFlags,
+        queue: &'a crate::device::Queue,
+    },
+    WithQueueFamily {
+        device: crate::device::LogicalDevice,
+        flags: vk::CommandPoolCreateFlags,
+        queue_family_index: u32,
+    }
+}
+impl<'a> CommandPoolCreateInfo<'a> {
+    pub fn flags(&self) -> vk::CommandPoolCreateFlags {
+        match self {
+            CommandPoolCreateInfo::WithQueue { flags, .. } => *flags,
+            CommandPoolCreateInfo::WithQueueFamily { flags, .. } => *flags
+        }
+    }
+
+    pub fn device(&self) -> &crate::device::LogicalDevice {
+        match self {
+            CommandPoolCreateInfo::WithQueue { device, .. } => device,
+            CommandPoolCreateInfo::WithQueueFamily { device, .. } => device
+        }
+    }
+}
+
+impl CommandPool {
+
+    pub fn new(
+        ci: CommandPoolCreateInfo,
     ) -> Result<Self> {
         let command_pool_ci = vk::CommandPoolCreateInfo {
             s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
             p_next: ptr::null(),
-            flags,
-            queue_family_index: queue.get_family_index(),
+            flags: ci.flags(),
+            queue_family_index: match &ci {
+                CommandPoolCreateInfo::WithQueue { queue, .. } => queue.get_family_index(),
+                CommandPoolCreateInfo::WithQueueFamily { queue_family_index, .. } => *queue_family_index
+            },
             _marker: Default::default(),
         };
         let handle = unsafe {
-            device
-                .get_handle()
-                .create_command_pool(&command_pool_ci, None)?
+                    ci.device()
+                    .get_handle()
+                    .create_command_pool(&command_pool_ci, None)?
         };
 
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Created VkCommandPool {:p}", handle);
 
-        Ok(Self { handle, device })
+        Ok(Self { handle, device: ci.device().clone() })
     }
 
     pub fn handle(&self) -> vk::CommandPool {

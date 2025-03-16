@@ -1,7 +1,3 @@
-pub use super::deferred_deletion::{
-    DeferredDeletion, DeferredDeletionSlot, DeferredDeletionSlotInner, StrongDeferredDeletionSlot,
-    WeakDeferredDeletionSlot,
-};
 pub use super::erased_storage;
 pub use super::error;
 pub use super::free_list::*;

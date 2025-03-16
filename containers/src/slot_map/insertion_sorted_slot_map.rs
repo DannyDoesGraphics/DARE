@@ -1,7 +1,6 @@
 use crate::error::ContainerErrors;
 use crate::prelude::Slot;
 use std::ops::{Deref, DerefMut};
-use std::slice::{Iter, IterMut};
 
 /// Regular slot map implementation
 
@@ -77,7 +76,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
 
     /// Removes a slot as according to insertion removal
     pub fn insertion_removal(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
-        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
+        if let Some(proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }

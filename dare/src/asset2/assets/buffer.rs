@@ -158,7 +158,6 @@ mod test {
     use rand::Rng;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Arc;
     use tokio::io::AsyncWriteExt;
 
     // Helper function to clean up the file after test
@@ -199,11 +198,8 @@ mod test {
             offset: 0,
             length: data_size,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: data_size,
             name: "".to_string(),
         };
@@ -251,11 +247,8 @@ mod test {
             offset: 0,
             length: data_size,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: data_size,
             name: "".to_string(),
         };
@@ -306,11 +299,8 @@ mod test {
             offset,
             length,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: length,
             name: "".to_string(),
         };
@@ -343,19 +333,19 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_with_stride.bin");
 
         // Prepare test data
-        const element_size: usize = 4; // Size of each element
-        const stride: usize = 6; // Stride between elements
+        const ELEMENT_SIZE: usize = 4; // Size of each element
+        const STRIDE: usize = 6; // Stride between elements
         let element_count = 100;
-        let length = stride * element_count;
+        let length = STRIDE * element_count;
         let chunk_size = 60; // Arbitrary chunk size
 
-        // Generate data with stride
+        // Generate data with STRIDE
         let mut data = Vec::with_capacity(length);
         for i in 0..element_count {
             // Element data
             data.extend_from_slice(&(i as u32).to_le_bytes());
-            // Padding to match the stride
-            data.extend_from_slice(&[0u8; stride - element_size]);
+            // Padding to match the STRIDE
+            data.extend_from_slice(&[0u8; STRIDE - ELEMENT_SIZE]);
         }
 
         // Write test data to file
@@ -364,7 +354,7 @@ mod test {
         file.flush().await?;
 
         // Expected data (elements only, without padding)
-        let mut expected_data = Vec::with_capacity(element_size * element_count);
+        let mut expected_data = Vec::with_capacity(ELEMENT_SIZE * element_count);
         for i in 0..element_count {
             expected_data.extend_from_slice(&(i as u32).to_le_bytes());
         }
@@ -374,7 +364,7 @@ mod test {
             location: asset::MetaDataLocation::FilePath(file_path.clone()),
             offset: 0,
             length,
-            stride: Some(stride),
+            stride: Some(STRIDE),
             format: dare::render::util::Format::new(ElementFormat::U32, 1),
             stored_format: dare::render::util::Format::new(ElementFormat::U32, 1),
             element_count,
@@ -424,11 +414,8 @@ mod test {
             offset: 0,
             length: data_size,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: data_size,
             name: "".to_string(),
         };
@@ -477,11 +464,8 @@ mod test {
             offset: 0,
             length: data_size,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: 0,
             name: "".to_string(),
         };
@@ -529,11 +513,8 @@ mod test {
             offset: 0,
             length: data_size,
             stride: None,
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U8, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U8,
-                1,
-            ),
+            format: dare::render::util::Format::new(ElementFormat::U8, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U8, 1),
             element_count: data_size,
             name: "".to_string(),
         };
@@ -572,13 +553,13 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_f32_vec3_with_stride.bin");
 
         // Prepare test data
-        const element_size: usize = 12; // Size of Vec3<f32>
-        const stride: usize = 16; // Stride between elements (including padding)
+        const ELEMENT_SIZE: usize = 12; // Size of Vec3<f32>
+        const STRIDE: usize = 16; // Stride between elements (including padding)
         let element_count = 100;
-        let length = stride * element_count;
+        let length = STRIDE * element_count;
         let chunk_size = 64; // Arbitrary chunk size
 
-        // Generate data with stride
+        // Generate data with STRIDE
         let mut data = Vec::with_capacity(length);
         for i in 0..element_count {
             // Create a Vec3<f32> with values (i as f32, i as f32 + 1.0, i as f32 + 2.0)
@@ -586,8 +567,8 @@ mod test {
             for &value in &vec {
                 data.extend_from_slice(&value.to_le_bytes());
             }
-            // Padding to match the stride
-            data.extend_from_slice(&[0u8; stride - element_size]);
+            // Padding to match the STRIDE
+            data.extend_from_slice(&[0u8; STRIDE - ELEMENT_SIZE]);
         }
 
         // Write test data to file
@@ -596,7 +577,7 @@ mod test {
         file.flush().await?;
 
         // Expected data (elements only, without padding)
-        let mut expected_data = Vec::with_capacity(element_size * element_count);
+        let mut expected_data = Vec::with_capacity(ELEMENT_SIZE * element_count);
         for i in 0..element_count {
             let vec = [i as f32, i as f32 + 1.0, i as f32 + 2.0];
             for &value in &vec {
@@ -609,13 +590,13 @@ mod test {
             location: asset::MetaDataLocation::FilePath(file_path.clone()),
             offset: 0,
             length,
-            stride: Some(stride),
+            stride: Some(STRIDE),
             format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 3, // Number of components in Vec3<f32>
             ),
             stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 3, // Number of components in Vec3<f32>
             ),
             element_count,
@@ -650,9 +631,9 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_f32_vec2_no_stride.bin");
 
         // Prepare test data
-        const element_size: usize = 8; // Size of Vec2<f32>
+        const ELEMENT_SIZE: usize = 8; // Size of Vec2<f32>
         let element_count = 200;
-        let length = element_size * element_count;
+        let length = ELEMENT_SIZE * element_count;
         let chunk_size = 128; // Arbitrary chunk size
 
         // Generate contiguous data (no stride)
@@ -680,11 +661,11 @@ mod test {
             length,
             stride: None, // No stride
             format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 2, // Vec2<f32>
             ),
             stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 2, // Vec2<f32>
             ),
             element_count,
@@ -719,20 +700,20 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_u16_indices_with_stride.bin");
 
         // Prepare test data
-        const element_size: usize = 2; // Size of u16
-        const stride: usize = 4; // Stride between elements
+        const ELEMENT_SIZE: usize = 2; // Size of u16
+        const STRIDE: usize = 4; // Stride between elements
         let element_count = 50;
-        let length = stride * element_count;
+        let length = STRIDE * element_count;
         let chunk_size = 50; // Arbitrary chunk size
 
-        // Generate data with stride
+        // Generate data with STRIDE
         let mut data = Vec::with_capacity(length);
         for i in 0..element_count {
             // Element data
             let value = i as u16;
             data.extend_from_slice(&value.to_le_bytes());
-            // Padding to match the stride
-            data.extend_from_slice(&[0u8; stride - element_size]);
+            // Padding to match the STRIDE
+            data.extend_from_slice(&[0u8; STRIDE - ELEMENT_SIZE]);
         }
 
         // Write test data to file
@@ -741,7 +722,7 @@ mod test {
         file.flush().await?;
 
         // Expected data (elements only, without padding)
-        let mut expected_data = Vec::with_capacity(element_size * element_count);
+        let mut expected_data = Vec::with_capacity(ELEMENT_SIZE * element_count);
         for i in 0..element_count {
             let value = i as u16;
             expected_data.extend_from_slice(&value.to_le_bytes());
@@ -752,12 +733,9 @@ mod test {
             location: asset::MetaDataLocation::FilePath(file_path.clone()),
             offset: 0,
             length,
-            stride: Some(stride),
-            format: dare::render::util::Format::new(dare::render::util::ElementFormat::U16, 1),
-            stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::U16,
-                1,
-            ),
+            stride: Some(STRIDE),
+            format: dare::render::util::Format::new(ElementFormat::U16, 1),
+            stored_format: dare::render::util::Format::new(ElementFormat::U16, 1),
             element_count,
             name: "".to_string(),
         };
@@ -790,13 +768,13 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_f32_mat4_with_stride.bin");
 
         // Prepare test data
-        const element_size: usize = 64; // Size of Mat4<f32> (4x4 matrix)
-        const stride: usize = 80; // Stride between elements (including padding)
+        const ELEMENT_SIZE: usize = 64; // Size of Mat4<f32> (4x4 matrix)
+        const STRIDE: usize = 80; // Stride between elements (including padding)
         let element_count = 20;
-        let length = stride * element_count;
+        let length = STRIDE * element_count;
         let chunk_size = 128; // Arbitrary chunk size
 
-        // Generate data with stride
+        // Generate data with STRIDE
         let mut data = Vec::with_capacity(length);
         for i in 0..element_count {
             // Create a Mat4<f32> with incremental values
@@ -804,8 +782,8 @@ mod test {
                 let value = (i * 16 + j) as f32;
                 data.extend_from_slice(&value.to_le_bytes());
             }
-            // Padding to match the stride
-            data.extend_from_slice(&[0u8; stride - element_size]);
+            // Padding to match the STRIDE
+            data.extend_from_slice(&[0u8; STRIDE - ELEMENT_SIZE]);
         }
 
         // Write test data to file
@@ -814,7 +792,7 @@ mod test {
         file.flush().await?;
 
         // Expected data (elements only, without padding)
-        let mut expected_data = Vec::with_capacity(element_size * element_count);
+        let mut expected_data = Vec::with_capacity(ELEMENT_SIZE * element_count);
         for i in 0..element_count {
             for j in 0..16 {
                 let value = (i * 16 + j) as f32;
@@ -827,13 +805,13 @@ mod test {
             location: asset::MetaDataLocation::FilePath(file_path.clone()),
             offset: 0,
             length,
-            stride: Some(stride),
+            stride: Some(STRIDE),
             format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 16, // Mat4<f32> has 16 components
             ),
             stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 16, // Mat4<f32> has 16 components
             ),
             element_count,
@@ -868,16 +846,16 @@ mod test {
         let file_path = generate_unique_file_path("test_buffer_f32_vec3_no_stride_offset.bin");
 
         // Prepare test data
-        const element_size: usize = 12; // Size of Vec3<f32>
+        const ELEMENT_SIZE: usize = 12; // Size of Vec3<f32>
         let element_count = 50;
         let total_elements = 100; // Total elements in file
         let offset_elements = 25; // Start reading from element 25
-        let length = element_size * element_count;
-        let offset = element_size * offset_elements;
+        let length = ELEMENT_SIZE * element_count;
+        let offset = ELEMENT_SIZE * offset_elements;
         let chunk_size = 64; // Arbitrary chunk size
 
         // Generate contiguous data (no stride)
-        let mut data = Vec::with_capacity(element_size * total_elements);
+        let mut data = Vec::with_capacity(ELEMENT_SIZE * total_elements);
         for i in 0..total_elements {
             // Create a Vec3<f32> with values (i as f32, i as f32 * 2.0, i as f32 * 3.0)
             let vec = [i as f32, i as f32 * 2.0, i as f32 * 3.0];
@@ -901,11 +879,11 @@ mod test {
             length,
             stride: None, // No stride
             format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 3, // Vec3<f32>
             ),
             stored_format: dare::render::util::Format::new(
-                dare::render::util::ElementFormat::F32,
+                ElementFormat::F32,
                 3, // Vec3<f32>
             ),
             element_count,

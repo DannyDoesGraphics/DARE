@@ -3,6 +3,7 @@ use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Weak};
+use crossbeam_channel::SendError;
 
 /// Responsible to dealing with dropping of virtual resources
 #[derive(Debug, Clone)]
@@ -14,7 +15,10 @@ struct VirtualResourceDrop {
 }
 impl Drop for VirtualResourceDrop {
     fn drop(&mut self) {
-        self.send.send(self.weak.clone()).unwrap();
+        // SAFETY: it is fine if we fail to indicate a resource needs to be dropped
+        unsafe {
+            self.send.send(self.weak.clone()).unwrap_or({});
+        }
     }
 }
 impl PartialEq for VirtualResourceDrop {
@@ -24,8 +28,8 @@ impl PartialEq for VirtualResourceDrop {
 }
 impl Eq for VirtualResourceDrop {}
 impl Hash for VirtualResourceDrop {
-    fn hash<H: Hasher>(&self, _: &mut H) {
-        // do nothing
+    fn hash<H: Hasher>(&self, hash: &mut H) {
+        self.weak.hash(hash);
     }
 }
 

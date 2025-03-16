@@ -18,6 +18,7 @@ pub mod asset_manager_system;
 pub mod handle;
 pub use asset_manager_system::*;
 pub use handle::*;
+use crate::render2::physical_resource;
 
 enum InternalLoadedState<T: MetaDataRenderAsset> {
     /// Asset is ready on the GPU to be loaded into
@@ -189,7 +190,7 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     }
 
     /// Attempts to retrieve the loaded version
-    pub fn get_loaded(
+    pub fn resolve(
         &self,
         handle: &RenderAssetHandle<T>,
     ) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
@@ -197,12 +198,12 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     }
 
     /// Attempts to retrieve loaded version from asset handle
-    pub fn get_loaded_from_asset_handle(
+    pub fn asset_resolve(
         &self,
         asset_handle: &AssetHandle<T::Asset>,
     ) -> Option<&<T as MetaDataRenderAsset>::Loaded> {
         self.get_storage_handle(asset_handle)
-            .map(|handle| self.get_loaded(&handle))?
+            .map(|handle| self.resolve(&handle))?
     }
 
     /// Attempts to retrieve the loaded version
@@ -222,7 +223,6 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
             for key in self.slot_mappings.keys() {
                 let mut hasher = DefaultHasher::new();
                 key.hash(&mut hasher);
-                println!("keys: {:?}", key);
             }
             let mut hasher = DefaultHasher::new();
             handle.hash(&mut hasher);
@@ -302,10 +302,10 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
     }
 }
 
-impl RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocatorImpl>> {
+impl RenderAssetManagerStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>> {
     pub fn get_bda(
         &self,
-        handle: &RenderAssetHandle<dare::render::components::RenderBuffer<GPUAllocatorImpl>>,
+        handle: &RenderAssetHandle<physical_resource::RenderBuffer<GPUAllocatorImpl>>,
     ) -> Option<vk::DeviceAddress> {
         self.internal_loaded
             .get(handle)
@@ -316,7 +316,7 @@ impl RenderAssetManagerStorage<dare::render::components::RenderBuffer<GPUAllocat
         &self,
         handle: &AssetHandle<dare::asset2::assets::Buffer>,
     ) -> Option<vk::DeviceAddress> {
-        self.get_loaded_from_asset_handle(handle)
+        self.asset_resolve(handle)
             .map(|buffer| buffer.address())
     }
 }

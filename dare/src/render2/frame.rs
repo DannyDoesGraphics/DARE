@@ -25,7 +25,7 @@ pub struct Frame {
     pub image_extent: vk::Extent2D,
 
     /// any resources binded for the current frame
-    pub resources: HashSet<dare::asset2::AssetHandleUntyped>,
+    pub resources: HashSet<dare::render::physical_resource::VirtualResource>,
     /// any material buffers
     pub material_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold indirect commands
@@ -179,9 +179,11 @@ impl Frame {
         )?;
         // make pools and buffers
         let command_pool = dagal::command::CommandPool::new(
-            allocator.device(),
-            present_queue,
-            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            dagal::command::CommandPoolCreateInfo::WithQueue {
+                device: allocator.device(),
+                queue: present_queue,
+                flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            }
         )?;
         let command_buffer =
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
@@ -217,7 +219,7 @@ impl Frame {
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
-                        "Indirect buffer for frame {}",
+                        "VkDrawIndexedIndirectCommand[] | Frame {}",
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,

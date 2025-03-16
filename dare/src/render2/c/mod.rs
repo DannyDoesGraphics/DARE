@@ -7,6 +7,7 @@ use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
+use crate::render2::physical_resource;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -48,26 +49,28 @@ impl Hash for CSurface {
 
 impl CSurface {
     pub fn from_surface(
-        buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
+        buffers: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
         >,
         surface: dare::engine::components::Surface,
     ) -> Option<Self> {
+        let positions = buffers.get_bda(&surface.vertex_buffer)?;
+        let indices = buffers.get_bda(&surface.index_buffer)?;
         Some(Self {
             material: 1,
             bit_flag: 2,
             _padding: 0,
-            positions: buffers.get_bda_from_asset_handle(&surface.vertex_buffer)?,
-            indices: buffers.get_bda_from_asset_handle(&surface.index_buffer)?,
+            positions,
+            indices,
             normals: surface
                 .normal_buffer
                 .as_ref()
-                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
+                .map(|buffer| buffers.get_bda(buffer))
                 .unwrap_or(Some(0))?,
             tangents: surface
                 .tangent_buffer
                 .as_ref()
-                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
+                .map(|buffer| buffers.get_bda(buffer))
                 .unwrap_or(Some(0))?,
             uv: 0,
         })
@@ -87,8 +90,8 @@ pub struct CMaterial {
 }
 impl CMaterial {
     pub fn from_material(
-        textures: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderImage<GPUAllocatorImpl>,
+        textures: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderImage<GPUAllocatorImpl>,
         >,
         material: dare::engine::components::Material,
     ) -> Option<Self> {
@@ -96,21 +99,19 @@ impl CMaterial {
             .albedo_texture
             .map(|t| {
                 textures
-                    .get_storage_handle(&t.asset_handle)
-                    .map(|h| h.id() as u32)
+                    .resolve_virtual_resource(&t.asset_handle)
+                    .map(|h| h.uid as u32)
             })
             .flatten();
 
         let mut bit_flag = MaterialFlags::NONE;
         if albedo_texture_id.is_some() {
             bit_flag |= MaterialFlags::ALBEDO;
-        } else {
-            panic!("WE FAILED!!");
-        }
+        };
 
         Some(Self {
             bit_flag: bit_flag.bits(),
-            _padding: 0,
+            _padding: 128,
             color_factor: material.albedo_factor.to_array(),
             albedo_texture_id: albedo_texture_id.unwrap_or(0),
             albedo_sampler_id: 0,

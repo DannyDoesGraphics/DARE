@@ -251,9 +251,11 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 .iter()
                 .map(|queue| {
                     dagal::command::CommandPool::new(
-                        device.clone(),
-                        queue,
-                        vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                        dagal::command::CommandPoolCreateInfo::WithQueue {
+                            device: device.clone(),
+                            queue,
+                            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                        }
                     )
                     .unwrap()
                 })

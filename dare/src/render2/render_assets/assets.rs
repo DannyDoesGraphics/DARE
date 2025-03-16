@@ -4,6 +4,7 @@ use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dare::asset2 as asset;
 use std::collections::HashMap;
+use crate::render2::physical_resource;
 
 /// Stores render assets densely packed
 pub struct HashRenderAssetStorage<T: super::traits::MetaDataRenderAsset> {
@@ -104,7 +105,7 @@ impl<T: super::traits::MetaDataRenderAsset> RenderAssetsStorage<T> {
         }
     }
 }
-impl RenderAssetsStorage<super::super::components::RenderBuffer<GPUAllocatorImpl>> {
+impl RenderAssetsStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>> {
     /// Get bda
     pub fn get_bda(
         &self,

@@ -16,6 +16,7 @@ use std::cmp::PartialEq;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
+use crate::render2::physical_resource;
 
 #[derive(Debug)]
 pub struct RenderServerInner {
@@ -91,10 +92,10 @@ impl RenderServer {
                 world.insert_resource(asset_server.clone());
                 world.insert_resource(render::components::camera::Camera::default());
                 world.insert_resource(RenderAssetManagerStorage::<
-                    render::components::RenderBuffer<GPUAllocatorImpl>,
+                    physical_resource::RenderBuffer<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
                 world.insert_resource(RenderAssetManagerStorage::<
-                    render::components::RenderImage<GPUAllocatorImpl>,
+                    physical_resource::RenderImage<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();
@@ -103,8 +104,10 @@ impl RenderServer {
                 texture_link.attach_to_world(&mut world, &mut schedule);
                 transform_link.attach_to_world(&mut world, &mut schedule);
                 bb_link.attach_to_world(&mut world, &mut schedule);
+                // physical resources
+                world.insert_resource(physical_resource::PhysicalResourceStorage::<physical_resource::RenderBuffer<GPUAllocatorImpl>>::new(asset_server.clone()));
+                world.insert_resource(physical_resource::PhysicalResourceStorage::<physical_resource::RenderImage<GPUAllocatorImpl>> ::new(asset_server.clone()));
                 // misc
-                schedule.add_systems(super::render_assets::storage::asset_manager_system);
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
                 // rendering

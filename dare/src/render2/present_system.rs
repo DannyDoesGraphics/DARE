@@ -1,7 +1,6 @@
 use crate::prelude as dare;
 use crate::prelude::render;
-use crate::prelude::render::components::RenderBuffer;
-use crate::render2::components::RenderImage;
+use crate::render2::physical_resource;
 use crate::render2::render_assets::RenderAssetsStorage;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
@@ -33,13 +32,13 @@ pub fn present_system_begin(
             &dare::physics::components::Transform,
         ),
     >,
-    textures: becs::Res<
+    mut textures: becs::ResMut<
         '_,
-        render::render_assets::storage::RenderAssetManagerStorage<RenderImage<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<physical_resource::RenderImage<GPUAllocatorImpl>>,
     >,
-    buffers: becs::Res<
+    mut buffers: becs::ResMut<
         '_,
-        render::render_assets::storage::RenderAssetManagerStorage<RenderBuffer<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>>,
     >,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
@@ -147,8 +146,8 @@ pub fn present_system_begin(
                     &camera,
                     frame,
                     surfaces,
-                    textures,
-                    buffers,
+                    &mut textures,
+                    &mut buffers,
                 )
                 .await;
                 // end present
@@ -158,6 +157,8 @@ pub fn present_system_begin(
                     surface_context,
                     frame,
                     swapchain_image_index,
+                    &mut textures,
+                    &mut buffers,
                 )
                 .await;
             }
@@ -180,6 +181,12 @@ pub async fn present_system_end(
     surface_context: &super::surface_context::SurfaceContext,
     mut frame: &mut super::frame::Frame,
     swapchain_image_index: u32,
+    textures: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderImage<GPUAllocatorImpl>,
+    >,
+    buffers: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderBuffer<GPUAllocatorImpl>,
+    >,
 ) {
     let window_context = render_context.inner.window_context.clone();
     let frame_count = frame_count.0.clone();
@@ -281,7 +288,9 @@ pub async fn present_system_end(
             }
         }
     }
-    // progress to next frame
+    // progress to next frame + update physical storage
+    buffers.update();
+    textures.update();
     frame_count.fetch_add(1, Ordering::AcqRel);
     #[cfg(feature = "tracing")]
     tracing::trace!("Finished frame {frame_number}");

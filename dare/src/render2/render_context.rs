@@ -178,20 +178,19 @@ impl RenderContext {
         });
         // pq
         let mut graphics_queue =
-            queue_allocator.retrieve_queues(&[], vk::QueueFlags::GRAPHICS, 2)?;
+            queue_allocator.retrieve_queues(None, vk::QueueFlags::GRAPHICS, 2)?;
         let queues = graphics_queue
             .iter()
             .map(|queue| (queue.get_index(), queue.get_family_index()))
             .collect::<Vec<(u32, u32)>>();
         let transfer_queues = queue_allocator.retrieve_queues(
-            &queues,
+            None,
             vk::QueueFlags::TRANSFER,
             queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER),
         )?;
         let mut present_queue = graphics_queue.pop().unwrap();
-        let immediate_queue = graphics_queue.pop().unwrap();
         let immediate_submit =
-            dare::render::util::ImmediateSubmit::new(device.clone(), immediate_queue)?;
+            dare::render::util::ImmediateSubmit::new(device.clone(), queue_allocator)?;
 
         let window_context = super::window_context::WindowContext::new(
             super::window_context::WindowContextCreateInfo {

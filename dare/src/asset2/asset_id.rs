@@ -126,6 +126,8 @@ pub enum AssetId<T: super::traits::Asset> {
     Generation { id: u32, generation: u32 },
     Phantom(PhantomData<T>),
 }
+unsafe impl<T: super::traits::Asset> Send for AssetId<T> {}
+unsafe impl<T: super::traits::Asset> Sync for AssetId<T> {}
 impl<T: super::traits::Asset> Debug for AssetId<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -221,8 +223,6 @@ impl<T: asset::Asset> From<AssetIdUntyped> for AssetId<T> {
         }
     }
 }
-
-unsafe impl<T: super::traits::Asset> Send for AssetId<T> {}
 
 impl<T: super::traits::Asset> AssetId<T> {
     pub fn as_untyped_id(self) -> AssetIdUntyped {

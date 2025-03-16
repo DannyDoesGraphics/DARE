@@ -96,7 +96,11 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             memory_type: self.memory_type.clone(),
             usage_flags: self.usage_flags.clone(),
         })?;
-        let old_buffer = self.handle.take().unwrap();
+        
+        // Don't take() the old_buffer yet, instead clone it for use in the transfer operation
+        // This ensures the old buffer remains valid during the entire copy operation
+        let old_buffer = self.handle.as_ref().unwrap().clone();
+        
         // todo: implement transfer on larger size
         unsafe {
             let buffer_copy = vk::BufferCopy2 {
@@ -145,7 +149,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 _marker: Default::default(),
             };
             immediate_submit
-                .submit(move |queue, cmd_buffer_recording| unsafe {
+                .submit(vk::QueueFlags::TRANSFER,
+                        move |queue, cmd_buffer_recording| unsafe {
                     cmd_buffer_recording
                         .get_device()
                         .get_handle()
@@ -278,7 +283,6 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         &mut self,
         immediate_submit: &dare::render::util::ImmediateSubmit,
         items: &[T],
-        queue_index: u32,
     ) -> anyhow::Result<()> {
         if size_of_val(items) == 0 {
             return Ok(());
@@ -309,7 +313,9 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             .await?;
         }
         immediate_submit
-            .submit(|_, cmd_buffer_recording| unsafe {
+            .submit(
+                vk::QueueFlags::TRANSFER,
+                |_, cmd_buffer_recording| unsafe {
                 cmd_buffer_recording
                     .get_device()
                     .get_handle()
@@ -332,43 +338,9 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                             _marker: Default::default(),
                         },
                     );
-
-                let copy_barrier = vk::BufferMemoryBarrier2 {
-                    s_type: vk::StructureType::BUFFER_MEMORY_BARRIER_2,
-                    p_next: ptr::null(),
-                    src_stage_mask: vk::PipelineStageFlags2::COPY,
-                    src_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
-                    dst_stage_mask: vk::PipelineStageFlags2::VERTEX_SHADER
-                        | vk::PipelineStageFlags2::COMPUTE_SHADER,
-                    dst_access_mask: vk::AccessFlags2::SHADER_READ,
-                    src_queue_family_index: immediate_submit.get_queue_family_index(),
-                    dst_queue_family_index: queue_index,
-                    buffer: *self.handle.as_ref().unwrap().as_raw(),
-                    offset: 0,
-                    size: vk::WHOLE_SIZE,
-                    _marker: Default::default(),
-                };
-                cmd_buffer_recording
-                    .get_device()
-                    .get_handle()
-                    .cmd_pipeline_barrier2(
-                        cmd_buffer_recording.handle(),
-                        &vk::DependencyInfo {
-                            s_type: vk::StructureType::DEPENDENCY_INFO,
-                            p_next: ptr::null(),
-                            dependency_flags: Default::default(),
-                            memory_barrier_count: 0,
-                            p_memory_barriers: ptr::null(),
-                            buffer_memory_barrier_count: 1,
-                            p_buffer_memory_barriers: &copy_barrier,
-                            image_memory_barrier_count: 0,
-                            p_image_memory_barriers: ptr::null(),
-                            _marker: Default::default(),
-                        },
-                    )
             })
             .await?;
-
+        drop(staging_buffer);
         Ok(())
     }
 }
