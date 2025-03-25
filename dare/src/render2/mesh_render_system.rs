@@ -13,8 +13,10 @@ use dagal::traits::AsRaw;
 use image::imageops::unsharpen;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use std::mem::size_of;
 use tokio::task;
 use crate::asset2::assets::BufferStreamInfo;
+use crate::asset2::prelude::AssetHandle;
 use crate::render2::physical_resource;
 use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
 use crate::render2::prelude::util::TransferPool;
@@ -62,12 +64,15 @@ pub fn build_instancing_data(
     Vec<dare::render::c::CMaterial>,
     Vec<dare::render::c::InstancedSurfacesInfo>,
     Vec<[f32; 16]>,
+    HashSet<VirtualResource>,
 ) {
     // Acquire a tightly packed map
     let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> =
         HashMap::with_capacity(query.iter().len());
     let mut unique_surfaces: Vec<dare::render::c::CSurface> = Vec::new();
     let mut asset_unique_surfaces: Vec<dare::engine::components::Surface> = Vec::new();
+    // Collection of strong virtual handles
+    let mut used_resources: HashSet<VirtualResource> = HashSet::new();
 
     let mut material_map: HashMap<dare::engine::components::Material, usize> =
         HashMap::with_capacity(surface_map.len());
@@ -89,6 +94,7 @@ pub fn build_instancing_data(
             let id: usize = unique_surfaces.len();
             // attempt a load of everything
             //println!("Index: {:?}", &surface.index_buffer);
+            const BUFFER_LIFETIME: u32 = 32;
             buffers.load_or_create(
                 surface.index_buffer.clone(),
                 BufferPrepareInfo {
@@ -102,7 +108,7 @@ pub fn build_instancing_data(
                 BufferStreamInfo {
                     chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
                 },
-                3
+                BUFFER_LIFETIME
             );
             //println!("Vertex: {:?}", &surface.vertex_buffer.id());
             buffers.load_or_create(
@@ -118,7 +124,7 @@ pub fn build_instancing_data(
                 BufferStreamInfo {
                     chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
                 },
-                3
+               BUFFER_LIFETIME
             );
             //println!("Normal: {:?}", &surface.normal_buffer);
             surface.normal_buffer.as_ref().map(|buffer| {
@@ -135,7 +141,7 @@ pub fn build_instancing_data(
                     BufferStreamInfo {
                         chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
                     },
-                    3
+                    BUFFER_LIFETIME
                 );
             });
             //println!("UV: {:?}", &surface.uv_buffer);
@@ -153,7 +159,7 @@ pub fn build_instancing_data(
                     BufferStreamInfo {
                         chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
                     },
-                    3
+                    BUFFER_LIFETIME
                 );
             });
             surface.tangent_buffer.as_ref().map(|buffer| {
@@ -170,9 +176,31 @@ pub fn build_instancing_data(
                     BufferStreamInfo {
                         chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
                     },
-                    3
+                    BUFFER_LIFETIME
                 );
             });
+
+            let mut buffer_resolve = |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
+                // retrieve virtual resource, if we can, resolve for physical
+                buffers.resolve_virtual_resource(virtual_resource).map(|vr| vr.upgrade()).flatten()
+                    .map(|vr| {
+                        buffers.resolve(&vr).map(|_| {
+                            used_resources.insert(vr.clone());
+                            vr
+                        })
+                    }).flatten()
+            };
+            
+            // Check if the required buffers can be resolved and upgrade them
+            buffer_resolve(&surface.index_buffer)?;
+            buffer_resolve(&surface.vertex_buffer)?;
+            if let Some(buffer) = surface.uv_buffer.as_ref() {
+                buffer_resolve(buffer)?;
+            }
+            if let Some(buffer) = surface.tangent_buffer.as_ref() {
+                buffer_resolve(buffer)?;
+            }
+            
             if let Some(c_surface) =
                 dare::render::c::CSurface::from_surface(buffers, (*surface).clone())
             {
@@ -270,6 +298,7 @@ pub fn build_instancing_data(
         unique_materials,
         instancing_information,
         transforms,
+        used_resources,
     )
 }
 
@@ -305,12 +334,13 @@ pub async fn mesh_render(
             }
             CommandBufferState::Recording(recording) => {
                 // Culling step
-                let (asset_surfaces, surfaces, materials, instancing_information, transforms) = {
+                let (asset_surfaces, surfaces, materials, instancing_information, transforms, used_virtual_resources) = {
                     let view_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     ) * camera.get_view_matrix();
                     build_instancing_data(view_proj, &surfaces, render_context.inner.allocator.clone(), render_context.transfer_pool(), &mut textures, &mut buffers)
                 };
+                frame.resources = used_virtual_resources;
                 // check for empty surfaces, before going
                 if instancing_information.is_empty() {
                     #[cfg(feature = "tracing")]
@@ -329,8 +359,6 @@ pub async fn mesh_render(
                         first_instance: 0,
                     })
                     .collect();
-                // TODO: save handles for lifetime purposes
-                // we only need the instanced info
                 let mut instanced_surfaces_bytes_offset: Vec<u64> = vec![0];
                 // upload indirect calls
                 frame
@@ -361,40 +389,6 @@ pub async fn mesh_render(
                     )
                     .await
                     .unwrap();
-                // collect all information on the surface and store strong refs
-                let used_virtual_resources = asset_surfaces.iter()
-                    .flat_map(|surface| {
-                        let mut v = Vec::default();
-                        buffers.resolve_virtual_resource(&surface.index_buffer)
-                            .map(|vr| vr.upgrade())
-                            .flatten()
-                            .map(|vr| v.push(vr));
-                        buffers.resolve_virtual_resource(&surface.vertex_buffer)
-                               .map(|vr| vr.upgrade())
-                               .flatten()
-                               .map(|vr| v.push(vr));
-                        surface.uv_buffer.as_ref().map(|buffer|
-                        buffers.resolve_virtual_resource(buffer)
-                               .map(|vr| vr.upgrade())
-                               .flatten()
-                               .map(|vr| v.push(vr))
-                        );
-                        surface.normal_buffer.as_ref().map(|buffer|
-                            buffers.resolve_virtual_resource(buffer)
-                                   .map(|vr| vr.upgrade())
-                                   .flatten()
-                                   .map(|vr| v.push(vr))
-                        );
-                        surface.tangent_buffer.as_ref().map(|buffer|
-                            buffers.resolve_virtual_resource(buffer)
-                                   .map(|vr| vr.upgrade())
-                                   .flatten()
-                                   .map(|vr| v.push(vr))
-                        );
-                        v
-                    })
-                    .collect::<HashSet<VirtualResource>>();
-                frame.resources = used_virtual_resources;
 
                 // upload surface information
                 frame

@@ -306,6 +306,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
                 virtual_resource.uid,
                 virtual_resource.gen,
             )).map(|physical_state| {
+                println!("Removing!");
                 physical_state.take();
             });
         }
@@ -366,6 +367,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
                             .or_default();
                     deletion_slot.virtual_resource = Some(virtual_resource.clone());
                     deletion_slot.lifetime = lifetime;
+                    deletion_slot.reset();
                     virtual_resource
                 }.downgrade();
                 // apply mapping
@@ -378,6 +380,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         self.load_asset_handle(&asset_handle, prepare_info, load_info);
     }
 
+    /// Keeps a physical resource alive still
     pub fn keep_deferred_alive(&mut self, virtual_resource: &VirtualResource) {
         self.deferred_deletion.get_mut(virtual_resource)
             .map(|deferred| deferred.reset());

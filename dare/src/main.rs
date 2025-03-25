@@ -1,6 +1,7 @@
 use dagal::ash::vk;
 use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
+use tracing_tracy::client::Client;
 
 mod app;
 mod asset2;
@@ -14,6 +15,7 @@ mod window;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    Client::start();
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
         eprintln!("The program panicked: {}", info);

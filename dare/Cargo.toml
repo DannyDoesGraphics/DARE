@@ -18,29 +18,25 @@ glam = "0.29.2"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
 bytemuck = "1.19.0"
 gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", branch = "ash-0.38", features = ["default", "vulkan"] }
-clap = { version = "4.5.17", features = ["derive"] }
 bitflags = "2.6.0"
 image = "0.25.5"
-rayon = "1.10.0"
 tokio = { version = "1.41.1", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
 derivative = "2.2.0"
 bevy_ecs = { version = "0.15.2", features = ["default", "multi_threaded"] }
 reqwest = { version = "0.12.9", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 async-stream = "0.3.6"
-log = "0.4.22"
-backtrace = "0.3.74"
-glm = "0.2.3"
 bevy_tasks = "0.15.2"
 futures = "0.3.31"
 futures-core = "0.3.31"
 crossbeam-channel = "0.5.13"
 moro = "0.4.0"
 num-traits = "0.2.19"
+tracing-tracy = "0.11.4"
 #slang = { git = "https://github.com/ProjectKML/slang-rs.git" }
 
 [dev-dependencies]
-rand = "0.8.5"
+rand = "0.9.0"
 
 [features]
 # Tracing

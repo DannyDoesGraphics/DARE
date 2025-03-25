@@ -24,7 +24,7 @@ pub struct Frame {
     pub queue: dagal::device::Queue,
     pub image_extent: vk::Extent2D,
 
-    /// any resources binded for the current frame
+    /// any resources bound for the current frame
     pub resources: HashSet<dare::render::physical_resource::VirtualResource>,
     /// any material buffers
     pub material_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
