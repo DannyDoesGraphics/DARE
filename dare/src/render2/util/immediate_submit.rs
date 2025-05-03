@@ -1,10 +1,10 @@
+use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::traits::AsRaw;
 use std::ptr;
 use std::sync::{Arc, LockResult};
-use dagal::allocators::GPUAllocatorImpl;
 
 #[derive(Debug)]
 struct ImmediateSubmitInner {
@@ -24,10 +24,7 @@ impl ImmediateSubmit {
         queues: dagal::util::queue_allocator::QueueAllocator<tokio::sync::Mutex<vk::Queue>>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: Arc::new(ImmediateSubmitInner {
-                queues,
-                device,
-            }),
+            inner: Arc::new(ImmediateSubmitInner { queues, device }),
         })
     }
 
@@ -39,15 +36,19 @@ impl ImmediateSubmit {
         domain: vk::QueueFlags,
         func: F,
     ) -> anyhow::Result<R> {
-        let queue: dagal::device::Queue<tokio::sync::Mutex<vk::Queue>> =
-            self.inner.queues.retrieve_queues(None, vk::QueueFlags::TRANSFER, 1)?.pop().unwrap();
+        let queue: dagal::device::Queue<tokio::sync::Mutex<vk::Queue>> = self
+            .inner
+            .queues
+            .retrieve_queues(None, vk::QueueFlags::TRANSFER, 1)?
+            .pop()
+            .unwrap();
         let queue_guard: tokio::sync::MutexGuard<vk::Queue> = queue.acquire_queue_async().await?;
         let command_pool = dagal::command::command_pool::CommandPool::new(
             dagal::command::command_pool::CommandPoolCreateInfo::WithQueue {
                 device: self.inner.device.clone(),
                 queue: &queue,
-                flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
-            }
+                flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            },
         )?;
         let command_buffer = command_pool.allocate(1)?.pop().unwrap();
         let command_buffer = command_buffer

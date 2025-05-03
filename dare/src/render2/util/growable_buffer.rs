@@ -96,11 +96,11 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             memory_type: self.memory_type.clone(),
             usage_flags: self.usage_flags.clone(),
         })?;
-        
+
         // Don't take() the old_buffer yet, instead clone it for use in the transfer operation
         // This ensures the old buffer remains valid during the entire copy operation
         let old_buffer = self.handle.as_ref().unwrap().clone();
-        
+
         // todo: implement transfer on larger size
         unsafe {
             let buffer_copy = vk::BufferCopy2 {
@@ -149,51 +149,53 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 _marker: Default::default(),
             };
             immediate_submit
-                .submit(vk::QueueFlags::TRANSFER,
-                        move |queue, cmd_buffer_recording| unsafe {
-                    cmd_buffer_recording
-                        .get_device()
-                        .get_handle()
-                        .cmd_pipeline_barrier2(
-                            *cmd_buffer_recording.get_handle(),
-                            &vk::DependencyInfo {
-                                s_type: vk::StructureType::DEPENDENCY_INFO,
-                                p_next: ptr::null(),
-                                dependency_flags: vk::DependencyFlags::empty(),
-                                memory_barrier_count: 0,
-                                p_memory_barriers: ptr::null(),
-                                buffer_memory_barrier_count: 1,
-                                p_buffer_memory_barriers: &memory_barrier_before,
-                                image_memory_barrier_count: 0,
-                                p_image_memory_barriers: ptr::null(),
-                                _marker: Default::default(),
-                            },
-                        );
+                .submit(
+                    vk::QueueFlags::TRANSFER,
+                    move |queue, cmd_buffer_recording| unsafe {
+                        cmd_buffer_recording
+                            .get_device()
+                            .get_handle()
+                            .cmd_pipeline_barrier2(
+                                *cmd_buffer_recording.get_handle(),
+                                &vk::DependencyInfo {
+                                    s_type: vk::StructureType::DEPENDENCY_INFO,
+                                    p_next: ptr::null(),
+                                    dependency_flags: vk::DependencyFlags::empty(),
+                                    memory_barrier_count: 0,
+                                    p_memory_barriers: ptr::null(),
+                                    buffer_memory_barrier_count: 1,
+                                    p_buffer_memory_barriers: &memory_barrier_before,
+                                    image_memory_barrier_count: 0,
+                                    p_image_memory_barriers: ptr::null(),
+                                    _marker: Default::default(),
+                                },
+                            );
 
-                    cmd_buffer_recording
-                        .get_device()
-                        .get_handle()
-                        .cmd_copy_buffer2(cmd_buffer_recording.handle(), &buffer_copy);
+                        cmd_buffer_recording
+                            .get_device()
+                            .get_handle()
+                            .cmd_copy_buffer2(cmd_buffer_recording.handle(), &buffer_copy);
 
-                    cmd_buffer_recording
-                        .get_device()
-                        .get_handle()
-                        .cmd_pipeline_barrier2(
-                            cmd_buffer_recording.handle(),
-                            &vk::DependencyInfo {
-                                s_type: vk::StructureType::DEPENDENCY_INFO,
-                                p_next: ptr::null(),
-                                dependency_flags: vk::DependencyFlags::empty(),
-                                memory_barrier_count: 0,
-                                p_memory_barriers: ptr::null(),
-                                buffer_memory_barrier_count: 1,
-                                p_buffer_memory_barriers: &memory_barrier_after,
-                                image_memory_barrier_count: 0,
-                                p_image_memory_barriers: ptr::null(),
-                                _marker: Default::default(),
-                            },
-                        );
-                })
+                        cmd_buffer_recording
+                            .get_device()
+                            .get_handle()
+                            .cmd_pipeline_barrier2(
+                                cmd_buffer_recording.handle(),
+                                &vk::DependencyInfo {
+                                    s_type: vk::StructureType::DEPENDENCY_INFO,
+                                    p_next: ptr::null(),
+                                    dependency_flags: vk::DependencyFlags::empty(),
+                                    memory_barrier_count: 0,
+                                    p_memory_barriers: ptr::null(),
+                                    buffer_memory_barrier_count: 1,
+                                    p_buffer_memory_barriers: &memory_barrier_after,
+                                    image_memory_barrier_count: 0,
+                                    p_image_memory_barriers: ptr::null(),
+                                    _marker: Default::default(),
+                                },
+                            );
+                    },
+                )
                 .await?;
             self.size = (self.size as i128 + dl) as vk::DeviceSize;
             self.handle = Some(Arc::new(new_buffer));
@@ -313,9 +315,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             .await?;
         }
         immediate_submit
-            .submit(
-                vk::QueueFlags::TRANSFER,
-                |_, cmd_buffer_recording| unsafe {
+            .submit(vk::QueueFlags::TRANSFER, |_, cmd_buffer_recording| unsafe {
                 cmd_buffer_recording
                     .get_device()
                     .get_handle()

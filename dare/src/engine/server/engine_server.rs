@@ -4,23 +4,37 @@ use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::IntoSystemConfigs;
 
+#[derive(Debug, Clone)]
+pub struct EngineClient {
+    server_send: tokio::sync::mpsc::UnboundedSender<()>,
+}
+
+impl EngineClient {
+    pub fn new(server_send: tokio::sync::mpsc::UnboundedSender<()>) -> Self {
+        Self { server_send }
+    }
+
+    pub fn tick(&self) -> Result<()> {
+        Ok(self.server_send.send(())?)
+    }
+}
+
 #[derive(Debug)]
 pub struct EngineServer {
-    sender: tokio::sync::mpsc::Sender<()>,
     thread: tokio::task::JoinHandle<()>,
 }
-unsafe impl Send for EngineServer {}
-unsafe impl Sync for EngineServer {}
 
 impl EngineServer {
     pub fn new(
+        runtime: tokio::runtime::Handle,
+        mut server_recv: tokio::sync::mpsc::UnboundedReceiver<()>,
         asset_server: dare::asset2::server::AssetServer,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
         texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
         bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
     ) -> Result<Self> {
-        let rt = dare::concurrent::BevyTokioRunTime::default();
+        let rt = dare::concurrent::BevyTokioRunTime::new(runtime);
 
         let mut world = becs::World::new();
         world.insert_resource(rt.clone());
@@ -40,42 +54,29 @@ impl EngineServer {
         bb_link_send.attach_to_world(&mut scheduler);
         texture_link_send.attach_to_world(&mut scheduler);
 
-        let (send, mut recv) = tokio::sync::mpsc::channel::<()>(32);
-        let thread = rt.runtime.spawn_blocking(move || {
+        let thread = rt.runtime.spawn(async move {
             loop {
-                match recv.try_recv() {
-                    Ok(_) => {
+                if server_recv.is_closed() {
+                    break;
+                }
+                match server_recv.recv().await {
+                    None => {}
+                    Some(_) => {
                         scheduler.run(&mut world);
                     }
-                    Err(e) => match e {
-                        tokio::sync::mpsc::error::TryRecvError::Empty => {}
-                        tokio::sync::mpsc::error::TryRecvError::Disconnected => break,
-                    },
                 }
             }
             drop(world);
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 
-        Ok(Self {
-            sender: send,
-            thread,
-        })
-    }
-
-    /// stops the engine manager
-    pub fn stop(&self) {
-        self.thread.abort();
-    }
-
-    pub async fn tick(&self) -> Result<()> {
-        Ok(self.sender.send(()).await?)
+        Ok(Self { thread })
     }
 }
 
 impl Drop for EngineServer {
     fn drop(&mut self) {
         tracing::trace!("Dropping engine manager");
-        self.thread.abort();
+        //self.thread.abort();
     }
 }

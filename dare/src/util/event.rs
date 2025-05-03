@@ -1,4 +1,10 @@
 use bevy_ecs::prelude as becs;
+use std::sync::mpsc::channel;
+
+pub fn event_send<T: Send + 'static>() -> (EventSender<T>, EventReceiver<T>) {
+    let (send, recv) = crossbeam_channel::unbounded();
+    (EventSender::new(send), EventReceiver::new(recv))
+}
 
 #[derive(Debug, becs::Resource)]
 pub struct EventSender<T: Send + 'static> {

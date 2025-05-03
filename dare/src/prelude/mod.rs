@@ -7,4 +7,4 @@ pub use crate::concurrent::prelude as concurrent;
 pub use crate::engine::prelude as engine;
 pub use crate::physics::prelude as physics;
 pub use crate::render2::prelude as render;
-pub use crate::window::prelude as winit;
+pub use crate::window::prelude as window;

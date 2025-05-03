@@ -3,32 +3,16 @@ use crate::prelude as dare;
 use crate::render2::physical_resource::gpu_buffer_stream;
 use crate::render2::prelude::util::TransferPool;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
-use bevy_ecs::prelude::Component;
 use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dare::asset2 as asset;
 use futures::StreamExt;
 use futures_core::future::BoxFuture;
-use std::ops::{Deref, DerefMut};
+use std::marker::PhantomData;
 
-/// Describes a buffer used for rendering
-#[derive(Component)]
 pub struct RenderBuffer<A: Allocator + 'static> {
-    pub buffer: dagal::resource::Buffer<A>,
-    pub handle: asset::AssetHandle<asset::assets::Buffer>,
-}
-impl<A: Allocator + 'static> Deref for RenderBuffer<A> {
-    type Target = dagal::resource::Buffer<A>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.buffer
-    }
-}
-impl<A: Allocator + 'static> DerefMut for RenderBuffer<A> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.buffer
-    }
+    _phantom: PhantomData<A>,
 }
 
 pub struct BufferPrepareInfo<A: Allocator + 'static> {
@@ -41,7 +25,7 @@ pub struct BufferPrepareInfo<A: Allocator + 'static> {
 }
 
 impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
-    type Loaded = RenderBuffer<A>;
+    type Loaded = dagal::resource::Buffer<A>;
     type Asset = asset::assets::Buffer;
     type PrepareInfo = BufferPrepareInfo<A>;
 
@@ -91,10 +75,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
                 match res {
                     Some((staging, dest)) => {
                         drop(staging);
-                        return Ok(Self {
-                            buffer: dest,
-                            handle: prepare_info.handle,
-                        });
+                        return Ok(dest);
                     }
                     None => {
                         // still processing

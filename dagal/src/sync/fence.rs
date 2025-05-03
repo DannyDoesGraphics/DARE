@@ -131,8 +131,7 @@ impl<'a> Future for FenceWait<'a> {
             Ok(status) => match status {
                 true => Poll::Ready(Ok(())),
                 false => {
-                    let waker = cx.waker().clone();
-                    waker.wake_by_ref();
+                    cx.waker().wake_by_ref();
                     Poll::Pending
                 }
             },

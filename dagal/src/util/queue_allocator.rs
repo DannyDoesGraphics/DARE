@@ -57,7 +57,9 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
         queue_flags: vk::QueueFlags,
         count: usize,
     ) -> Result<Vec<dagal::device::Queue<M>>, QueueAllocatorError> {
-        let exclude: HashSet<(u32, u32)> = exclusion_mask.map(|exclusion_mask| exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect()).unwrap_or_default();
+        let exclude: HashSet<(u32, u32)> = exclusion_mask
+            .map(|exclusion_mask| exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect())
+            .unwrap_or_default();
         let mut n: usize = 0;
         let v: Vec<dagal::device::Queue<M>> = self
             .queues

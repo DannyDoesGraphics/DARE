@@ -34,11 +34,15 @@ pub fn present_system_begin(
     >,
     mut textures: becs::ResMut<
         '_,
-        physical_resource::PhysicalResourceStorage<physical_resource::RenderImage<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderImage<GPUAllocatorImpl>,
+        >,
     >,
     mut buffers: becs::ResMut<
         '_,
-        physical_resource::PhysicalResourceStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
+        >,
     >,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {

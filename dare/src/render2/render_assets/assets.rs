@@ -1,10 +1,10 @@
 use crate::prelude as dare;
+use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dare::asset2 as asset;
 use std::collections::HashMap;
-use crate::render2::physical_resource;
 
 /// Stores render assets densely packed
 pub struct HashRenderAssetStorage<T: super::traits::MetaDataRenderAsset> {
@@ -114,10 +114,7 @@ impl RenderAssetsStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>> {
         self.dense_render_assets
             .assets
             .get(&asset_id.as_untyped_id())
-            .map(|v| {
-                v.as_ref()
-                    .map(|render_buffer| render_buffer.buffer.address())
-            })
+            .map(|v| v.as_ref().map(|render_buffer| render_buffer.address()))
             .flatten()
     }
 }

@@ -1,90 +1,67 @@
 use crate::engine;
 use crate::prelude as dare;
+use crate::prelude::render::RenderServerRequest;
 use crate::render2::prelude as render;
 use anyhow::Result;
-use dagal::allocators::GPUAllocatorImpl;
-use dagal::raw_window_handle::HasRawDisplayHandle;
+use dagal::raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;
+use dagal::wsi::WindowDimensions;
+use futures::FutureExt;
 use std::sync::Arc;
 
 /// This app only exists to get the first window
 pub struct App {
+    window_send: Option<tokio::sync::oneshot::Sender<dare::window::WindowHandles>>,
     window: Option<Arc<window::Window>>,
-    engine_server: Option<engine::server::engine_server::EngineServer>,
-    render_server: Option<render::server::RenderServer>,
-    configuration: render::create_infos::RenderContextConfiguration,
+    engine_client: engine::server::engine_server::EngineClient,
+    render_client: render::server::RenderClient,
     last_position: Option<glam::Vec2>,
     last_dt: std::time::Instant,
-    surface_link_recv:
-        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Surface>,
-    surface_link_send:
-        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Surface>,
-    transform_link_recv:
-        dare::util::entity_linker::ComponentsLinkerReceiver<dare::physics::components::Transform>,
-    transform_link_send:
-        dare::util::entity_linker::ComponentsLinkerSender<dare::physics::components::Transform>,
-    bb_link_recv:
-        dare::util::entity_linker::ComponentsLinkerReceiver<render::components::BoundingBox>,
-    bb_link_send:
-        dare::util::entity_linker::ComponentsLinkerSender<render::components::BoundingBox>,
-    texture_link_recv:
-        dare::util::entity_linker::ComponentsLinkerReceiver<engine::components::Material>,
-    texture_link_send:
-        dare::util::entity_linker::ComponentsLinkerSender<engine::components::Material>,
 }
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = Arc::new(
-            event_loop
-                .create_window(
-                    window::WindowAttributes::default()
-                        .with_title("DARE")
-                        .with_resizable(true),
-                )
-                .unwrap(),
-        );
-        self.window = Some(window.clone());
-
-        let window = window.clone();
-        let config = self.configuration.clone();
-
-        tokio::task::block_in_place(|| {
-            match self.render_server.as_mut() {
-                None => {
-                    // render manager does not exist yet
-                    let mut render_server = render::server::RenderServer::new(
-                        render::create_infos::RenderContextCreateInfo {
-                            window: window.clone(),
-                            configuration: config,
-                        },
-                        self.surface_link_recv.clone(),
-                        self.texture_link_recv.clone(),
-                        self.transform_link_recv.clone(),
-                        self.bb_link_recv.clone(),
-                    );
-                    // Call the synchronous blocking send function
-                    render_server.update_surface(&window).unwrap();
-                    self.render_server = Some(render_server);
-                }
-                Some(rs) => {
-                    rs.update_surface(&window).unwrap();
-                }
-            };
-        });
-        if self.engine_server.is_none() {
-            self.engine_server = Some(
-                engine::server::EngineServer::new(
-                    self.render_server.as_ref().cloned().unwrap().asset_server(),
-                    &self.surface_link_send,
-                    &self.texture_link_send,
-                    &self.transform_link_send,
-                    &self.bb_link_send,
-                )
-                .unwrap(),
+        println!("AHH");
+        if self.window.is_none() {
+            let window = Arc::new(
+                event_loop
+                    .create_window(
+                        window::WindowAttributes::default()
+                            .with_title("DARE")
+                            .with_resizable(true),
+                    )
+                    .unwrap(),
             );
+            self.window = Some(window.clone());
+            self.window_send.take().map(|send| {
+                send.send(dare::window::WindowHandles {
+                    raw_window_handle: Arc::new(window.raw_window_handle().unwrap()),
+                    raw_display_handle: Arc::new(window.raw_display_handle().unwrap()),
+                })
+            });
+            self.render_client
+                .send_blocking(RenderServerRequest::SurfaceUpdate {
+                    dimensions: Some((
+                        self.window.as_ref().unwrap().width(),
+                        self.window.as_ref().unwrap().height(),
+                    )),
+                    raw_handles: None,
+                })
+                .unwrap();
+        } else {
+            self.render_client
+                .send_blocking(RenderServerRequest::SurfaceUpdate {
+                    dimensions: Some((
+                        self.window.as_ref().unwrap().width(),
+                        self.window.as_ref().unwrap().height(),
+                    )),
+                    raw_handles: None,
+                })
+                .unwrap();
         }
     }
 
@@ -97,69 +74,57 @@ impl winit::application::ApplicationHandler for App {
         use winit::event::WindowEvent;
         match event {
             WindowEvent::RedrawRequested => {
-                if let Some(rs) = self.render_server.as_ref() {
-                    // check if there is a valid window to render to
-                    if self
-                        .window
-                        .as_ref()
-                        .map(|window| {
-                            window.inner_size().width != 0 && window.inner_size().height != 0
-                        })
-                        .unwrap_or(false)
-                    {
-                        tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async move {
-                                let render = rs
-                                    .send(render::RenderServerNoCallbackRequest::Render)
-                                    .await
-                                    .unwrap();
-                                render.notified().await;
-                            })
-                        });
-                        if let Some(window) = self.window.as_ref() {
-                            let current_t: std::time::Instant = std::time::Instant::now();
-                            window.set_title(&format!(
-                                "DARE | micro-seconds: {}",
-                                current_t.duration_since(self.last_dt).as_millis()
-                            ));
-                            self.last_dt = current_t;
-                        }
+                // check if there is a valid window to render to
+                if self
+                    .window
+                    .as_ref()
+                    .map(|window| window.inner_size().width != 0 && window.inner_size().height != 0)
+                    .unwrap_or(false)
+                {
+                    let window_clone = self.window.clone();
+                    let current_t = std::time::Instant::now();
+                    let last_dt = self.last_dt;
+
+                    self.render_client
+                        .send_blocking(RenderServerRequest::Render)
+                        .unwrap();
+
+                    // Update window title if needed
+                    if let Some(window) = window_clone {
+                        window.set_title(&format!(
+                            "DARE | micro-seconds: {}",
+                            current_t.duration_since(last_dt).as_millis()
+                        ));
                     }
-                } else {
+
+                    // Update the last_dt here
+                    self.last_dt = current_t;
                 }
             }
             WindowEvent::CloseRequested => {
-                if let Some(rs) = self.render_server.take() {
-                    {
-                        let rs = rs.clone();
-                        tokio::task::block_in_place(|| {
-                            tokio::runtime::Handle::current().block_on(async move {
-                                let render = rs
-                                    .send(render::RenderServerNoCallbackRequest::Stop)
-                                    .await
-                                    .unwrap();
-                                render.notified().await;
-                            });
-                        });
-                    }
-                    // drop engine manager first
-                    drop(self.engine_server.take());
-                    drop(rs);
-                    println!("Dropping RS");
-                    event_loop.exit();
+                // Spawn instead of blocking the current thread
+                unsafe {
+                    // SAFETY: do not care if this fails
+                    self.render_client
+                        .send_blocking(RenderServerRequest::Stop)
+                        .unwrap_err_unchecked();
                 }
+                event_loop.exit();
             }
             WindowEvent::Resized(_) => {
-                if let Some(rs) = self.render_server.as_ref().cloned() {
-                    if let Some(window) = self.window.as_ref() {
-                        if window.inner_size().width != 0 && window.inner_size().height != 0 {
-                            rs.update_surface(window).unwrap();
-                            rs.set_new_surface_flag(false);
-                        } else {
-                            rs.set_new_surface_flag(true);
-                        }
+                if let Some(window) = self.window.as_ref() {
+                    if window.inner_size().width != 0 && window.inner_size().height != 0 {
+                        self.render_client
+                            .send_blocking(RenderServerRequest::SurfaceUpdate {
+                                dimensions: Some((
+                                    window.inner_size().width,
+                                    window.inner_size().height,
+                                )),
+                                raw_handles: None,
+                            })
+                            .unwrap();
                     }
-                };
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(window) = self.window.as_ref() {
@@ -172,11 +137,10 @@ impl winit::application::ApplicationHandler for App {
                         .flatten();
                     self.last_position = Some(position);
                     if let Some(dp) = dp {
-                        if let Some(rs) = self.render_server.as_ref() {
-                            rs.input_send()
-                                .send(dare::winit::input::Input::MouseDelta(dp))
-                                .unwrap();
-                        }
+                        self.render_client
+                            .input_send()
+                            .send(dare::window::input::Input::MouseDelta(dp))
+                            .unwrap();
                     }
                 }
             }
@@ -184,34 +148,28 @@ impl winit::application::ApplicationHandler for App {
                 self.last_position = None;
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(rs) = self.render_server.as_ref() {
-                    rs.input_send()
-                        .send(dare::winit::input::Input::KeyEvent(event))
-                        .unwrap();
-                }
+                self.render_client
+                    .input_send()
+                    .send(dare::window::input::Input::KeyEvent(event))
+                    .unwrap();
             }
             WindowEvent::MouseInput {
                 device_id,
                 state,
                 button,
             } => {
-                if let Some(rs) = self.render_server.as_ref() {
-                    rs.input_send()
-                        .send(dare::winit::input::Input::MouseButton { button, state })
-                        .unwrap();
-                }
+                self.render_client
+                    .input_send()
+                    .send(dare::window::input::Input::MouseButton { button, state })
+                    .unwrap();
             }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let Some(es) = self.engine_server.as_ref() {
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async move {
-                    es.tick().await.unwrap();
-                })
-            })
+        if let Err(_) = self.engine_client.tick() {
+            //eprintln!("Engine tick error: {}", e);
         }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
@@ -219,36 +177,19 @@ impl winit::application::ApplicationHandler for App {
     }
 }
 
-impl Drop for App {
-    fn drop(&mut self) {
-        drop(self.engine_server.take());
-    }
-}
-
 impl App {
-    pub fn new(configuration: render::create_infos::RenderContextConfiguration) -> Result<Self> {
-        let (surface_link_send, surface_link_recv) =
-            dare::util::entity_linker::ComponentsLinker::default();
-        let (transform_link_send, transform_link_recv) =
-            dare::util::entity_linker::ComponentsLinker::default();
-        let (bb_link_send, bb_link_recv) = dare::util::entity_linker::ComponentsLinker::default();
-        let (texture_link_send, texture_link_recv) =
-            dare::util::entity_linker::ComponentsLinker::default();
+    pub fn new(
+        render_client: render::server::RenderClient,
+        engine_client: engine::server::EngineClient,
+        window_send: tokio::sync::oneshot::Sender<dare::window::WindowHandles>,
+    ) -> Result<Self> {
         Ok(Self {
+            window_send: Some(window_send),
             window: None,
-            engine_server: None,
-            render_server: None,
-            configuration,
+            engine_client,
+            render_client,
             last_position: None,
             last_dt: std::time::Instant::now(),
-            surface_link_recv,
-            surface_link_send,
-            transform_link_recv,
-            transform_link_send,
-            bb_link_recv,
-            bb_link_send,
-            texture_link_recv,
-            texture_link_send,
         })
     }
 }

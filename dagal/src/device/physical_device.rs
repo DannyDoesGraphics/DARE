@@ -77,10 +77,10 @@ impl PhysicalDevice {
     }
 
     /// Selects the most suitable device
-    pub fn select<Window: crate::wsi::DagalWindow>(
+    pub fn select(
         instance: &crate::core::Instance,
         surface: Option<&crate::wsi::Surface>,
-        settings: crate::bootstrap::app_info::AppSettings<Window>,
+        settings: crate::bootstrap::app_info::AppSettings,
     ) -> anyhow::Result<Self> {
         use std::ffi::c_void;
 

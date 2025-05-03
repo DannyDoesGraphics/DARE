@@ -1,5 +1,7 @@
 use ash::vk;
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::fmt::Debug;
+use std::sync::Arc;
 
 /// Indicates what the expectation of such an input
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,7 +99,7 @@ pub struct GPURequirements {
 }
 
 #[derive(Debug)]
-pub struct AppSettings<'a, Window: crate::wsi::DagalWindow> {
+pub struct AppSettings {
     /// Name of application
     pub name: String,
     /// Application version
@@ -112,8 +114,8 @@ pub struct AppSettings<'a, Window: crate::wsi::DagalWindow> {
     pub enable_validation: bool,
     /// Enable debug utils
     pub debug_utils: bool,
-    /// Optional window reference
-    pub window: Option<&'a Window>,
+    pub raw_display_handle: Option<RawDisplayHandle>,
+    pub raw_window_handle: Option<RawWindowHandle>,
     /// Surface formats expected
     pub surface_format: Option<Expected<vk::SurfaceFormatKHR>>,
     /// Preferred present mode, ordered from most preferred to least

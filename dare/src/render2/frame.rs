@@ -178,13 +178,12 @@ impl Frame {
             vk::FenceCreateFlags::SIGNALED,
         )?;
         // make pools and buffers
-        let command_pool = dagal::command::CommandPool::new(
-            dagal::command::CommandPoolCreateInfo::WithQueue {
+        let command_pool =
+            dagal::command::CommandPool::new(dagal::command::CommandPoolCreateInfo::WithQueue {
                 device: allocator.device(),
                 queue: present_queue,
                 flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-            }
-        )?;
+            })?;
         let command_buffer =
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
         Ok(Frame {

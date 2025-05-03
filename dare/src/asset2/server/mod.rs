@@ -67,7 +67,7 @@ impl AssetServer {
     /// # Locking behavior
     /// Since all state is stored behind a RwLock shard, write will be attempted, but upon
     /// failure, will not be done and simply skipped.
-    pub fn flush(&self) -> anyhow::Result<()> {
+    pub fn try_flush(&self) -> anyhow::Result<()> {
         while let Ok(drop_id) = self.inner.drop_recv.try_recv() {
             match self.infos.states.try_get_mut(&drop_id) {
                 TryResult::Present(mut asset_info) => {

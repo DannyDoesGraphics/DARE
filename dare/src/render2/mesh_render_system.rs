@@ -1,6 +1,11 @@
+use crate::asset2::assets::BufferStreamInfo;
+use crate::asset2::prelude::AssetHandle;
 use crate::prelude as dare;
 use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
+use crate::render2::physical_resource;
+use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
+use crate::render2::prelude::util::TransferPool;
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -15,11 +20,6 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use tokio::task;
-use crate::asset2::assets::BufferStreamInfo;
-use crate::asset2::prelude::AssetHandle;
-use crate::render2::physical_resource;
-use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
-use crate::render2::prelude::util::TransferPool;
 
 /// Functions effectively as a collection
 struct SurfaceRender<'a> {
@@ -85,7 +85,8 @@ pub fn build_instancing_data(
         normal_texture_id: 0,
         normal_sampler_id: 0,
     }];
-    for (_index, (_entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+    for (_index, (_entity, surface, material, bounding_box, transform)) in query.iter().enumerate()
+    {
         // check if it even exists in frame
         if !bounding_box.visible_in_frustum(transform.get_transform_matrix(), view_proj) {
             continue;
@@ -94,21 +95,34 @@ pub fn build_instancing_data(
             let id: usize = unique_surfaces.len();
             // attempt a load of everything
             //println!("Index: {:?}", &surface.index_buffer);
-            const BUFFER_LIFETIME: u32 = 32;
+            const BUFFER_LIFETIME: u32 = 8;
             buffers.load_or_create(
                 surface.index_buffer.clone(),
                 BufferPrepareInfo {
                     allocator: allocator.clone(),
                     handle: surface.index_buffer.clone(),
                     transfer_pool: transfer_pool.clone(),
-                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::INDEX_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                     location: MemoryLocation::GpuOnly,
-                    name: Some(buffers.asset_server.get_metadata(&surface.index_buffer).as_ref().map(|metadata| metadata.name.clone()).unwrap_or(String::from("UNNAMED index"))),
+                    name: Some(
+                        buffers
+                            .asset_server
+                            .get_metadata(&surface.index_buffer)
+                            .as_ref()
+                            .map(|metadata| metadata.name.clone())
+                            .unwrap_or(String::from("UNNAMED index")),
+                    ),
                 },
                 BufferStreamInfo {
-                    chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
+                    chunk_size: transfer_pool
+                        .cpu_staging_size()
+                        .min(transfer_pool.gpu_staging_size())
+                        as usize,
                 },
-                BUFFER_LIFETIME
+                BUFFER_LIFETIME,
             );
             //println!("Vertex: {:?}", &surface.vertex_buffer.id());
             buffers.load_or_create(
@@ -117,14 +131,27 @@ pub fn build_instancing_data(
                     allocator: allocator.clone(),
                     handle: surface.vertex_buffer.clone(),
                     transfer_pool: transfer_pool.clone(),
-                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::VERTEX_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                     location: MemoryLocation::GpuOnly,
-                    name: Some(buffers.asset_server.get_metadata(&surface.vertex_buffer).as_ref().map(|metadata| metadata.name.clone()).unwrap_or(String::from("UNNAMED vertex"))),
+                    name: Some(
+                        buffers
+                            .asset_server
+                            .get_metadata(&surface.vertex_buffer)
+                            .as_ref()
+                            .map(|metadata| metadata.name.clone())
+                            .unwrap_or(String::from("UNNAMED vertex")),
+                    ),
                 },
                 BufferStreamInfo {
-                    chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
+                    chunk_size: transfer_pool
+                        .cpu_staging_size()
+                        .min(transfer_pool.gpu_staging_size())
+                        as usize,
                 },
-               BUFFER_LIFETIME
+                BUFFER_LIFETIME,
             );
             //println!("Normal: {:?}", &surface.normal_buffer);
             surface.normal_buffer.as_ref().map(|buffer| {
@@ -134,14 +161,27 @@ pub fn build_instancing_data(
                         allocator: allocator.clone(),
                         handle: buffer.clone(),
                         transfer_pool: transfer_pool.clone(),
-                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(buffers.asset_server.get_metadata(buffer).as_ref().map(|metadata| metadata.name.clone()).unwrap_or(String::from("UNNAMED normal"))),
+                        name: Some(
+                            buffers
+                                .asset_server
+                                .get_metadata(buffer)
+                                .as_ref()
+                                .map(|metadata| metadata.name.clone())
+                                .unwrap_or(String::from("UNNAMED normal")),
+                        ),
                     },
                     BufferStreamInfo {
-                        chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
                     },
-                    BUFFER_LIFETIME
+                    BUFFER_LIFETIME,
                 );
             });
             //println!("UV: {:?}", &surface.uv_buffer);
@@ -152,14 +192,27 @@ pub fn build_instancing_data(
                         allocator: allocator.clone(),
                         handle: buffer.clone(),
                         transfer_pool: transfer_pool.clone(),
-                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(buffers.asset_server.get_metadata(buffer).as_ref().map(|metadata| metadata.name.clone()).unwrap_or(String::from("UNNAMED uv"))),
+                        name: Some(
+                            buffers
+                                .asset_server
+                                .get_metadata(buffer)
+                                .as_ref()
+                                .map(|metadata| metadata.name.clone())
+                                .unwrap_or(String::from("UNNAMED uv")),
+                        ),
                     },
                     BufferStreamInfo {
-                        chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
                     },
-                    BUFFER_LIFETIME
+                    BUFFER_LIFETIME,
                 );
             });
             surface.tangent_buffer.as_ref().map(|buffer| {
@@ -169,28 +222,49 @@ pub fn build_instancing_data(
                         allocator: allocator.clone(),
                         handle: buffer.clone(),
                         transfer_pool: transfer_pool.clone(),
-                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(buffers.asset_server.get_metadata(buffer).as_ref().map(|metadata| metadata.name.clone()).unwrap_or(String::from("UNNAMED tangent"))),
+                        name: Some(
+                            buffers
+                                .asset_server
+                                .get_metadata(buffer)
+                                .as_ref()
+                                .map(|metadata| metadata.name.clone())
+                                .unwrap_or(String::from("UNNAMED tangent")),
+                        ),
                     },
                     BufferStreamInfo {
-                        chunk_size: transfer_pool.cpu_staging_size().min(transfer_pool.gpu_staging_size()) as usize,
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
                     },
-                    BUFFER_LIFETIME
+                    BUFFER_LIFETIME,
                 );
             });
 
-            let mut buffer_resolve = |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
-                // retrieve virtual resource, if we can, resolve for physical
-                buffers.resolve_virtual_resource(virtual_resource).map(|vr| vr.upgrade()).flatten()
-                    .map(|vr| {
-                        buffers.resolve(&vr).map(|_| {
-                            used_resources.insert(vr.clone());
-                            vr
+            let mut buffer_resolve =
+                |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
+                    // retrieve virtual resource, if we can, resolve for physical
+                    buffers
+                        .resolve_virtual_resource(virtual_resource)
+                        .map(|vr| {
+                            println!("upgrade: {}", vr.upgrade().is_some());
+                            vr.upgrade()
                         })
-                    }).flatten()
-            };
-            
+                        .flatten()
+                        .map(|vr| {
+                            buffers.resolve(&vr).map(|_| {
+                                used_resources.insert(vr.clone());
+                                vr
+                            })
+                        })
+                        .flatten()
+                };
+
             // Check if the required buffers can be resolved and upgrade them
             buffer_resolve(&surface.index_buffer)?;
             buffer_resolve(&surface.vertex_buffer)?;
@@ -200,7 +274,7 @@ pub fn build_instancing_data(
             if let Some(buffer) = surface.tangent_buffer.as_ref() {
                 buffer_resolve(buffer)?;
             }
-            
+
             if let Some(c_surface) =
                 dare::render::c::CSurface::from_surface(buffers, (*surface).clone())
             {
@@ -237,7 +311,8 @@ pub fn build_instancing_data(
 
     /// (surface_index, material_index) -> transforms
     let mut instance_groups: HashMap<(u64, u64), Vec<glam::Mat4>> = HashMap::new();
-    for (_index, (_entity, surface, material, _bounding_box, transform)) in query.iter().enumerate() {
+    for (_index, (_entity, surface, material, _bounding_box, transform)) in query.iter().enumerate()
+    {
         // ignore surfaces which failed to resolve
         if surface_map
             .get(surface)
@@ -319,11 +394,11 @@ pub async fn mesh_render(
         ),
     >,
     mut textures: &mut physical_resource::PhysicalResourceStorage<
-            physical_resource::RenderImage<GPUAllocatorImpl>,
-        >,
+        physical_resource::RenderImage<GPUAllocatorImpl>,
+    >,
     mut buffers: &mut physical_resource::PhysicalResourceStorage<
-            physical_resource::RenderBuffer<GPUAllocatorImpl>,
-        >,
+        physical_resource::RenderBuffer<GPUAllocatorImpl>,
+    >,
 ) {
     #[cfg(feature = "tracing")]
     tracing::trace!("Rendering meshes into {frame_number}");
@@ -334,17 +409,34 @@ pub async fn mesh_render(
             }
             CommandBufferState::Recording(recording) => {
                 // Culling step
-                let (asset_surfaces, surfaces, materials, instancing_information, transforms, used_virtual_resources) = {
+                let (
+                    asset_surfaces,
+                    surfaces,
+                    materials,
+                    instancing_information,
+                    transforms,
+                    used_virtual_resources,
+                ) = {
                     let view_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     ) * camera.get_view_matrix();
-                    build_instancing_data(view_proj, &surfaces, render_context.inner.allocator.clone(), render_context.transfer_pool(), &mut textures, &mut buffers)
+                    build_instancing_data(
+                        view_proj,
+                        &surfaces,
+                        render_context.inner.allocator.clone(),
+                        render_context.transfer_pool(),
+                        &mut textures,
+                        &mut buffers,
+                    )
                 };
+                frame.resources.clear();
                 frame.resources = used_virtual_resources;
                 // check for empty surfaces, before going
                 if instancing_information.is_empty() {
                     #[cfg(feature = "tracing")]
                     tracing::warn!("No instances found, skipping render.");
+
+                    println!("Nothing found");
                     return;
                 }
 
@@ -509,9 +601,7 @@ pub async fn mesh_render(
                 for (index, instancing) in instancing_information.iter().enumerate() {
                     let surface_asset = &asset_surfaces[instancing.surface as usize];
                     let index_buffer = buffers
-                        .resolve_asset(
-                            &asset_surfaces[instancing.surface as usize].index_buffer,
-                        )
+                        .resolve_asset(&asset_surfaces[instancing.surface as usize].index_buffer)
                         .unwrap();
                     // push new constants
                     push_constant.instanced_surface_info =
@@ -545,7 +635,7 @@ pub async fn mesh_render(
                             .get_handle()
                             .cmd_bind_index_buffer(
                                 recording.handle(),
-                                *index_buffer.buffer.as_raw(),
+                                *index_buffer.as_raw(),
                                 0,
                                 vk::IndexType::UINT32,
                             );

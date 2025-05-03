@@ -3,6 +3,7 @@ use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
+use dagal::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use dagal::traits::{AsRaw, Destructible};
 use dagal::winit;
 use std::mem::{swap, ManuallyDrop};
@@ -30,7 +31,7 @@ pub struct SurfaceContextUpdateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
-    pub window: &'a winit::window::Window,
+    pub raw_handles: crate::window::WindowHandles,
 
     pub frames_in_flight: Option<usize>,
 }
@@ -42,7 +43,8 @@ pub(super) struct InnerSurfaceContextCreateInfo<'a> {
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub present_queue: dagal::device::Queue,
-    pub window: &'a winit::window::Window,
+    pub raw_handles: crate::window::WindowHandles,
+    pub extent: (u32, u32),
 
     // Frames in flight
     pub frames_in_flight: Option<usize>,
@@ -62,18 +64,19 @@ impl SurfaceContext {
         // make instances
         let surface = window_context_ci
             .surface
-            .unwrap_or(dagal::wsi::Surface::new(
+            .unwrap_or(dagal::wsi::Surface::new_with_handles(
                 window_context_ci.instance.get_entry(),
                 window_context_ci.instance.get_instance(),
-                window_context_ci.window,
+                *window_context_ci.raw_handles.raw_display_handle,
+                *window_context_ci.raw_handles.raw_window_handle,
             )?);
         let surface =
             surface.query_details(unsafe { *window_context_ci.physical_device.as_raw() })?;
         let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface);
         // clamp window size into surface limits
         let image_extent = swapchain.clamp_extent(&vk::Extent2D {
-            width: window_context_ci.window.inner_size().width,
-            height: window_context_ci.window.inner_size().height,
+            width: window_context_ci.extent.0,
+            height: window_context_ci.extent.1,
         });
         let frames_in_flight = window_context_ci.frames_in_flight.map(|fif| {
             fif.clamp(
@@ -144,21 +147,19 @@ impl SurfaceContext {
 
 impl Drop for SurfaceContext {
     fn drop(&mut self) {
-        let mut vk_fences: Vec<vk::Fence> = Vec::new();
-        while vk_fences.len() != self.frames.len() {
-            vk_fences.clear();
-            for frame in self.frames.iter() {
-                tokio::task::block_in_place(|| {
-                    let rt_handle = tokio::runtime::Handle::current();
-                    rt_handle.block_on(async {
-                        let locked_frame = frame.lock().await;
-                        if locked_frame.render_fence.get_fence_status().unwrap_or(true) {
-                            vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
-                        }
-                    });
-                });
+        let mut vk_fences = Vec::new();
+
+        // Collect all valid fences
+        for frame in self.frames.iter() {
+            // Use blocking lock instead of async
+            if let Ok(locked_frame) = frame.try_lock() {
+                if locked_frame.render_fence.get_fence_status().unwrap_or(true) {
+                    vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
+                }
             }
         }
+
+        // Wait for all fences if any were collected
         if !vk_fences.is_empty() {
             unsafe {
                 self.allocator

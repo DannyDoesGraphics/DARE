@@ -9,7 +9,9 @@ use dagal::ash::vk::Handle;
 use dagal::bootstrap::app_info::{Expected, QueueRequest};
 use dagal::bootstrap::init::ContextInit;
 use dagal::pipelines::PipelineBuilder;
-use dagal::raw_window_handle::HasRawDisplayHandle;
+use dagal::raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+};
 use dagal::traits::AsRaw;
 use dagal::winit;
 use futures::StreamExt;
@@ -22,7 +24,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct RenderContextCreateInfo {
-    pub(crate) window: Arc<winit::window::Window>,
+    pub(crate) raw_handles: dare::window::WindowHandles,
     pub(crate) configuration: RenderContextConfiguration,
 }
 
@@ -36,8 +38,9 @@ pub struct RenderContextConfiguration {
 
 #[derive(Debug)]
 pub struct RenderContextInner {
-    pub(super) render_thread: std::sync::RwLock<Option<tokio::task::AbortHandle>>,
+    pub(super) render_thread: RwLock<Option<tokio::task::AbortHandle>>,
     pub(super) configuration: RenderContextConfiguration,
+    pub(super) raw_handles: dare::window::WindowHandles,
     pub(super) transfer_pool: dare::render::util::TransferPool<GPUAllocatorImpl>,
     pub(super) window_context: Arc<super::window_context::WindowContext>,
     pub(super) new_swapchain_requested: AtomicBool,
@@ -54,9 +57,17 @@ pub struct RenderContextInner {
 
 impl Drop for RenderContextInner {
     fn drop(&mut self) {
-        while let Some(abort_handle) = self.render_thread.write().unwrap().as_ref() {
-            if abort_handle.is_finished() {
-                break;
+        // wait for thread lock to be free (should be)
+        // we spin lock here
+        loop {
+            if let Ok(lock) = self.render_thread.try_write() {
+                if let Some(lock) = &*lock {
+                    // attempt to abort
+                    lock.abort();
+                    if lock.is_finished() {
+                        break;
+                    }
+                }
             }
         }
         unsafe { self.device.get_handle().device_wait_idle().unwrap() }
@@ -74,7 +85,7 @@ impl RenderContext {
     pub fn new(ci: RenderContextCreateInfo) -> Result<Self> {
         let (instance, physical_device, surface, device, mut allocator, execution_manager) =
             dagal::bootstrap::init::WindowedContext::init(
-                dagal::bootstrap::app_info::AppSettings::<winit::window::Window> {
+                dagal::bootstrap::app_info::AppSettings {
                     name: "DARE".to_string(),
                     version: 0,
                     engine_name: "DARE".to_string(),
@@ -82,7 +93,8 @@ impl RenderContext {
                     api_version: (1, 3, 0, 0),
                     enable_validation: true,
                     debug_utils: cfg!(debug_assertions),
-                    window: Some(&*ci.window),
+                    raw_display_handle: Some(*ci.raw_handles.raw_display_handle),
+                    raw_window_handle: Some(*ci.raw_handles.raw_window_handle),
                     surface_format: Some(Expected::Preferred(vk::SurfaceFormatKHR {
                         format: vk::Format::B8G8R8_SRGB,
                         color_space: Default::default(),
@@ -202,16 +214,14 @@ impl RenderContext {
                         physical_device: &physical_device,
                         allocator: allocator.clone(),
                         present_queue,
-                        window: &ci.window,
+                        raw_handles: ci.raw_handles.clone(),
+                        extent: (0, 0),
                         frames_in_flight: Some(3),
                     },
                 )?),
+                window_handles: ci.raw_handles.clone(),
             },
         );
-        let gpu_rt = dare::render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
-            device.clone(),
-            &mut allocator,
-        )?;
         /// 256kb transfers
         let transfer_pool = {
             dare::render::util::TransferPool::new(
@@ -258,6 +268,7 @@ impl RenderContext {
                 allocator,
                 window_context: Arc::new(window_context),
                 configuration: ci.configuration,
+                raw_handles: ci.raw_handles,
                 transfer_pool,
                 graphics_pipeline,
                 graphics_layout: graphics_pipeline_layout,
@@ -268,14 +279,14 @@ impl RenderContext {
         })
     }
 
-    pub fn update_surface(&self, window: &winit::window::Window) -> Result<()> {
+    pub fn update_surface(&self) -> Result<()> {
         self.inner.window_context.update_surface(
             super::surface_context::SurfaceContextUpdateInfo {
                 instance: &self.inner.instance,
                 physical_device: &self.inner.physical_device,
                 allocator: self.inner.allocator.clone(),
-                window,
                 frames_in_flight: Some(self.inner.configuration.target_frames_in_flight),
+                raw_handles: self.inner.raw_handles.clone(),
             },
         )?;
         Ok(())
@@ -286,7 +297,8 @@ impl RenderContext {
         self.inner.transfer_pool.clone()
     }
 
-    pub fn strong_count(&self) -> usize {
-        Arc::strong_count(&self.inner)
+    /// Bind a render thread to the render context
+    pub async fn bind_render_thread(&self, thread: tokio::task::AbortHandle) {
+        *self.inner.render_thread.write().await = Some(thread);
     }
 }

@@ -9,19 +9,15 @@ use std::ffi::{c_char, c_void, CString};
 use std::marker::PhantomData;
 use std::ptr;
 
-pub struct WindowlessContext<W: crate::wsi::DagalWindow> {
-    _phantom: PhantomData<W>,
-}
+pub struct WindowlessContext {}
 
-pub struct WindowedContext<W: crate::wsi::DagalWindow> {
-    _phantom: PhantomData<W>,
-}
+pub struct WindowedContext {}
 
-pub trait ContextInit<W: crate::wsi::DagalWindow> {
+pub trait ContextInit {
     type Output<A: Allocator>;
 
     /// Initialize the context with the default allocator
-    fn init(settings: AppSettings<W>) -> anyhow::Result<Self::Output<GPUAllocatorImpl>>;
+    fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>>;
 
     /// Initializes the context with a custom allocator
     fn init_with_allocator<
@@ -32,12 +28,12 @@ pub trait ContextInit<W: crate::wsi::DagalWindow> {
             &crate::device::LogicalDevice,
         ) -> anyhow::Result<A>,
     >(
-        settings: AppSettings<W>,
+        settings: AppSettings,
         make_alloc: F,
     ) -> anyhow::Result<Self::Output<A>>;
 }
 
-impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowlessContext<W> {
+impl ContextInit for WindowlessContext {
     type Output<A: Allocator> = (
         crate::core::Instance,
         crate::device::PhysicalDevice,
@@ -46,7 +42,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowlessContext<W> {
         crate::device::execution_manager::ExecutionManager,
     );
 
-    fn init(settings: AppSettings<W>) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
+    fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         todo!()
     }
 
@@ -58,14 +54,14 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowlessContext<W> {
             &crate::device::LogicalDevice,
         ) -> anyhow::Result<A>,
     >(
-        settings: AppSettings<W>,
+        settings: AppSettings,
         make_alloc: F,
     ) -> anyhow::Result<Self::Output<A>> {
         todo!()
     }
 }
 
-impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
+impl ContextInit for WindowedContext {
     type Output<A: Allocator> = (
         crate::core::Instance,
         crate::device::PhysicalDevice,
@@ -75,7 +71,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
         crate::device::execution_manager::ExecutionManager,
     );
 
-    fn init(settings: AppSettings<W>) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
+    fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         let application_name: CString = CString::new(settings.name.clone())?;
         let engine_name: CString = CString::new(settings.engine_name.clone())?;
         let application_info = unsafe {
@@ -99,12 +95,9 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
         if settings.enable_validation {
             layers.push(CString::new("VK_LAYER_KHRONOS_validation")?);
         }
-        let display_handle = settings.window.map(|r| r.raw_display_handle());
-        let window_handle = settings.window.map(|r| r.raw_window_handle());
         let mut extensions: Vec<CString> = Vec::new();
-        if let Some(display_handle) = display_handle.clone() {
-            let display_handle = display_handle?;
-            for ext in ash_window::enumerate_required_extensions(display_handle)? {
+        if let Some(display_handle) = settings.raw_display_handle.as_ref() {
+            for ext in ash_window::enumerate_required_extensions(*display_handle)? {
                 extensions.push(crate::util::wrap_c_str(*ext));
             }
         }
@@ -136,12 +129,14 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             })?
         };
         let surface: Option<crate::wsi::Surface> =
-            if let (Some(display_handle), Some(window_handle)) = (display_handle, window_handle) {
+            if let (Some(display_handle), Some(window_handle)) =
+                (settings.raw_display_handle, settings.raw_window_handle)
+            {
                 crate::wsi::Surface::new_with_handles(
                     instance.get_entry(),
                     instance.get_instance(),
-                    display_handle?,
-                    window_handle?,
+                    display_handle,
+                    window_handle,
                 )
                 .map_or_else(
                     |err| {
@@ -265,7 +260,7 @@ impl<W: crate::wsi::DagalWindow> ContextInit<W> for WindowedContext<W> {
             &crate::device::LogicalDevice,
         ) -> anyhow::Result<A>,
     >(
-        settings: AppSettings<W>,
+        settings: AppSettings,
         make_alloc: F,
     ) -> anyhow::Result<Self::Output<A>> {
         todo!()

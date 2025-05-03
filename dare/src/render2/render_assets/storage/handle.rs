@@ -70,9 +70,14 @@ impl<T: MetaDataRenderAsset> Drop for RenderAssetHandle<T> {
                 handle,
                 dropped_handles_send,
             } => {
-                dropped_handles_send.send(HandleRCDelta::Remove(RenderAssetHandle::Weak {
-                    handle: handle.clone(),
-                }));
+                // SAFETY: we can ignore all errors here
+                unsafe {
+                    dropped_handles_send
+                        .send(HandleRCDelta::Remove(RenderAssetHandle::Weak {
+                            handle: handle.clone(),
+                        }))
+                        .unwrap_err_unchecked();
+                }
             }
             RenderAssetHandle::Weak { .. } => {}
         }

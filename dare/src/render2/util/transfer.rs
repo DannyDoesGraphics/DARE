@@ -1,18 +1,14 @@
-use crate::util::either::Either;
 use anyhow::Result;
-use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::ash::vk::{Handle, Queue};
+use dagal::ash::vk::Queue;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
-use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
 use futures::stream::FuturesUnordered;
-use futures::{FutureExt, TryFutureExt};
 use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 #[derive(Debug)]
 pub enum TransferRequest<A: Allocator> {
@@ -123,16 +119,19 @@ struct TransferProcessor {
 async fn pick_available_queues(
     queues: &[dagal::device::Queue],
 ) -> (usize, tokio::sync::MutexGuard<'_, Queue>) {
-    loop {
-        for (index, queue) in queues.iter().enumerate() {
-            if let Ok(lock) = queue.get_handle().try_lock() {
-                // If we successfully locked a CommandBuffer, return it
-                return (index, lock);
-            }
-        }
-        // Sleep briefly before retrying to avoid busy waiting
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    let lock_futures = queues
+        .iter()
+        .enumerate()
+        .map(|(idx, queue)| {
+            Box::pin(async move {
+                let queue = queue.get_handle().lock().await;
+                (idx, queue)
+            }) as std::pin::Pin<Box<_>>
+        })
+        .collect::<Vec<_>>();
+
+    // race
+    futures::future::select_all(lock_futures).await.0
 }
 
 impl<A: Allocator + 'static> TransferPool<A> {
@@ -255,7 +254,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             device: device.clone(),
                             queue,
                             flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-                        }
+                        },
                     )
                     .unwrap()
                 })
@@ -389,6 +388,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
         let fence: &dagal::sync::Fence = &processor.fences[index];
         // wait for fence to be cleared
         fence.fence_await().await?;
+
         fence.reset().unwrap();
         let res = {
             let command_buffer = processor.command_pools[index]
@@ -433,11 +433,11 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             dst_layout,
                             src_buffer,
                             src_offset,
-                            src_length,
+                            src_length: _src_length,
                             extent,
                             dst_image,
                             dst_offset,
-                            dst_length,
+                            dst_length: _dst_length,
                         } => {
                             processor.device.get_handle().cmd_pipeline_barrier2(
                                 command_buffer.handle(),

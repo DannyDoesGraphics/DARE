@@ -3,11 +3,11 @@ pub mod indirect_buffers;
 pub use indirect_buffers::*;
 
 use crate::prelude as dare;
+use crate::render2::physical_resource;
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
-use crate::render2::physical_resource;
 
 bitflags! {
     #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

@@ -14,11 +14,9 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
-pub mod asset_manager_system;
 pub mod handle;
-pub use asset_manager_system::*;
-pub use handle::*;
 use crate::render2::physical_resource;
+pub use handle::*;
 
 enum InternalLoadedState<T: MetaDataRenderAsset> {
     /// Asset is ready on the GPU to be loaded into
@@ -307,16 +305,13 @@ impl RenderAssetManagerStorage<physical_resource::RenderBuffer<GPUAllocatorImpl>
         &self,
         handle: &RenderAssetHandle<physical_resource::RenderBuffer<GPUAllocatorImpl>>,
     ) -> Option<vk::DeviceAddress> {
-        self.internal_loaded
-            .get(handle)
-            .map(|slot| slot.buffer.address())
+        self.internal_loaded.get(handle).map(|slot| slot.address())
     }
 
     pub fn get_bda_from_asset_handle(
         &self,
         handle: &AssetHandle<dare::asset2::assets::Buffer>,
     ) -> Option<vk::DeviceAddress> {
-        self.asset_resolve(handle)
-            .map(|buffer| buffer.address())
+        self.asset_resolve(handle).map(|buffer| buffer.address())
     }
 }

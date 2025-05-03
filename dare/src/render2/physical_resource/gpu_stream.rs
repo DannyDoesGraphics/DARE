@@ -6,6 +6,9 @@ use dagal::ash::vk;
 use futures::StreamExt;
 use futures_core::Stream;
 
+/// Streams data from a source stream to a GPU buffer
+///
+/// Returns back the staging buffer and the destination buffer as a tuple
 pub fn gpu_buffer_stream<'a, T, A>(
     mut staging_buffer: dagal::resource::Buffer<A>,
     dst_buffer: dagal::resource::Buffer<A>,
@@ -67,4 +70,52 @@ where
             }
         }
     }
+}
+
+/// Streams data from a source stream to a GPU texture
+///
+/// Returns back the staging buffer and the destination image as a tuple
+pub fn gpu_texture_stream<'a, T, A>(
+    mut staging_buffer: dagal::resource::Buffer<A>,
+    dst_image: dagal::resource::Image<A>,
+    transfer_pool: dare::render::util::TransferPool<A>,
+    stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
+) -> ()
+where
+    T: AsRef<[u8]> + Send + 'a,
+    A: Allocator + 'static,
+{
+    assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size());
+
+    stream! {
+        let mut initial_progress = 0;
+        let mut staging_buffer = Some(staging_buffer);
+        let mut dest_image = Some(dst_image);
+
+        // stabilize the stream to within buffer stream restrictions
+        let stream = stream.filter_map(|item| async move {
+            match item {
+                Ok(value) => Some(value),
+                Err(err) => {
+                    panic!("Stream error: {}", err);
+                    None
+                }
+            }
+        }).boxed();
+        let mut stream = dare::asset2::loaders::framer::Framer::new(stream, staging_buffer.as_ref().unwrap().get_size() as usize).boxed();
+        /*
+        loop {
+            if let Some(data) = stream.next().await {
+                assert!(data.len() <= transfer_pool.gpu_staging_size() as usize);
+                let length = data.len() as vk::DeviceSize;
+                // write to staging
+                staging_buffer.as_mut().unwrap().write(0, &data).unwrap();
+                let transfer_future = transfer_pool.transfer_gpu(
+                )
+            }
+        }
+         */
+    };
+
+    todo!()
 }

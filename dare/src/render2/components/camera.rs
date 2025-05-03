@@ -152,7 +152,7 @@ impl Camera {
 
 pub fn camera_system(
     mut camera: becs::ResMut<'_, Camera>,
-    mut input: becs::ResMut<'_, dare::util::event::EventReceiver<dare::winit::input::Input>>,
+    mut input: becs::ResMut<'_, dare::util::event::EventReceiver<dare::window::input::Input>>,
     dt: becs::ResMut<dare::render::systems::delta_time::DeltaTime>,
 ) {
     let dt = dt.get_delta();
