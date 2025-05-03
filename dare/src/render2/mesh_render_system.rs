@@ -251,10 +251,7 @@ pub fn build_instancing_data(
                     // retrieve virtual resource, if we can, resolve for physical
                     buffers
                         .resolve_virtual_resource(virtual_resource)
-                        .map(|vr| {
-                            println!("upgrade: {}", vr.upgrade().is_some());
-                            vr.upgrade()
-                        })
+                        .map(|vr| vr.upgrade())
                         .flatten()
                         .map(|vr| {
                             buffers.resolve(&vr).map(|_| {
