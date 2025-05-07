@@ -12,8 +12,8 @@ use dagal::traits::AsRaw;
 use std::mem::swap;
 use std::ptr;
 use std::ptr::write;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::MutexGuard;
 
 /// Grabs the final present image and draws it

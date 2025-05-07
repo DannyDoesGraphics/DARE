@@ -10,8 +10,8 @@ use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
-use dagal::command::command_buffer::CmdBuffer;
 use dagal::command::CommandBufferState;
+use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::Pipeline;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
@@ -95,7 +95,7 @@ pub fn build_instancing_data(
             let id: usize = unique_surfaces.len();
             // attempt a load of everything
             //println!("Index: {:?}", &surface.index_buffer);
-            const BUFFER_LIFETIME: u32 = 8;
+            const BUFFER_LIFETIME: u32 = 64;
             buffers.load_or_create(
                 surface.index_buffer.clone(),
                 BufferPrepareInfo {
@@ -350,19 +350,6 @@ pub fn build_instancing_data(
                 .collect::<Vec<[f32; 16]>>(),
         );
     }
-    // sanity check
-    for (instancing, (_, tfs)) in instancing_information.iter().zip(instance_groups.iter()) {
-        let start = instancing.transformation_offset as usize;
-        let end = instancing.transformation_offset as usize + instancing.instances as usize;
-        if transforms[start..end]
-            != tfs
-                .iter()
-                .map(|t| t.transpose().to_cols_array())
-                .collect::<Vec<[f32; 16]>>()
-        {
-            panic!("Not equivalent?");
-        }
-    }
 
     (
         asset_unique_surfaces,
@@ -432,8 +419,6 @@ pub async fn mesh_render(
                 if instancing_information.is_empty() {
                     #[cfg(feature = "tracing")]
                     tracing::warn!("No instances found, skipping render.");
-
-                    println!("Nothing found");
                     return;
                 }
 

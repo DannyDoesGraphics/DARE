@@ -7,7 +7,7 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use futures::stream::{self, StreamExt};
-    use rand::Rng;
+    use rand::{Rng, RngCore};
     use tokio::task;
 
     // Test when element_size equals element_stride (no stride)
@@ -222,7 +222,7 @@ mod tests {
 
         for _ in 0..element_count {
             // Generate an element of random bytes
-            let element: Vec<u8> = (0..element_size).map(|_| rng.gen()).collect();
+            let element: Vec<u8> = (0..element_size).map(|_| rng.next_u32() as u8).collect();
             input_data.extend_from_slice(&element);
 
             // Add padding/stride bytes (could be random or zeros)

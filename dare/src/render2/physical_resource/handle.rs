@@ -37,7 +37,7 @@ impl Hash for VirtualResourceDrop {
 #[derive(Debug, Clone)]
 pub struct VirtualResource {
     pub uid: u64,
-    pub gen: u64,
+    pub generation: u64,
     /// determines if current handle is considered to be a strong handle and should ref count
     pub ref_count: Option<Either<Weak<VirtualResourceDrop>, Arc<VirtualResourceDrop>>>,
     pub type_id: TypeId,
@@ -45,13 +45,15 @@ pub struct VirtualResource {
 impl Hash for VirtualResource {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.uid.hash(state);
-        self.gen.hash(state);
+        self.generation.hash(state);
         self.type_id.hash(state);
     }
 }
 impl PartialEq for VirtualResource {
     fn eq(&self, other: &Self) -> bool {
-        self.uid == other.uid && self.gen == other.gen && self.type_id == other.type_id
+        self.uid == other.uid
+            && self.generation == other.generation
+            && self.type_id == other.type_id
     }
 }
 impl Eq for VirtualResource {}
@@ -59,18 +61,18 @@ impl Eq for VirtualResource {}
 impl VirtualResource {
     pub fn new(
         uid: u64,
-        gen: u64,
+        generation: u64,
         send: Option<crossbeam_channel::Sender<VirtualResource>>,
         type_id: TypeId,
     ) -> Self {
         Self {
             uid,
-            gen,
+            generation,
             ref_count: send.map(|send| {
                 Either::Right(Arc::new(VirtualResourceDrop {
                     weak: VirtualResource {
                         uid,
-                        gen,
+                        generation,
                         ref_count: None,
                         type_id,
                     },
@@ -85,7 +87,7 @@ impl VirtualResource {
         self.uid
     }
     pub fn get_gen(&self) -> u64 {
-        self.gen
+        self.generation
     }
     pub fn get_type_id(&self) -> TypeId {
         self.type_id
@@ -95,7 +97,7 @@ impl VirtualResource {
     pub fn downgrade(&self) -> Self {
         Self {
             uid: self.uid,
-            gen: self.gen,
+            generation: self.generation,
             ref_count: self.ref_count.as_ref().map(|either| match either {
                 Either::Left(weak) => Either::Left(weak.clone()),
                 Either::Right(strong) => Either::Left(Arc::downgrade(strong)),
@@ -118,7 +120,7 @@ impl VirtualResource {
                 };
                 Some(Self {
                     uid: self.uid,
-                    gen: self.gen,
+                    generation: self.generation,
                     ref_count,
                     type_id: self.type_id,
                 })

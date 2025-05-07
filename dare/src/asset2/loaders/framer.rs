@@ -87,7 +87,7 @@ impl<'a, T: AsRef<[u8]>> futures_core::stream::Stream for Framer<'a, T> {
 mod tests {
     use super::*;
     use futures::executor::block_on;
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use std::pin::Pin;
     use std::task::{Context, Poll, Waker};
 

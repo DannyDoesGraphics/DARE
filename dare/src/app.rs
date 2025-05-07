@@ -25,7 +25,6 @@ pub struct App {
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        println!("AHH");
         if self.window.is_none() {
             let window = Arc::new(
                 event_loop

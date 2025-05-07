@@ -2,7 +2,6 @@ use crate::prelude as dare;
 use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use bevy_ecs::prelude::IntoSystemConfigs;
 
 #[derive(Debug, Clone)]
 pub struct EngineClient {

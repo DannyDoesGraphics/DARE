@@ -1,7 +1,7 @@
 pub use bevy_ecs::prelude as becs;
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 #[derive(Clone, becs::Resource)]
 pub struct FrameCount(pub(crate) Arc<AtomicUsize>);

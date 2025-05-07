@@ -20,20 +20,20 @@ pub struct CastStream<
 }
 
 impl<
-        'a,
-        T: AsRef<[u8]>,
-        Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
-        Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
-    > Unpin for CastStream<'a, T, Source, Destination>
+    'a,
+    T: AsRef<[u8]>,
+    Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
+    Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
+> Unpin for CastStream<'a, T, Source, Destination>
 {
 }
 
 impl<
-        'a,
-        T: AsRef<[u8]>,
-        Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
-        Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
-    > CastStream<'a, T, Source, Destination>
+    'a,
+    T: AsRef<[u8]>,
+    Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
+    Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
+> CastStream<'a, T, Source, Destination>
 {
     pub fn new(
         stream: BoxStream<'a, T>,
@@ -54,11 +54,11 @@ impl<
 }
 
 impl<
-        'a,
-        T: AsRef<[u8]>,
-        Source: ToPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
-        Destination: ToPrimitive + FromPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
-    > futures_core::Stream for CastStream<'a, T, Source, Destination>
+    'a,
+    T: AsRef<[u8]>,
+    Source: ToPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
+    Destination: ToPrimitive + FromPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
+> futures_core::Stream for CastStream<'a, T, Source, Destination>
 {
     type Item = Vec<u8>;
 
@@ -123,9 +123,9 @@ impl<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytemuck::{cast_slice, Pod};
-    use futures::stream;
+    use bytemuck::{Pod, cast_slice};
     use futures::StreamExt;
+    use futures::stream;
     use num_traits::{Bounded, FromPrimitive, ToPrimitive};
 
     fn setup_stream<T: Pod>(data: Vec<T>) -> BoxStream<'static, Vec<u8>> {

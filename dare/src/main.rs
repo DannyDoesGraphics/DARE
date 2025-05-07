@@ -39,7 +39,7 @@ fn main() {
     // start the tokio runtime
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .worker_threads(2)
+        .worker_threads(32)
         .build()
         .unwrap();
     let asset_server = asset2::server::AssetServer::default();

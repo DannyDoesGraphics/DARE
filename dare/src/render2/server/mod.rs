@@ -9,15 +9,14 @@ use crate::render2::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use bevy_ecs::prelude::IntoSystemConfigs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::winit;
 use derivative::Derivative;
 use std::any::Any;
 use std::cmp::PartialEq;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 #[derive(Debug)]
 pub struct RenderServer {
@@ -63,7 +62,6 @@ impl RenderServer {
                         .unwrap(),
                     );
                 }
-                println!("Hello");
                 // add senders
                 world.insert_resource(input_recv);
                 // add necessary resources

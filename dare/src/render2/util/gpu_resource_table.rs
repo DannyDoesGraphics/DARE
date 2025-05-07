@@ -295,18 +295,6 @@ impl<A: Allocator> GPUResourceTable<A> {
             .remove(unsafe { handle.transmute() })
     }
 
-    pub async fn with_image_view<R, F: FnOnce(&RTSlot<resource::ImageView>) -> R>(
-        &self,
-        handle: &container::Slot<resource::ImageView>,
-        f: F,
-    ) -> Result<R> {
-        Ok(self
-            .image_views
-            .write()
-            .await
-            .with_slot(unsafe { &handle.clone().transmute() }, f)?)
-    }
-
     /// Get a new sampler
     pub async fn new_sampler<'a>(
         &self,

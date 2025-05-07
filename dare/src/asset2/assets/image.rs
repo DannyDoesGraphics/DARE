@@ -2,7 +2,7 @@ use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataStreamable;
 use crate::asset2::metadata_location::MetaDataLocation;
 use crate::prelude as dare;
-use crate::render2::util::{handle_cast_stream, ElementFormat};
+use crate::render2::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
 use derivative::Derivative;
 use futures::{FutureExt, StreamExt, TryStreamExt};

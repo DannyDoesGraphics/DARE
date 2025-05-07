@@ -15,12 +15,12 @@ use dagal::raw_window_handle::{
 use dagal::traits::AsRaw;
 use dagal::winit;
 use futures::StreamExt;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 use std::marker::PhantomData;
-use std::mem::{take, ManuallyDrop};
+use std::mem::{ManuallyDrop, take};
 use std::ptr;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
 
 pub struct RenderContextCreateInfo {

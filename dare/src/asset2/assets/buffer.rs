@@ -1,7 +1,7 @@
 use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataStreamable;
 use crate::prelude as dare;
-use crate::render2::util::{handle_cast_stream, ElementFormat};
+use crate::render2::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
 use derivative::Derivative;
 use futures::{FutureExt, StreamExt, TryStreamExt};
@@ -106,7 +106,9 @@ impl MetaDataStreamable for BufferMetaData {
                 Ok(stream)
             }
             asset::MetaDataLocation::Memory(memory) => {
-                tracing::warn!("Asset data stored in memory. This is extremely bad and will quickly consume a lot of memory in the system.");
+                tracing::warn!(
+                    "Asset data stored in memory. This is extremely bad and will quickly consume a lot of memory in the system."
+                );
                 let memory: Arc<[u8]> = memory[self.offset..(self.offset + self.length)]
                     .to_owned()
                     .into();
@@ -155,7 +157,7 @@ pub struct BufferStreamInfo {
 mod test {
     use super::*;
     use futures::StreamExt;
-    use rand::Rng;
+    use rand::{Rng, RngCore};
     use std::fs;
     use std::path::PathBuf;
     use tokio::io::AsyncWriteExt;
@@ -169,8 +171,8 @@ mod test {
 
     // Helper function to generate a unique file path
     fn generate_unique_file_path(base_name: &str) -> PathBuf {
-        let mut rng = rand::thread_rng();
-        let random_number: u64 = rng.gen();
+        let mut rng = rand::rng();
+        let random_number: u64 = rng.next_u64();
         let file_name = format!("{}_{}", random_number, base_name);
         let mut file_path = std::env::current_dir().unwrap();
         file_path.push(file_name);

@@ -42,6 +42,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
         prepare_info: Self::PrepareInfo,
         load_info: <<Self::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'_>,
     ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>> {
+        panic!("Not running");
         Box::pin(async move {
             let (mut allocator, handle, transfer_pool, name) = prepare_info;
             let image_loaded = metadata.load(()).await?.image.to_rgba8();

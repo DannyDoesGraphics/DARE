@@ -6,7 +6,7 @@ use dagal::ash::vk::Handle;
 use dagal::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use dagal::traits::{AsRaw, Destructible};
 use dagal::winit;
-use std::mem::{swap, ManuallyDrop};
+use std::mem::{ManuallyDrop, swap};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
