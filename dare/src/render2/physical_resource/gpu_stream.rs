@@ -1,10 +1,10 @@
 use crate::prelude as dare;
-use crate::render2::prelude::util::TransferRequestCallback;
 use async_stream::stream;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use futures::StreamExt;
 use futures_core::Stream;
+use futures_core::stream::BoxStream;
 
 /// Streams data from a source stream to a GPU buffer
 ///
@@ -13,63 +13,106 @@ pub fn gpu_buffer_stream<'a, T, A>(
     mut staging_buffer: dagal::resource::Buffer<A>,
     dst_buffer: dagal::resource::Buffer<A>,
     transfer_pool: dare::render::util::TransferPool<A>,
-    stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
+    source_stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
 ) -> impl Stream<Item = Option<(dagal::resource::Buffer<A>, dagal::resource::Buffer<A>)>> + 'a + Send
 where
     T: AsRef<[u8]> + Send + 'a,
     A: Allocator + 'static,
 {
     assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size());
-    stream! {
-        let mut initial_progress = 0;
-        let mut staging_buffer = Some(staging_buffer);
-        let mut dest_buffer = Some(dst_buffer);
 
-        // stabilize the stream to within buffer stream restrictions
-        let stream = stream.filter_map(|item| async move {
-            match item {
-            Ok(value) => Some(value), // Pass the value through
-            Err(err) => {
-                panic!("Stream error: {}", err); // Log or handle the error
-                None // Drop the error
-            }
-            }
-        }).boxed();
-        let mut stream = dare::asset2::loaders::framer::Framer::new(stream, staging_buffer.as_ref().unwrap().get_size() as usize).boxed();
-        loop {
-            if let Some(data) = stream.next().await {
-                assert!(data.len() <= transfer_pool.gpu_staging_size() as usize);
-                let length = data.len() as vk::DeviceSize;
-                // write to staging
-                staging_buffer.as_mut().unwrap().write(0, &data).unwrap();
-                let transfer_future = transfer_pool.transfer_gpu(
-                    dare::render::util::TransferRequest::Buffer {
-                            src_buffer: staging_buffer.take().unwrap(),
-                            dst_buffer: dest_buffer.take().unwrap(),
-                            src_offset: 0,
-                            dst_offset: initial_progress,
-                            length,
-                    },
-                );
-                let res = transfer_future.await.unwrap();
-                match res {
-                    TransferRequestCallback::Buffer{
-                        dst_buffer, src_buffer, ..
-                    } => {
-                        dest_buffer = Some(dst_buffer);
-                        staging_buffer = Some(src_buffer);
-                    },
-                    _ => panic!()
+    // filter out source information (we just panic for now)
+    let filtered_stream: BoxStream<'a, T> = source_stream
+        .filter_map(|res| async move {
+            match res {
+                Ok(n) => Some(n),
+                Err(e) => {
+                    panic!("Error found in GPU stream: {e}");
+                    None
                 }
-
-                initial_progress += length;
-
-                yield None;
-            } else if staging_buffer.is_some() && dest_buffer.is_some() {
-                yield Some((staging_buffer.take().unwrap(), dest_buffer.take().unwrap()));
             }
-        }
-    }
+        })
+        .boxed();
+
+    // framer
+    // define const
+    let hardware_partition_size: usize = transfer_pool
+        .gpu_staging_size()
+        .min(transfer_pool.cpu_staging_size()) as usize;
+    let mut framer =
+        dare::asset2::loaders::framer::Framer::new(filtered_stream, hardware_partition_size);
+
+    // create gpu stream + state and unfold (folding, but instead of a stream -> single, single -> stream)
+    let state = (
+        Some(staging_buffer), // staging buffer
+        Some(dst_buffer),     // dst buffer
+        transfer_pool,        // transfer pool to send transfer request
+        framer,               // stream
+        0 as vk::DeviceSize,  // progress made
+        false,                // done tracking
+    );
+    futures::stream::unfold(
+        state,
+        move |(
+            mut staging_opt,
+            mut dest_opt,
+            transfer_pool,
+            mut framer,
+            mut progress,
+            mut done,
+        )| async move {
+            if let Some(chunk) = framer.next().await {
+                let chunk_size = chunk.len();
+                assert!(chunk_size <= hardware_partition_size);
+
+                // write partition into staging
+                staging_opt
+                    .as_mut()
+                    .map(|mut staging| staging.write(0, &chunk));
+                let callback = transfer_pool
+                    .transfer_gpu(dare::render::util::TransferRequest::Buffer {
+                        src_buffer: staging_opt.take().unwrap(),
+                        dst_buffer: dest_opt.take().unwrap(),
+                        src_offset: 0,
+                        dst_offset: progress,
+                        length: chunk_size as vk::DeviceSize,
+                    })
+                    .await
+                    .unwrap();
+
+                // unpacked returned buffers
+                if let dare::render::util::TransferRequestCallback::Buffer {
+                    dst_buffer,
+                    src_buffer,
+                    ..
+                } = callback
+                {
+                    dest_opt = Some(dst_buffer);
+                    staging_opt = Some(src_buffer);
+                }
+                progress += chunk_size as vk::DeviceSize;
+
+                Some((
+                    None,
+                    (staging_opt, dest_opt, transfer_pool, framer, progress, done),
+                ))
+            } else if !done {
+                done = true;
+                if let (Some(s), Some(d)) = (staging_opt.take(), dest_opt.take()) {
+                    Some((
+                        Some((s, d)),
+                        (staging_opt, dest_opt, transfer_pool, framer, progress, done),
+                    ))
+                } else {
+                    // nothing to yield
+                    None
+                }
+            } else {
+                // done!
+                None
+            }
+        },
+    )
 }
 
 /// Streams data from a source stream to a GPU texture
