@@ -69,8 +69,8 @@ where
                 staging_opt
                     .as_mut()
                     .map(|mut staging| staging.write(0, &chunk));
-                let callback = transfer_pool
-                    .transfer_gpu(dare::render::util::TransferRequest::Buffer {
+                let (src_buffer, dst_buffer) = transfer_pool
+                    .buffer_to_buffer_transfer(dare::render::util::TransferBufferToBuffer {
                         src_buffer: staging_opt.take().unwrap(),
                         dst_buffer: dest_opt.take().unwrap(),
                         src_offset: 0,
@@ -81,15 +81,8 @@ where
                     .unwrap();
 
                 // unpacked returned buffers
-                if let dare::render::util::TransferRequestCallback::Buffer {
-                    dst_buffer,
-                    src_buffer,
-                    ..
-                } = callback
-                {
-                    dest_opt = Some(dst_buffer);
-                    staging_opt = Some(src_buffer);
-                }
+                staging_opt = Some(src_buffer);
+                dest_opt = Some(dst_buffer);
                 progress += chunk_size as vk::DeviceSize;
 
                 Some((
@@ -129,36 +122,5 @@ where
     A: Allocator + 'static,
 {
     assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size());
-
-    stream! {
-        let mut initial_progress = 0;
-        let mut staging_buffer = Some(staging_buffer);
-        let mut dest_image = Some(dst_image);
-
-        // stabilize the stream to within buffer stream restrictions
-        let stream = stream.filter_map(|item| async move {
-            match item {
-                Ok(value) => Some(value),
-                Err(err) => {
-                    panic!("Stream error: {}", err);
-                    None
-                }
-            }
-        }).boxed();
-        let mut stream = dare::asset2::loaders::framer::Framer::new(stream, staging_buffer.as_ref().unwrap().get_size() as usize).boxed();
-        /*
-        loop {
-            if let Some(data) = stream.next().await {
-                assert!(data.len() <= transfer_pool.gpu_staging_size() as usize);
-                let length = data.len() as vk::DeviceSize;
-                // write to staging
-                staging_buffer.as_mut().unwrap().write(0, &data).unwrap();
-                let transfer_future = transfer_pool.transfer_gpu(
-                )
-            }
-        }
-         */
-    };
-
     todo!()
 }

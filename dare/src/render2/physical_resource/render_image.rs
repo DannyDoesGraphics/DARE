@@ -96,23 +96,6 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                     name: name.as_deref(),
                 })
             }?;
-            let image = match transfer_pool
-                .transfer_gpu(TransferRequest::Image {
-                    src_layout: vk::ImageLayout::UNDEFINED,
-                    dst_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    src_buffer: staging_buffer,
-                    src_offset: 0,
-                    src_length: 0,
-                    extent,
-                    dst_image: image,
-                    dst_offset: Default::default(),
-                    dst_length: 0,
-                })
-                .await?
-            {
-                TransferRequestCallback::Buffer { .. } => unreachable!(),
-                TransferRequestCallback::Image { dst_image, .. } => dst_image,
-            };
             let full_view = image.acquire_full_image_view()?;
 
             tracing::trace!("Loaded!");

@@ -1,7 +1,6 @@
 use ash::vk;
 
 /// Utilities to help with Vulkan formats
-
 pub fn get_size_from_vk_format(format: &vk::Format) -> usize {
     match format {
         &vk::Format::UNDEFINED => 0,

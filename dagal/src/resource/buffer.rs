@@ -98,7 +98,7 @@ impl<A: Allocator> Buffer<A> {
             unsafe {
                 let data_ptr = data.as_ptr() as *const _ as *const c_void;
                 let mapped_ptr = mapped_ptr.as_ptr().add(offset_bytes as usize);
-                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, mem::size_of_val(data));
+                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, size_of_val(data));
             }
             Ok(())
         } else {
