@@ -1,2 +1,4 @@
 /// A render graph system that uses dagal
-mod graph;
+pub mod graph;
+pub mod passes;
+pub use graph::*;

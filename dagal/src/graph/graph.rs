@@ -8,7 +8,7 @@ pub trait TaskResource: Debug + PartialEq + Eq + Hash {}
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TaskResourceId {
     pub(crate) uid: u64,
-    pub(crate) gen: u64,
+    pub(crate) generation: u64,
 }
 impl TaskResourceId {
     /// Make a new task resource id
@@ -17,36 +17,57 @@ impl TaskResourceId {
         resource.hash(&mut hash);
         Self {
             uid: hash.finish(),
-            gen: 0,
+            generation: 0,
         }
     }
 }
+
 impl Hash for TaskResourceId {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.uid.hash(state);
-        self.gen.hash(state);
+        self.generation.hash(state);
     }
 }
 
-/// A barrier that uses underlying [`TaskResourceId`]
-#[derive(Debug)]
-pub struct TaskBarrier {
-    pub(crate) resource_id: TaskResourceId,
+pub enum PassType {
+    Compute {
+        pipeline_id: usize,
+        dispatch: [u32; 3],
+    },
+    Raster {
+        pipeline_id: usize,
+        dispatch: [u32; 3],
+    },
+    Custom(Box<dyn Fn()>),
 }
 
 /// A task node
 #[derive(Debug)]
-pub struct Task {
+pub struct TaskNode {
+    /// Name of the pass
+    pub(crate) name: String,
+    /// Input resources
     pub(crate) inputs: Vec<TaskResourceId>,
+    /// Output resources
     pub(crate) outputs: Vec<TaskResourceId>,
 }
 
-#[derive(Debug)]
-pub enum TaskNode {
-    Task(Task),
-    Barrier(TaskBarrier),
+pub struct RenderGraph {
+    nodes: Vec<TaskNode>,
+    /// For each node, list the dependent nodes
+    dependencies: Vec<Vec<usize>>,
+    /// In-degree counts for Kahn's algorithm
+    in_degree: Vec<usize>,
+    next_resource_index: usize,
 }
 
-pub struct TaskGraph {
-    graph: DiGraph<TaskNode, TaskResourceId>,
+impl RenderGraph {
+    pub fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+            dependencies: Vec::new(),
+            in_degree: Vec::new(),
+            next_resource_index: 0,
+        }
+    }
 }
