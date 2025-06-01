@@ -23,7 +23,7 @@ pub enum CommandPoolCreateInfo<'a> {
         queue_family_index: u32,
     },
 }
-impl<'a> CommandPoolCreateInfo<'a> {
+impl CommandPoolCreateInfo<'_> {
     pub fn flags(&self) -> vk::CommandPoolCreateFlags {
         match self {
             CommandPoolCreateInfo::WithQueue { flags, .. } => *flags,

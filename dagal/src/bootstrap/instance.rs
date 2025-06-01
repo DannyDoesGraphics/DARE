@@ -22,7 +22,7 @@ pub struct InstanceBuilder<'a> {
     vulkan_version: (u32, u32, u32),
 }
 
-impl<'a> Default for InstanceBuilder<'a> {
+impl Default for InstanceBuilder<'_> {
     fn default() -> Self {
         Self::new()
     }

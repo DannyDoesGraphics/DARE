@@ -120,7 +120,7 @@ impl Drop for Fence {
 pub struct FenceWait<'a> {
     pub fence: &'a Fence,
 }
-impl<'a> Future for FenceWait<'a> {
+impl Future for FenceWait<'_> {
     type Output = Result<()>;
 
     /// A fence's future can be considered ready if:

@@ -6,7 +6,7 @@ use crate::prelude as dare;
 use crate::render2::physical_resource;
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
 
 bitflags! {
@@ -89,12 +89,15 @@ pub struct CMaterial {
     pub normal_sampler_id: u32,
 }
 impl CMaterial {
-    pub fn from_material(
+    pub fn from_material<A: Allocator>(
+        arc_allocator: ArcAllocator<A>,
+        transfer_pool: dare::render::util::TransferPool<A>,
         textures: &mut physical_resource::PhysicalResourceStorage<
-            physical_resource::RenderImage<GPUAllocatorImpl>,
+            physical_resource::RenderImage<A>,
         >,
         material: dare::engine::components::Material,
     ) -> Option<Self> {
+        let mut bit_flag = MaterialFlags::NONE;
         let albedo_texture_id = material
             .albedo_texture
             .map(|t| {
@@ -104,7 +107,6 @@ impl CMaterial {
             })
             .flatten();
 
-        let mut bit_flag = MaterialFlags::NONE;
         if albedo_texture_id.is_some() {
             bit_flag |= MaterialFlags::ALBEDO;
         };

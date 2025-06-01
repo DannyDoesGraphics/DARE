@@ -36,6 +36,7 @@ impl Drop for Sampler {
     }
 }
 
+#[derive(Clone)]
 pub enum SamplerCreateInfo<'a> {
     /// Creates a sampler from an existing [`VkSamplerCreateInfo`](vk::SamplerCreateInfo).
     ///
@@ -84,7 +85,7 @@ pub enum SamplerCreateInfo<'a> {
         unnormalized_coordinates: vk::Bool32,
     },
 }
-impl<'a> Hash for SamplerCreateInfo<'a> {
+impl Hash for SamplerCreateInfo<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             SamplerCreateInfo::FromVk {
@@ -163,6 +164,7 @@ impl PartialEq for SamplerCreateInfo<'_> {
         }
     }
 }
+impl Eq for SamplerCreateInfo<'_> {}
 
 impl Hash for Sampler {
     fn hash<H: Hasher>(&self, state: &mut H) {

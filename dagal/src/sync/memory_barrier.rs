@@ -26,7 +26,7 @@ pub struct DependencyInfo<'a, A: Allocator> {
     pub(crate) buffer_memory_barriers: Vec<BufferMemoryBarrier<'a, A>>,
 }
 
-impl<'a, A: Allocator> Default for DependencyInfo<'a, A> {
+impl<A: Allocator> Default for DependencyInfo<'_, A> {
     fn default() -> Self {
         Self {
             dependency_flags: vk::DependencyFlags::empty(),

@@ -42,7 +42,7 @@ pub struct ComputePipelineBuilder<'a> {
     layout: Option<vk::PipelineLayout>,
 }
 
-impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
+impl PipelineBuilder for ComputePipelineBuilder<'_> {
     type BuildTo = ComputePipeline;
 
     /// Destroy and existing layout and replace it.

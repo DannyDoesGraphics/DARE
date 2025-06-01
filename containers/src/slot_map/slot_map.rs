@@ -39,8 +39,8 @@ impl<T> SlotMap<T> {
         self.data.push((element, free_slot_index));
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index, free_slot.generation);
-        out_slot
+
+        Slot::new(free_slot_index, free_slot.generation)
     }
 
     pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
@@ -54,7 +54,7 @@ impl<T> SlotMap<T> {
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
-            if self.data.len() > 0 && proxy_slot.id != (self.data.len() - 1) as u64 {
+            if !self.data.is_empty() && proxy_slot.id != (self.data.len() - 1) as u64 {
                 let proxy_slot_data_index = proxy_slot.id;
                 let last_index = self.data.len() - 1;
                 // swap with the last
@@ -76,31 +76,25 @@ impl<T> SlotMap<T> {
     }
 
     pub fn get(&self, slot: Slot<T>) -> Option<&T> {
-        self.slots
-            .get(slot.id as usize)
-            .map(|proxy_slot| {
-                if proxy_slot.generation == slot.generation {
-                    self.data.get(proxy_slot.id as usize).map(|data| &data.0)
-                } else {
-                    None
-                }
-            })
-            .flatten()
+        self.slots.get(slot.id as usize).and_then(|proxy_slot| {
+            if proxy_slot.generation == slot.generation {
+                self.data.get(proxy_slot.id as usize).map(|data| &data.0)
+            } else {
+                None
+            }
+        })
     }
 
     pub fn get_mut(&mut self, slot: Slot<T>) -> Option<&mut T> {
-        self.slots
-            .get(slot.id as usize)
-            .map(|proxy_slot| {
-                if proxy_slot.generation == slot.generation {
-                    self.data
-                        .get_mut(proxy_slot.id as usize)
-                        .map(|data| &mut data.0)
-                } else {
-                    None
-                }
-            })
-            .flatten()
+        self.slots.get(slot.id as usize).and_then(|proxy_slot| {
+            if proxy_slot.generation == slot.generation {
+                self.data
+                    .get_mut(proxy_slot.id as usize)
+                    .map(|data| &mut data.0)
+            } else {
+                None
+            }
+        })
     }
 
     pub fn iter(&self) -> Iter<'_, (T, u64)> {

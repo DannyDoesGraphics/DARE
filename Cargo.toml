@@ -7,6 +7,3 @@ members = [
 ]
 
 resolver = "2"
-
-[env]
-SLANG_DIR = "C:/dev/vcpkg/packages/shader-slang_x64-windows"

@@ -32,6 +32,12 @@ impl Debug for FlashMapErasedStorage {
     }
 }
 
+impl Default for FlashMapErasedStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FlashMapErasedStorage {
     pub fn new() -> Self {
         let (write, read) = flashmap::new::<TypeId, Box<dyn Any>>();
@@ -45,10 +51,9 @@ impl FlashMapErasedStorage {
     pub fn get_mut_write_guard(
         &self,
     ) -> Result<MutexGuard<flashmap::WriteHandle<TypeId, Box<dyn Any>>>> {
-        Ok(self
-            .write_handle
+        self.write_handle
             .lock()
-            .map_err(|_| anyhow::Error::from(anyhow::anyhow!("Poison error")))?)
+            .map_err(|_| anyhow::anyhow!("Poison error"))
     }
 
     /// Get the write handle

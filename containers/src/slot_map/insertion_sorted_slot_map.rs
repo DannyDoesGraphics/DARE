@@ -86,7 +86,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
-            if self.data.len() > 0 && proxy_slot.id != (self.data.len() - 1) as u64 {
+            if !self.data.is_empty() && proxy_slot.id != (self.data.len() - 1) as u64 {
                 let proxy_slot_data_index = proxy_slot.id;
                 let last_index = self.data.len() - 1;
                 // swap with the last

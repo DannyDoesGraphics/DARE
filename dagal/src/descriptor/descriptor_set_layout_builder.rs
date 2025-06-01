@@ -17,7 +17,7 @@ pub struct DescriptorSetLayoutBinding<'a> {
     flags: vk::DescriptorBindingFlags,
 }
 
-impl<'a> DescriptorSetLayoutBinding<'a> {
+impl DescriptorSetLayoutBinding<'_> {
     pub fn flag(mut self, flag: vk::DescriptorBindingFlags) -> Self {
         self.flags = flag;
         self

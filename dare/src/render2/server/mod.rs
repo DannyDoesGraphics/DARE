@@ -42,6 +42,9 @@ impl RenderServer {
         bb_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<
             render::components::BoundingBox,
         >,
+        name_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<
+            dare::engine::components::Name,
+        >,
     ) -> Self {
         println!("Starting");
         //let (new_send, mut new_recv) = crossbeam_channel::unbounded::<RenderServerPacket>();
@@ -77,6 +80,9 @@ impl RenderServer {
                 world.insert_resource(RenderAssetManagerStorage::<
                     physical_resource::RenderImage<GPUAllocatorImpl>,
                 >::new(asset_server.clone()));
+                world.insert_resource(physical_resource::PhysicalResourceStorage::<
+                    dare::asset2::assets::SamplerAsset,
+                >::new(asset_server.clone()));
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = becs::Schedule::default();
                 // links
@@ -84,6 +90,7 @@ impl RenderServer {
                 texture_link_recv.attach_to_world(&mut world, &mut schedule);
                 transform_link_recv.attach_to_world(&mut world, &mut schedule);
                 bb_link_recv.attach_to_world(&mut world, &mut schedule);
+                name_link_recv.attach_to_world(&mut world, &mut schedule);
                 // physical resources
                 world.insert_resource(physical_resource::PhysicalResourceStorage::<
                     physical_resource::RenderBuffer<GPUAllocatorImpl>,

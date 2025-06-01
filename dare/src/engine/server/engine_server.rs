@@ -32,6 +32,7 @@ impl EngineServer {
         texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
         bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
+        name_link_send: &ComponentsLinkerSender<dare::engine::components::Name>,
     ) -> Result<Self> {
         let rt = dare::concurrent::BevyTokioRunTime::new(runtime);
 
@@ -45,6 +46,7 @@ impl EngineServer {
         transform_link_send.attach_to_world(&mut init_schedule);
         bb_link_send.attach_to_world(&mut init_schedule);
         texture_link_send.attach_to_world(&mut init_schedule);
+        name_link_send.attach_to_world(&mut init_schedule);
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();
@@ -52,6 +54,7 @@ impl EngineServer {
         transform_link_send.attach_to_world(&mut scheduler);
         bb_link_send.attach_to_world(&mut scheduler);
         texture_link_send.attach_to_world(&mut scheduler);
+        name_link_send.attach_to_world(&mut scheduler);
 
         let thread = rt.runtime.spawn(async move {
             loop {

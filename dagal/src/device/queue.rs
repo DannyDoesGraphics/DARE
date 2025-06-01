@@ -26,7 +26,7 @@ pub struct QueueInfo {
     pub can_present: bool,
 }
 
-impl<'a> From<QueueInfo> for vk::DeviceQueueInfo2<'a> {
+impl From<QueueInfo> for vk::DeviceQueueInfo2<'_> {
     fn from(val: QueueInfo) -> Self {
         vk::DeviceQueueInfo2 {
             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,

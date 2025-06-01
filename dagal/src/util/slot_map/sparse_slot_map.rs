@@ -81,11 +81,10 @@ impl<T> SparseSlotMap<T> {
 
     /// Checks if a given slot is valid in the SparseSlotMap
     pub fn is_valid_slot(&self, slot: &Slot<T>) -> bool {
-        return self
-            .data
+        self.data
             .get(slot.id as usize)
             .map(|slot_union| *slot == slot_union.slot && slot_union.data.is_some())
-            .unwrap_or(false);
+            .unwrap_or(false)
     }
 
     /// Count # of used slots

@@ -8,6 +8,7 @@ use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
+use futures::{FutureExt, StreamExt};
 use futures_core::future::BoxFuture;
 use std::io::Read;
 use std::ptr;
@@ -40,9 +41,8 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
     fn load_asset<'a>(
         metadata: <Self::Asset as Asset>::Metadata,
         prepare_info: Self::PrepareInfo,
-        load_info: <<Self::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'_>,
+        _: <<Self::Asset as Asset>::Metadata as MetaDataLoad>::LoadInfo<'_>,
     ) -> BoxFuture<'a, anyhow::Result<Self::Loaded>> {
-        panic!("Not running");
         Box::pin(async move {
             let (mut allocator, handle, transfer_pool, name) = prepare_info;
             let image_loaded = metadata.load(()).await?.image.to_rgba8();
@@ -68,7 +68,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                 height: image_loaded.height(),
                 depth: 1,
             };
-            let mut image = unsafe {
+            let image =
                 dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
                     device: allocator.device(),
                     allocator: &mut allocator,
@@ -94,16 +94,41 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
                         _marker: Default::default(),
                     },
                     name: name.as_deref(),
-                })
-            }?;
-            let full_view = image.acquire_full_image_view()?;
-
-            tracing::trace!("Loaded!");
-            Ok(Self {
+                })?;
+            // start transfer
+            let mut stream = dare::render::physical_resource::gpu_texture_stream(
+                staging_buffer,
                 image,
-                full_view,
-                handle,
-            })
+                vk::ImageLayout::UNDEFINED,
+                Some(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+                transfer_pool,
+                futures::stream::once(async move { Ok(bytes) }),
+            )
+            .boxed();
+            while let Some(res) = stream.next().await {
+                match res {
+                    Some((staging, image)) => {
+                        drop(staging);
+                        let full_view = image.acquire_full_image_view()?;
+                        tracing::trace!("Created image");
+                        return Ok(Self {
+                            image,
+                            full_view,
+                            handle,
+                        });
+                    }
+                    None => {
+                        // still processing
+                    }
+                }
+            }
+            unreachable!()
         })
+    }
+}
+
+impl<A: Allocator> Drop for RenderImage<A> {
+    fn drop(&mut self) {
+        tracing::trace!("Dropping image");
     }
 }

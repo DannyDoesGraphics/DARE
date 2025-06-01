@@ -1,4 +1,4 @@
-use crate::bootstrap::app_info::{Expected, QueueRequest};
+use crate::bootstrap::app_info::Expected;
 use crate::device::QueueInfo;
 use crate::traits::AsRaw;
 use ash;

@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
-[env]
-SLANG_DIR = "C:/dev/vcpkg/packages/shader-slang_x64-windows"
-
 [dependencies]
 anyhow = "1.0.98"
 thiserror = "2.0.2"
@@ -29,7 +26,8 @@ futures = "0.3.31"
 futures-core = "0.3.31"
 crossbeam-channel = "0.5.15"
 num-traits = "0.2.19"
-tracing-tracy = "0.11.4"
+tracy-client = {version = "0.18.1", features = ["enable"]}
+#tracing-tracy = {version = "0.11.4", features = ["enable"]}
 #slang = { git = "https://github.com/ProjectKML/slang-rs.git" }
 
 [dev-dependencies]

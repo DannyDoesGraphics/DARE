@@ -1,7 +1,6 @@
 use ash::vk;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::fmt::Debug;
-use std::sync::Arc;
 
 /// Indicates what the expectation of such an input
 #[derive(Debug, Clone, PartialEq, Eq)]

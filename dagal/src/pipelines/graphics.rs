@@ -55,7 +55,7 @@ pub struct GraphicsPipelineBuilder<'a> {
     color_attachment_format: vk::Format,
 }
 
-impl<'a> Clone for GraphicsPipelineBuilder<'a> {
+impl Clone for GraphicsPipelineBuilder<'_> {
     /// **Only performs a partial clone of the underlying data.**
     ///
     /// Only clones input_assembly, rasterizer, color_blend_attachment, multisampling, depth_stencil,
@@ -77,7 +77,7 @@ impl<'a> Clone for GraphicsPipelineBuilder<'a> {
     }
 }
 
-impl<'a> Default for GraphicsPipelineBuilder<'a> {
+impl Default for GraphicsPipelineBuilder<'_> {
     fn default() -> Self {
         Self {
             shaders: HashMap::new(),
@@ -113,7 +113,7 @@ impl<'a> Default for GraphicsPipelineBuilder<'a> {
     }
 }
 
-impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
+impl super::PipelineBuilder for GraphicsPipelineBuilder<'_> {
     type BuildTo = GraphicsPipeline;
 
     fn replace_layout(mut self, layout: vk::PipelineLayout) -> Self {
@@ -231,7 +231,7 @@ impl<'a> super::PipelineBuilder for GraphicsPipelineBuilder<'a> {
     }
 }
 
-impl<'a> GraphicsPipelineBuilder<'a> {
+impl GraphicsPipelineBuilder<'_> {
     /// Clears all currently held layouts + shaders but does not delete them.
     pub fn clear(self) -> Self {
         Self::default()

@@ -54,7 +54,6 @@ impl DeletionSlot {
 }
 
 enum PhysicalState<T> {
-    None,
     Loading,
     Some(T),
 }
@@ -66,16 +65,8 @@ impl<T> PhysicalState<T> {
         }
     }
 
-    pub fn is_none(&self) -> bool {
-        match self {
-            PhysicalState::None => true,
-            _ => false,
-        }
-    }
-
     pub fn map<F: FnOnce(&T) -> A, A>(&self, f: F) -> Option<A> {
         match self {
-            PhysicalState::None => None,
             PhysicalState::Loading => None,
             PhysicalState::Some(t) => Some(f(t)),
         }
@@ -83,20 +74,11 @@ impl<T> PhysicalState<T> {
 
     pub fn replace(&mut self, val: T) -> Option<T> {
         match self {
-            PhysicalState::None | PhysicalState::Loading => {
+            PhysicalState::Loading => {
                 *self = PhysicalState::Some(val);
                 None
             }
             PhysicalState::Some(t) => Some(std::mem::replace(t, val)),
-        }
-    }
-
-    pub fn take(&mut self) -> Option<T> {
-        let mut state = PhysicalState::None;
-        std::mem::swap(&mut state, self);
-        match state {
-            PhysicalState::Some(t) => Some(t),
-            _ => None,
         }
     }
 
@@ -147,9 +129,9 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         }
     }
 
-    /// Allocate a virtual resource handle with no physical resource backing
+    /// Allocate a virtual resource handle that is in the process of loading
     pub fn get_virtual_handle(&mut self, lifetime: Option<u32>) -> VirtualResource {
-        let slot = self.slot.insert(PhysicalState::None);
+        let slot = self.slot.insert(PhysicalState::Loading);
         let virtual_resource = slot_to_virtual_handle(
             slot,
             match lifetime {
@@ -160,7 +142,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         match lifetime {
             None => virtual_resource,
             Some(lifetime) => {
-                let mut deletion_slot = self
+                let deletion_slot = self
                     .deferred_deletion
                     .entry(virtual_resource.clone())
                     .or_default();
@@ -219,7 +201,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     ) -> VirtualResource {
         let virtual_handle = self.get_virtual_handle(lifetime);
         if lifetime.map(|v| v > 0).unwrap_or(false) {
-            let mut deletion = self.deferred_deletion.get_mut(&virtual_handle).unwrap(); // unwrap should be *fine* here, since [`Self::get_deferred_virtual_handle`] properly sets up the deletion entry.
+            let deletion = self.deferred_deletion.get_mut(&virtual_handle).unwrap(); // unwrap should be *fine* here, since [`Self::get_deferred_virtual_handle`] properly sets up the deletion entry.
             deletion.reset();
             deletion.virtual_resource.replace(virtual_handle.clone());
         }
@@ -289,18 +271,15 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         }
         // remove dropped
         while let Ok(virtual_resource) = self.drop_recv.try_recv() {
-            self.slot
-                .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
-                .map(|physical_state| {
-                    // remove mapping if it exists
-                    self.asset_mapping_reverse
-                        .remove(&virtual_resource)
-                        .map(|handle| {
-                            self.asset_mapping.remove(&handle);
-                        });
-                    let res = physical_state.take();
-                    drop(res)
-                });
+            if let Ok(t) = self
+                .slot
+                .remove(Slot::new(virtual_resource.uid, virtual_resource.generation))
+            {
+                self.asset_mapping_reverse
+                    .remove(&virtual_resource)
+                    .map(|vr| self.asset_mapping.remove(&vr));
+                drop(t);
+            }
         }
     }
 
@@ -318,12 +297,12 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         let is_unloaded = self
             .slot
             .get(slot.clone())
-            .map(|state| state.is_none())
+            .map(|state| !state.is_some())
             .unwrap_or(false);
         if is_unloaded {
             let virtual_handle = virtual_handle.clone();
             // get deferred deletion and reset
-            if let Some(mut deferred_deletion) = self.deferred_deletion.get_mut(&virtual_handle) {
+            if let Some(deferred_deletion) = self.deferred_deletion.get_mut(&virtual_handle) {
                 deferred_deletion.reset();
             }
             self.slot
@@ -349,7 +328,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     }
 
     /// Similar to `load_asset_handle` however, we will insert the resource and perform a load if it does not exist
-    pub fn load_or_create(
+    pub fn load_or_create_asset_handle(
         &mut self,
         asset_handle: AssetHandle<T::Asset>,
         prepare_info: T::PrepareInfo,
@@ -364,9 +343,9 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
             .unwrap_or(false)
         {
             let virtual_resource = {
-                let slot = self.slot.insert(PhysicalState::None);
+                let slot = self.slot.insert(PhysicalState::Loading);
                 let virtual_resource = slot_to_virtual_handle(slot, Some(self.drop_send.clone()));
-                let mut deletion_slot = self
+                let deletion_slot = self
                     .deferred_deletion
                     .entry(virtual_resource.downgrade())
                     .or_default();
@@ -417,19 +396,19 @@ impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
 /// This is primarily useful if we have certain objects such as Samplers which are universal across
 /// images
 pub struct PhysicalResourceHashMap<
-    CI: 'static + Hash + PartialEq + Eq,
-    L: Send + Resource<CreateInfo<'static> = CI>,
-    T: MetaDataRenderAsset<Loaded = L>,
+    T: MetaDataRenderAsset<Loaded = L, Asset = A>,
+    A: Hash + PartialEq + Eq + Clone,
+    L: Send + Resource,
 > {
     resource: PhysicalResourceStorage<T>,
-    map: HashMap<CI, VirtualResource>,
+    map: HashMap<A, VirtualResource>,
 }
 
 impl<
-    CI: 'static + Hash + PartialEq + Eq + Clone,
-    L: Send + Resource<CreateInfo<'static> = CI>,
-    T: MetaDataRenderAsset<Loaded = L>,
-> PhysicalResourceHashMap<CI, L, T>
+    T: MetaDataRenderAsset<Loaded = L, Asset = A>,
+    A: Hash + PartialEq + Eq + Clone,
+    L: Send + Resource,
+> PhysicalResourceHashMap<T, A, L>
 {
     /// Create a new hashmap
     pub fn new(asset_server: AssetServer) -> Self {
@@ -440,7 +419,7 @@ impl<
     }
 
     /// Attempts to retrieve using create info, if not, force a load to occur
-    pub fn retrieve(&mut self, ci: CI) -> Option<&T::Loaded> {
+    pub fn retrieve(&mut self, ci: A) -> Option<&T::Loaded> {
         // do a check if the virtual resource exists
         let vr_option = self.map.get(&ci).cloned();
         let is_vr_option = vr_option.is_some();
@@ -452,19 +431,12 @@ impl<
             // if not, go try to retrieve again
         }
         // make a new resource, since we cannot resolve it
-        let loaded: L = match L::new(ci.clone()) {
-            Ok(l) => l,
-            Err(e) => {
-                tracing::error!("Failed to load physical resource: {}", e);
-                return None; // Failed to create, return None
-            }
-        };
         let virtual_resource = self.resource.get_virtual_handle(Some(0));
         // if mapping doesn't exist yet, map it
         if !is_vr_option {
             self.map.insert(ci, virtual_resource.clone());
         }
-        self.resource.alias(&virtual_resource, loaded);
+        //self.resource.alias(&virtual_resource, loaded);
         self.resource.resolve(&virtual_resource)
     }
 

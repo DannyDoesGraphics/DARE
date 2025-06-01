@@ -245,7 +245,7 @@ impl<A: Allocator> Image<A> {
                     _marker: Default::default(),
                 }
             },
-            name: None,
+            name: Some(String::from("Full Image CI")),
         })
     }
 }
@@ -448,8 +448,11 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                         .get_handle()
                         .get_image_memory_requirements(image.handle)
                 };
-                let allocation =
-                    allocator.allocate(name.unwrap_or(""), &memory_requirements, location)?;
+                let allocation = allocator.allocate(
+                    name.unwrap_or("IMAGE ALLOCATION"),
+                    &memory_requirements,
+                    location,
+                )?;
                 unsafe {
                     image.device.get_handle().bind_image_memory(
                         image.handle,

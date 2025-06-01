@@ -138,7 +138,7 @@ mod test {
         // Test case with 1 queue flag
         let queue_requests = vec![super::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true)];
         let allocations = super::determine_queue_slotting(queue_families, queue_requests).unwrap();
-        assert!(allocations.first().is_some());
+        assert!(!allocations.is_empty());
         assert_eq!(allocations.first().unwrap().len(), 1);
         assert_eq!(
             allocations.first().unwrap().first().unwrap().clone(),
@@ -161,7 +161,7 @@ mod test {
             super::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true),
         ];
         let allocations = super::determine_queue_slotting(queue_families, queue_requests).unwrap();
-        assert!(allocations.first().is_some());
+        assert!(!allocations.is_empty());
         assert_eq!(allocations.len(), 2);
         assert_eq!(
             allocations.first().unwrap().first().unwrap().clone(),
@@ -194,7 +194,7 @@ mod test {
         ];
         // Test if it is possible to create queues across different families
         let allocations = super::determine_queue_slotting(queue_families, queue_requests).unwrap();
-        assert!(allocations.first().is_some());
+        assert!(!allocations.is_empty());
         assert_eq!(allocations.len(), 2);
         assert_eq!(
             allocations.first().unwrap().first().unwrap().clone(),
@@ -236,7 +236,7 @@ mod test {
         ];
         // Test if it is possible to create queues across different families
         let allocations = super::determine_queue_slotting(queue_families, queue_requests).unwrap();
-        assert!(allocations.first().is_some());
+        assert!(!allocations.is_empty());
         assert_eq!(allocations.len(), 2);
         assert_eq!(
             allocations.first().unwrap().first().unwrap().clone(),

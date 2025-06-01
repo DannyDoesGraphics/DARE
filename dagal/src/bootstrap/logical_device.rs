@@ -229,7 +229,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
     }
 }
 
-impl<'a> From<crate::bootstrap::PhysicalDevice> for LogicalDeviceBuilder<'a> {
+impl From<crate::bootstrap::PhysicalDevice> for LogicalDeviceBuilder<'_> {
     /// Construct a new logical device builder from a [`bootstrap::Bootstrap`](crate::bootstrap::PhysicalDevice)
     ///
     /// # Examples

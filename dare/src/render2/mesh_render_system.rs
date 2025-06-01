@@ -6,6 +6,7 @@ use crate::render2::c::CPushConstant;
 use crate::render2::physical_resource;
 use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
 use crate::render2::prelude::util::TransferPool;
+use crate::render2::util::{ImageFilter, WrappingMode};
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -48,6 +49,7 @@ pub fn build_instancing_data(
             Option<&dare::engine::components::Material>,
             &dare::render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
     allocator: ArcAllocator<GPUAllocatorImpl>,
@@ -55,6 +57,7 @@ pub fn build_instancing_data(
     textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
     buffers: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
@@ -85,7 +88,8 @@ pub fn build_instancing_data(
         normal_texture_id: 0,
         normal_sampler_id: 0,
     }];
-    for (_index, (_entity, surface, material, bounding_box, transform)) in query.iter().enumerate()
+    for (_index, (_entity, surface, material, bounding_box, transform, name)) in
+        query.iter().enumerate()
     {
         // check if it even exists in frame
         if !bounding_box.visible_in_frustum(transform.get_transform_matrix(), view_proj) {
@@ -96,7 +100,7 @@ pub fn build_instancing_data(
             // attempt a load of everything
             //println!("Index: {:?}", &surface.index_buffer);
             const BUFFER_LIFETIME: u32 = 64;
-            buffers.load_or_create(
+            buffers.load_or_create_asset_handle(
                 surface.index_buffer.clone(),
                 BufferPrepareInfo {
                     allocator: allocator.clone(),
@@ -107,14 +111,7 @@ pub fn build_instancing_data(
                         | vk::BufferUsageFlags::INDEX_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                     location: MemoryLocation::GpuOnly,
-                    name: Some(
-                        buffers
-                            .asset_server
-                            .get_metadata(&surface.index_buffer)
-                            .as_ref()
-                            .map(|metadata| metadata.name.clone())
-                            .unwrap_or(String::from("UNNAMED index")),
-                    ),
+                    name: Some(format!("{}_index_buffer", name.0.clone())),
                 },
                 BufferStreamInfo {
                     chunk_size: transfer_pool
@@ -125,7 +122,7 @@ pub fn build_instancing_data(
                 BUFFER_LIFETIME,
             );
             //println!("Vertex: {:?}", &surface.vertex_buffer.id());
-            buffers.load_or_create(
+            buffers.load_or_create_asset_handle(
                 surface.vertex_buffer.clone(),
                 BufferPrepareInfo {
                     allocator: allocator.clone(),
@@ -136,14 +133,7 @@ pub fn build_instancing_data(
                         | vk::BufferUsageFlags::VERTEX_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                     location: MemoryLocation::GpuOnly,
-                    name: Some(
-                        buffers
-                            .asset_server
-                            .get_metadata(&surface.vertex_buffer)
-                            .as_ref()
-                            .map(|metadata| metadata.name.clone())
-                            .unwrap_or(String::from("UNNAMED vertex")),
-                    ),
+                    name: Some(format!("{}_vertex_buffer", name.0.clone())),
                 },
                 BufferStreamInfo {
                     chunk_size: transfer_pool
@@ -155,7 +145,7 @@ pub fn build_instancing_data(
             );
             //println!("Normal: {:?}", &surface.normal_buffer);
             surface.normal_buffer.as_ref().map(|buffer| {
-                buffers.load_or_create(
+                buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
                         allocator: allocator.clone(),
@@ -166,14 +156,7 @@ pub fn build_instancing_data(
                             | vk::BufferUsageFlags::STORAGE_BUFFER
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(
-                            buffers
-                                .asset_server
-                                .get_metadata(buffer)
-                                .as_ref()
-                                .map(|metadata| metadata.name.clone())
-                                .unwrap_or(String::from("UNNAMED normal")),
-                        ),
+                        name: Some(format!("{}_normal_buffer", name.0.clone())),
                     },
                     BufferStreamInfo {
                         chunk_size: transfer_pool
@@ -186,7 +169,7 @@ pub fn build_instancing_data(
             });
             //println!("UV: {:?}", &surface.uv_buffer);
             surface.uv_buffer.as_ref().map(|buffer| {
-                buffers.load_or_create(
+                buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
                         allocator: allocator.clone(),
@@ -197,14 +180,7 @@ pub fn build_instancing_data(
                             | vk::BufferUsageFlags::STORAGE_BUFFER
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(
-                            buffers
-                                .asset_server
-                                .get_metadata(buffer)
-                                .as_ref()
-                                .map(|metadata| metadata.name.clone())
-                                .unwrap_or(String::from("UNNAMED uv")),
-                        ),
+                        name: Some(format!("{}_uv_buffer", name.0.clone())),
                     },
                     BufferStreamInfo {
                         chunk_size: transfer_pool
@@ -216,7 +192,7 @@ pub fn build_instancing_data(
                 );
             });
             surface.tangent_buffer.as_ref().map(|buffer| {
-                buffers.load_or_create(
+                buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
                         allocator: allocator.clone(),
@@ -227,14 +203,7 @@ pub fn build_instancing_data(
                             | vk::BufferUsageFlags::STORAGE_BUFFER
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         location: MemoryLocation::GpuOnly,
-                        name: Some(
-                            buffers
-                                .asset_server
-                                .get_metadata(buffer)
-                                .as_ref()
-                                .map(|metadata| metadata.name.clone())
-                                .unwrap_or(String::from("UNNAMED tangent")),
-                        ),
+                        name: Some(format!("{}_tangent_buffer", name.0.clone())),
                     },
                     BufferStreamInfo {
                         chunk_size: transfer_pool
@@ -293,7 +262,34 @@ pub fn build_instancing_data(
             .or_insert_with(|| {
                 let id: usize = unique_materials.len();
                 if let Some(material) = material.cloned() {
-                    match dare::render::c::CMaterial::from_material(textures, material) {
+                    material.albedo_texture.as_ref().map(|texture| {
+                        textures.load_or_create_asset_handle(
+                            texture.asset_handle.clone(),
+                            (
+                                allocator.clone(),
+                                texture.asset_handle.clone(),
+                                transfer_pool.clone(),
+                                Some(format!("{}_albedo_texture", name.0.clone())),
+                            ),
+                            (),
+                            128,
+                        );
+                        /*
+                        samplers.load_or_create(
+                            texture.sampler.clone(),
+                            (),
+                            (),
+                            128
+                        );
+                        */
+                    });
+
+                    match dare::render::c::CMaterial::from_material(
+                        allocator.clone(),
+                        transfer_pool.clone(),
+                        textures,
+                        material,
+                    ) {
                         None => 0,
                         Some(material) => {
                             unique_materials.push(material);
@@ -308,7 +304,8 @@ pub fn build_instancing_data(
 
     /// (surface_index, material_index) -> transforms
     let mut instance_groups: HashMap<(u64, u64), Vec<glam::Mat4>> = HashMap::new();
-    for (_index, (_entity, surface, material, _bounding_box, transform)) in query.iter().enumerate()
+    for (_index, (_entity, surface, material, _bounding_box, transform, name)) in
+        query.iter().enumerate()
     {
         // ignore surfaces which failed to resolve
         if surface_map
@@ -375,11 +372,13 @@ pub async fn mesh_render(
             Option<&dare::engine::components::Material>,
             &dare::render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
     mut textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
     mut buffers: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
@@ -410,6 +409,7 @@ pub async fn mesh_render(
                         render_context.inner.allocator.clone(),
                         render_context.transfer_pool(),
                         &mut textures,
+                        samplers,
                         &mut buffers,
                     )
                 };

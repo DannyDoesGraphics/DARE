@@ -30,6 +30,7 @@ pub fn present_system_begin(
             Option<&dare::engine::components::Material>,
             &render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
     mut textures: becs::ResMut<
@@ -37,6 +38,9 @@ pub fn present_system_begin(
         physical_resource::PhysicalResourceStorage<
             physical_resource::RenderImage<GPUAllocatorImpl>,
         >,
+    >,
+    mut samplers: becs::ResMut<
+        physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
     >,
     mut buffers: becs::ResMut<
         '_,
@@ -67,23 +71,21 @@ pub fn present_system_begin(
             [frame_number % surface_context.frames_in_flight]
             .lock()
             .await;
-        let mut frame = &mut *frame_guard;
+        let frame = &mut *frame_guard;
         // wait until semaphore is ready
-        unsafe {
-            // wait for frame to finish rendering before rendering again
-            frame.render_fence.wait(u64::MAX).unwrap();
-            frame.render_fence.reset().unwrap();
-            // drop all resource handles
-            frame.resources.clear();
-            // drop all staging buffers
-            frame.staging_buffers.clear();
-        }
+        // wait for frame to finish rendering before rendering again
+        frame.render_fence.wait(u64::MAX).unwrap();
+        frame.render_fence.reset().unwrap();
+        // drop all resource handles
+        frame.resources.clear();
+        // drop all staging buffers
+        frame.staging_buffers.clear();
         let swapchain_image_index = surface_context.swapchain.next_image_index(
             u64::MAX,
             Some(&frame.swapchain_semaphore),
             None,
         );
-        let swapchain_image_index = match swapchain_image_index {
+        let _swapchain_image_index = match swapchain_image_index {
             Ok(swapchain_image_index) => {
                 *surface_context.swapchain_image_index.write().await = swapchain_image_index;
                 //let swapchain_image = &window_context.swapchain_images[swapchain_image_index as usize];
@@ -151,6 +153,7 @@ pub fn present_system_begin(
                     frame,
                     surfaces,
                     &mut textures,
+                    &mut samplers,
                     &mut buffers,
                 )
                 .await;
@@ -294,7 +297,7 @@ pub async fn present_system_end(
     }
     // progress to next frame + update physical storage
     buffers.update();
-    textures.update();
+    //textures.update();
     frame_count.fetch_add(1, Ordering::AcqRel);
     #[cfg(feature = "tracing")]
     tracing::trace!("Finished frame {frame_number}");

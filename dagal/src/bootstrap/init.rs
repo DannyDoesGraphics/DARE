@@ -6,7 +6,6 @@ use gpu_allocator::vulkan::AllocatorCreateDesc;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
-use std::marker::PhantomData;
 use std::ptr;
 
 pub struct WindowlessContext {}

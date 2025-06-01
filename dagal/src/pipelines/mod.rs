@@ -21,9 +21,7 @@ pub struct PipelineInputAssemblyStateCreateInfo {
     pub primitive_restart_enable: bool,
 }
 
-impl<'a> From<PipelineInputAssemblyStateCreateInfo>
-    for vk::PipelineInputAssemblyStateCreateInfo<'a>
-{
+impl From<PipelineInputAssemblyStateCreateInfo> for vk::PipelineInputAssemblyStateCreateInfo<'_> {
     fn from(val: PipelineInputAssemblyStateCreateInfo) -> Self {
         vk::PipelineInputAssemblyStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
