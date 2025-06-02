@@ -83,7 +83,7 @@ pub struct RenderContext {
 
 impl RenderContext {
     pub fn new(ci: RenderContextCreateInfo) -> Result<Self> {
-        let (instance, physical_device, surface, device, mut allocator, execution_manager) =
+        let (instance, physical_device, surface, device, mut allocator) =
             dagal::bootstrap::init::WindowedContext::init(
                 dagal::bootstrap::app_info::AppSettings {
                     name: "DARE".to_string(),

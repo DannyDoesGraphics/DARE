@@ -38,7 +38,6 @@ impl ContextInit for WindowlessContext {
         crate::device::PhysicalDevice,
         crate::device::LogicalDevice,
         ArcAllocator<A>,
-        crate::device::execution_manager::ExecutionManager,
     );
 
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
@@ -67,7 +66,6 @@ impl ContextInit for WindowedContext {
         Option<crate::wsi::Surface>,
         crate::device::LogicalDevice,
         ArcAllocator<A>,
-        crate::device::execution_manager::ExecutionManager,
     );
 
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
@@ -222,10 +220,6 @@ impl ContextInit for WindowedContext {
                 debug_utils,
             })?;
 
-        // Now we create an execution manager using all queues
-        let execution_manager: crate::device::ExecutionManager =
-            crate::device::ExecutionManager::from_device(logical_device.clone(), &physical_device);
-
         // Make an allocator
         let allocator = ArcAllocator::new(GPUAllocatorImpl::new(
             unsafe {
@@ -247,7 +241,6 @@ impl ContextInit for WindowedContext {
             surface,
             logical_device,
             allocator,
-            execution_manager,
         ))
     }
 
