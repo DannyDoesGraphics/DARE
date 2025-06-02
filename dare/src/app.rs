@@ -88,7 +88,7 @@ impl winit::application::ApplicationHandler for App {
                         .send_blocking(RenderServerRequest::RenderStart)
                         .unwrap();
 
-                    // Update window title if needed
+                    // Update the window title if needed
                     if let Some(window) = window_clone {
                         window.set_title(&format!(
                             "DARE | micro-seconds: {}",
