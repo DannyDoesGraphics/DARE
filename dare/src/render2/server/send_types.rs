@@ -1,14 +1,12 @@
 use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
-use dagal::allocators::GPUAllocatorImpl;
-use dagal::winit;
-use std::any::Any;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum RenderServerRequest {
-    /// Requests a single frame be rendered
-    Render,
+    /// Starts continuous rendering
+    RenderStart,
+    /// Stops continuous rendering
+    RenderEnd,
     /// Surface has been updated
     SurfaceUpdate {
         dimensions: Option<(u32, u32)>,

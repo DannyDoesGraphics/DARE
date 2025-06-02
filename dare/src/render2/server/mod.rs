@@ -9,14 +9,8 @@ use crate::render2::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
-use dagal::ash::vk;
-use dagal::winit;
+use dagal::allocators::GPUAllocatorImpl;
 use derivative::Derivative;
-use std::any::Any;
-use std::cmp::PartialEq;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 #[derive(Debug)]
 pub struct RenderServer {
@@ -103,36 +97,49 @@ impl RenderServer {
                 schedule.add_systems(super::components::camera::camera_system);
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
+                
+                let mut is_rendering = false;
+                
                 loop {
                     // close server
                     if packet_recv.is_closed() {
                         break;
                     }
-                    match packet_recv.recv().await {
-                        Some(packet) => {
-                            match packet.request {
-                                render::RenderServerRequest::Render => {
-                                    schedule.run(&mut world);
+                    
+                    // Always try to receive packets without blocking
+                    while let Ok(packet) = packet_recv.try_recv() {
+                        match packet.request {
+                            render::RenderServerRequest::RenderStart => {
+                                is_rendering = true;
+                            }
+                            render::RenderServerRequest::RenderEnd => {
+                                is_rendering = false;
+                            }
+                            render::RenderServerRequest::Stop => {
+                                let mut shutdown_schedule = becs::Schedule::default();
+                                shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
+                                shutdown_schedule.run(&mut world);
+                                return; // Exit the loop and function
+                            }
+                            render::RenderServerRequest::SurfaceUpdate {
+                                dimensions: _,
+                                raw_handles: _,
+                            } => {
+                                if let Err(e) = render_context.update_surface() {
+                                    eprintln!("Failed to update surface: {}", e);
                                 }
-                                render::RenderServerRequest::Stop => {
-                                    let mut shutdown_schedule = becs::Schedule::default();
-                                    shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
-                                    shutdown_schedule.run(&mut world);
-                                    break;
-                                }
-                                render::RenderServerRequest::SurfaceUpdate {
-                                    dimensions,
-                                    raw_handles,
-                                } => {
-                                    if let Err(e) = render_context.update_surface() {
-                                        eprintln!("Failed to update surface: {}", e);
-                                    }
-                                }
-                            };
-                            packet.callback.map(|v| v.send(()));
-                        }
-                        None => {}
+                            }
+                        };
+                        packet.callback.map(|v| v.send(()));
                     }
+                    
+                    // If we're in rendering mode, run a frame
+                    if is_rendering {
+                        schedule.run(&mut world);
+                    }
+                    
+                    // Small yield to prevent blocking the async runtime completely
+                    tokio::task::yield_now().await;
                 }
                 tracing::trace!("Stopping render manager");
                 // drop world
@@ -174,6 +181,26 @@ impl RenderClient {
 
     pub fn input_send(&self) -> &dare::util::event::EventSender<dare::window::input::Input> {
         &self.input_sender
+    }
+
+    /// Starts continuous rendering
+    pub fn start_rendering(&self) -> Result<()> {
+        self.send(render::RenderServerRequest::RenderStart)
+    }
+
+    /// Stops continuous rendering
+    pub fn stop_rendering(&self) -> Result<()> {
+        self.send(render::RenderServerRequest::RenderEnd)
+    }
+
+    /// Starts continuous rendering with blocking for callback
+    pub fn start_rendering_blocking(&self) -> Result<()> {
+        self.send_blocking(render::RenderServerRequest::RenderStart)
+    }
+
+    /// Stops continuous rendering with blocking for callback
+    pub fn stop_rendering_blocking(&self) -> Result<()> {
+        self.send_blocking(render::RenderServerRequest::RenderEnd)
     }
 
     /// Sends with blocking for a callback

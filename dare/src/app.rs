@@ -85,7 +85,7 @@ impl winit::application::ApplicationHandler for App {
                     let last_dt = self.last_dt;
 
                     self.render_client
-                        .send_blocking(RenderServerRequest::Render)
+                        .send_blocking(RenderServerRequest::RenderStart)
                         .unwrap();
 
                     // Update window title if needed
