@@ -1,12 +1,6 @@
 use crate::prelude::render;
-use crate::prelude::render::{RenderServerPacket, RenderServerRequest};
 use dagal::ash::vk;
-use dagal::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use dagal::winit;
-use dagal::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
-use futures::executor;
-use std::process::exit;
-use std::sync::Arc;
 use tracing_subscriber::FmtSubscriber;
 
 mod app;

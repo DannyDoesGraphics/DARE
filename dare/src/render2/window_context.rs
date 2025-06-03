@@ -1,8 +1,6 @@
 use crate::render2::surface_context::SurfaceContext;
 use anyhow::Result;
-use dagal::allocators::Allocator;
-use dagal::raw_window_handle::HasRawDisplayHandle;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::RwLock;
 
 #[derive(Debug)]
 pub struct WindowContext {

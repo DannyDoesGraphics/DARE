@@ -3,9 +3,7 @@ use crate::prelude as dare;
 use crate::prelude::render::RenderServerRequest;
 use crate::render2::prelude as render;
 use anyhow::Result;
-use dagal::raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use dagal::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;

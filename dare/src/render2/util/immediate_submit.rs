@@ -1,10 +1,9 @@
-use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::traits::AsRaw;
 use std::ptr;
-use std::sync::{Arc, LockResult};
+use std::sync::Arc;
 
 #[derive(Debug)]
 struct ImmediateSubmitInner {

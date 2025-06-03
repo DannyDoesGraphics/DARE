@@ -1,8 +1,6 @@
 use crate::util::either::Either;
-use crossbeam_channel::SendError;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Weak};
 
 /// Responsible to dealing with dropping of virtual resources

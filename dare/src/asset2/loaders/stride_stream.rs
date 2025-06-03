@@ -126,7 +126,7 @@ impl<'a, T: AsRef<[u8]>> futures_core::Stream for StrideStream<'a, T> {
                     Some(data) => {
                         // Data can be added
                         match data {
-                            Ok(mut data) => {
+                            Ok(data) => {
                                 // check offset and ret early
                                 if this.bytes_recv + data.as_ref().len() < this.offset {
                                     this.bytes_recv += data.as_ref().len();

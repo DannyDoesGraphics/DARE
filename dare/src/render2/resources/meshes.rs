@@ -1,8 +1,6 @@
 use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
-use dare_containers::error::ContainerErrors;
 use dare_containers::prelude as containers;
-use dare_containers::prelude::Slot;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, becs::Resource)]

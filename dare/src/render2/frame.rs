@@ -8,7 +8,6 @@ use dagal::traits::AsRaw;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
-use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]

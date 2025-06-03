@@ -1,6 +1,6 @@
 use super::prelude as asset;
 use derivative::Derivative;
-use std::fmt::{Debug, Formatter, Pointer};
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};

@@ -1,19 +1,15 @@
-use std::future::Future;
-use std::pin::Pin;
+use std::ptr;
 use std::sync::{Arc, Weak};
-use std::{mem, ptr};
 use tokio::sync::RwLock;
 
 use anyhow::Result;
 /// Bevy
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, ArcAllocator};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
 use dagal::{descriptor, resource};
-/// A GPU resource table
-use dare_containers::prelude as container;
 use dare_containers::prelude::Container;
 
 #[derive(Debug)]

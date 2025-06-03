@@ -133,7 +133,7 @@ impl asset::loaders::MetaDataLoad for BufferMetaData {
     async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
         let mut stream = self.stream(load_info).await?;
         let mut data: Vec<u8> = Vec::with_capacity(self.format.size() * self.element_count);
-        while let Some(mut incoming) = stream.next().await {
+        while let Some(incoming) = stream.next().await {
             let mut incoming = incoming?;
             data.append(&mut incoming);
         }

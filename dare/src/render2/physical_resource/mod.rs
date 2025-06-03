@@ -1,22 +1,16 @@
-use crate::asset2::prelude::{AssetHandle, AssetMetadata};
+use crate::asset2::prelude::AssetHandle;
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
 use containers::Slot;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
-use dagal::resource::sampler::SamplerCreateInfo;
 use dagal::resource::traits::Resource;
 use dare_containers::prelude as containers;
 use futures::TryFutureExt;
-use std::any::{Any, TypeId};
-use std::cell::RefCell;
+use std::any::TypeId;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::Deref;
-use std::sync::{Arc, LazyLock};
 
 pub mod gpu_stream;
 pub use gpu_stream::*;
@@ -27,7 +21,6 @@ pub mod render_image;
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude as asset;
 use crate::asset2::server::AssetServer;
-use crate::asset2::server::asset_info::AssetInfo;
 pub use handle::*;
 pub use render_buffer::*;
 pub use render_image::*;
@@ -63,17 +56,11 @@ enum PhysicalState<T> {
 }
 impl<T> PhysicalState<T> {
     pub fn is_some(&self) -> bool {
-        match self {
-            PhysicalState::Some(_) => true,
-            _ => false,
-        }
+        matches!(self, PhysicalState::Some(_))
     }
 
     pub fn is_none(&self) -> bool {
-        match self {
-            PhysicalState::Empty => true,
-            _ => false,
-        }
+        matches!(self, PhysicalState::Empty)
     }
 
     pub fn map<F: FnOnce(&T) -> A, A>(&self, f: F) -> Option<A> {
@@ -171,8 +158,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     ) -> Option<T::Loaded> {
         self.slot
             .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
-            .map(|option| option.replace(physical_resource))
-            .flatten()
+            .and_then(|option| option.replace(physical_resource))
     }
 
     /// Alias an asset handle to a virtual resource
@@ -195,14 +181,13 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     ) -> Option<T::Loaded> {
         self.slot
             .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
-            .map(|option| {
+            .and_then(|option| {
                 // reset lifetime
-                self.deferred_deletion
-                    .get_mut(&virtual_resource)
-                    .map(|deferred| deferred.reset());
+                if let Some(deferred) = self.deferred_deletion.get_mut(&virtual_resource) {
+                    deferred.reset()
+                }
                 option.replace(physical_resource)
             })
-            .flatten()
     }
     /// Insert a deferred physical resource back to a new virtual resource
     pub fn insert_deferred(
@@ -229,17 +214,16 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     pub fn resolve(&mut self, virtual_resource: &VirtualResource) -> Option<&T::Loaded> {
         self.slot
             .get(Slot::new(virtual_resource.uid, virtual_resource.generation))
-            .map(|option| match option.as_ref() {
+            .and_then(|option| match option.as_ref() {
                 None => None,
                 Some(r) => {
                     // keep alive
-                    self.deferred_deletion
-                        .get_mut(&virtual_resource)
-                        .map(|deferred| deferred.reset());
+                    if let Some(deferred) = self.deferred_deletion.get_mut(virtual_resource) {
+                        deferred.reset()
+                    }
                     Some(r)
                 }
             })
-            .flatten()
     }
 
     /// Resolve using an asset instead of virtual resource
@@ -321,25 +305,24 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
             if let Some(deferred_deletion) = self.deferred_deletion.get_mut(&virtual_handle) {
                 deferred_deletion.reset();
             }
-            self.slot
-                .get_mut(slot.clone())
-                .map(|state| *state = PhysicalState::Loading);
-            self.asset_server
-                .get_metadata(&asset_handle)
-                .map(|metadata| {
-                    tokio::task::spawn(async move {
-                        T::load_asset(metadata, prepare_info, load_info)
-                            .and_then(|v| async move {
-                                if let Err(_) = finished_queue.send((virtual_handle.clone(), v)) {
-                                    tracing::error!(
-                                        "Physical resource storage failed to send loaded resource"
-                                    );
-                                };
-                                Ok(())
-                            })
-                            .await
-                    });
+            // apply lock
+            if let Some(slot) = self.slot.get_mut(slot) {
+                *slot = PhysicalState::Loading;
+            }
+            if let Some(metadata) = self.asset_server.get_metadata(&asset_handle) {
+                tokio::task::spawn(async move {
+                    T::load_asset(metadata, prepare_info, load_info)
+                        .and_then(|v| async move {
+                            if finished_queue.send((virtual_handle.clone(), v)).is_err() {
+                                tracing::error!(
+                                    "Physical resource storage failed to send loaded resource"
+                                );
+                            };
+                            Ok(())
+                        })
+                        .await
                 });
+            }
         }
     }
 
@@ -388,16 +371,15 @@ impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
         if let Some(vr) = self
             .asset_mapping
             .get(asset_handle)
-            .map(|vr| vr.upgrade())
-            .flatten()
+            .and_then(|vr| vr.upgrade())
         {
             self.slot
                 .get(Slot::new(vr.uid, vr.generation))?
                 .as_ref()
                 .map(|buf| {
-                    self.deferred_deletion
-                        .get_mut(&vr)
-                        .map(|deferred| deferred.reset());
+                    if let Some(deferred) = self.deferred_deletion.get_mut(&vr) {
+                        deferred.reset()
+                    }
                     buf.address()
                 })
         } else {

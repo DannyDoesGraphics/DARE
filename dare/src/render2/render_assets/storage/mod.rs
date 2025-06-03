@@ -1,18 +1,15 @@
 use crate::asset2::prelude::AssetHandle;
-use crate::asset2::server::AssetServerDelta;
 use crate::prelude as dare;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use crossbeam_channel::SendError;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dare_containers as containers;
 use dare_containers::prelude::Slot;
-use futures::{FutureExt, TryFutureExt};
+use futures::FutureExt;
 use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
-use std::ops::Deref;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 pub mod handle;
 use crate::render2::physical_resource;
@@ -101,7 +98,7 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
         while let Ok(handle) = self.dropped_handles_recv.try_recv() {
             match handle {
                 HandleRCDelta::Add(handle) => {
-                    if let Some(mut amount) = self.handle_references.get_mut(&handle) {
+                    if let Some(amount) = self.handle_references.get_mut(&handle) {
                         *amount += 1;
                     } else {
                         tracing::warn!("Expected handle, got `None`");
@@ -109,7 +106,7 @@ impl<T: MetaDataRenderAsset> RenderAssetManagerStorage<T> {
                 }
                 HandleRCDelta::Remove(handle) => {
                     // If handle references does not exist, it indicates it mostly has been removed
-                    if let Some(mut amount) = self.handle_references.get_mut(&handle) {
+                    if let Some(amount) = self.handle_references.get_mut(&handle) {
                         *amount -= 1;
                         // no refs left, delete
                         if *amount == 0 {

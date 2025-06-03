@@ -5,7 +5,6 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource::BufferCreateInfo;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
-use std::ops::Deref;
 use std::ptr;
 use std::sync::Arc;
 

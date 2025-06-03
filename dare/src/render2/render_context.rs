@@ -9,15 +9,9 @@ use dagal::ash::vk::Handle;
 use dagal::bootstrap::app_info::{Expected, QueueRequest};
 use dagal::bootstrap::init::ContextInit;
 use dagal::pipelines::PipelineBuilder;
-use dagal::raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use dagal::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use dagal::traits::AsRaw;
-use dagal::winit;
 use futures::StreamExt;
-use std::ffi::{CStr, CString, c_void};
-use std::marker::PhantomData;
-use std::mem::{ManuallyDrop, take};
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -200,7 +194,7 @@ impl RenderContext {
             vk::QueueFlags::TRANSFER,
             queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER),
         )?;
-        let mut present_queue = graphics_queue.pop().unwrap();
+        let present_queue = graphics_queue.pop().unwrap();
         let immediate_submit =
             dare::render::util::ImmediateSubmit::new(device.clone(), queue_allocator)?;
 

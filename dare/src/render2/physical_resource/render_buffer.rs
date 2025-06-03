@@ -31,7 +31,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderBuffer<A> {
 
     fn prepare_asset(
         metadata: <Self::Asset as asset::Asset>::Metadata,
-        mut prepare_info: Self::PrepareInfo,
+        prepare_info: Self::PrepareInfo,
     ) -> anyhow::Result<Self::Loaded> {
         todo!()
     }

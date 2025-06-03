@@ -3,12 +3,9 @@ pub mod deltas;
 pub mod render_asset_state;
 
 use super::prelude as asset;
-use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
-use crossbeam_channel::SendError;
 use dare_containers::dashmap::try_result::TryResult;
 pub use deltas::AssetServerDelta;
-pub use render_asset_state::*;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

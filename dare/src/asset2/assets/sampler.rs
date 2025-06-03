@@ -2,13 +2,12 @@ use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
-use crate::vk::SamplerCreateInfo;
 use bevy_tasks::futures_lite::FutureExt;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use futures_core::future::BoxFuture;
 use gltf::texture::{MagFilter, MinFilter, WrappingMode};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 
 pub struct Sampler {}

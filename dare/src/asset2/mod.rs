@@ -1,4 +1,3 @@
-use bevy_ecs::prelude::*;
 mod asset_id;
 mod asset_state;
 pub mod assets;

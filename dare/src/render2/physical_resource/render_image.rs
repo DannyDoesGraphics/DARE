@@ -1,18 +1,15 @@
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude::Asset;
 use crate::prelude as dare;
-use crate::prelude::render::util::{TransferRequest, TransferRequestCallback};
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
-use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
+use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use dagal::traits::AsRaw;
 use futures::{FutureExt, StreamExt};
 use futures_core::future::BoxFuture;
 use std::io::Read;
 use std::ptr;
-use tracing::instrument::WithSubscriber;
 
 #[derive(Debug, Component)]
 pub struct RenderImage<A: Allocator + 'static> {

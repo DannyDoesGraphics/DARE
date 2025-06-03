@@ -1,12 +1,10 @@
 use crate::asset2::assets::BufferStreamInfo;
 use crate::asset2::prelude::AssetHandle;
 use crate::prelude as dare;
-use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
 use crate::render2::physical_resource;
 use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
 use crate::render2::prelude::util::TransferPool;
-use crate::render2::util::{ImageFilter, WrappingMode};
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -16,11 +14,8 @@ use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::Pipeline;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
-use image::imageops::unsharpen;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::mem::size_of;
-use tokio::task;
 
 /// Functions effectively as a collection
 struct SurfaceRender<'a> {

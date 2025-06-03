@@ -1,14 +1,13 @@
 use anyhow::Result;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::ash::vk::{DisplayPowerStateEXT, Queue};
+use dagal::ash::vk::Queue;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
 use dagal::traits::AsRaw;
 use futures::stream::FuturesUnordered;
 use std::ptr;
 use std::sync::Arc;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub struct TransferBufferToBuffer<A: Allocator> {

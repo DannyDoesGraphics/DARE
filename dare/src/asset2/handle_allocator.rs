@@ -1,6 +1,6 @@
 use super::prelude as asset;
+use std::sync::atomic;
 use std::sync::atomic::AtomicU32;
-use std::sync::{Arc, atomic};
 
 #[derive(Debug)]
 pub struct HandleAllocator {

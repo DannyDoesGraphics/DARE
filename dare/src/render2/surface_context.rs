@@ -1,13 +1,8 @@
 use anyhow::Result;
-use bevy_ecs::prelude as becs;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
-use dagal::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
-use dagal::traits::{AsRaw, Destructible};
-use dagal::winit;
-use std::mem::{ManuallyDrop, swap};
-use std::sync::Arc;
+use dagal::traits::AsRaw;
 use tokio::sync::{Mutex, RwLock};
 
 /// Relating to anything that relies on window resizing

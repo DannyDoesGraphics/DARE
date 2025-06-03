@@ -1,20 +1,14 @@
 use crate::prelude as dare;
 use crate::prelude::render;
 use crate::render2::physical_resource;
-use crate::render2::render_assets::RenderAssetsStorage;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::ash::vk::CommandBuffer;
 use dagal::command::CommandBufferState;
 use dagal::traits::AsRaw;
-use std::mem::swap;
 use std::ptr;
-use std::ptr::write;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tokio::sync::MutexGuard;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
@@ -186,7 +180,7 @@ pub async fn present_system_end(
     frame_count: super::frame_number::FrameCount,
     render_context: super::render_context::RenderContext,
     surface_context: &super::surface_context::SurfaceContext,
-    mut frame: &mut super::frame::Frame,
+    frame: &mut super::frame::Frame,
     swapchain_image_index: u32,
     textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,

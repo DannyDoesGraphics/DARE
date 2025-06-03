@@ -1,7 +1,5 @@
 use crate::prelude as dare;
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
-use dagal::ash::vk;
 
 pub fn init_assets(
     mut commands: becs::Commands,

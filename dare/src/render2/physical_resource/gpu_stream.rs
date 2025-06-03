@@ -1,12 +1,10 @@
 use crate::prelude as dare;
-use async_stream::stream;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::util::format::get_size_from_vk_format;
 use futures::StreamExt;
 use futures_core::Stream;
 use futures_core::stream::BoxStream;
-use std::ops::Div;
 
 /// Streams data from a source stream to a GPU buffer
 ///
@@ -68,9 +66,7 @@ where
                 assert!(chunk_size <= hardware_partition_size);
 
                 // write partition into staging
-                staging_opt
-                    .as_mut()
-                    .map(|mut staging| staging.write(0, &chunk));
+                staging_opt.as_mut().map(|staging| staging.write(0, &chunk));
                 let (src_buffer, dst_buffer) = transfer_pool
                     .buffer_to_buffer_transfer(dare::render::util::TransferBufferToBuffer {
                         src_buffer: staging_opt.take().unwrap(),
