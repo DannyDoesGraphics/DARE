@@ -2,7 +2,7 @@ use crate::asset2::prelude::AssetHandle;
 use crate::asset2::traits::Asset;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
-use containers::Slot;
+use containers::DefaultSlot;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
@@ -26,7 +26,7 @@ pub use render_buffer::*;
 pub use render_image::*;
 
 pub fn slot_to_virtual_handle<T: 'static>(
-    slot: Slot<T>,
+    slot: DefaultSlot<T>,
     drop_send: Option<crossbeam_channel::Sender<VirtualResource>>,
 ) -> VirtualResource {
     VirtualResource::new(slot.id(), slot.generation(), drop_send, TypeId::of::<T>())
@@ -157,7 +157,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         physical_resource: T::Loaded,
     ) -> Option<T::Loaded> {
         self.slot
-            .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
+            .get_mut(DefaultSlot::new(
+                virtual_resource.uid,
+                virtual_resource.generation,
+            ))
             .and_then(|option| option.replace(physical_resource))
     }
 
@@ -180,7 +183,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         physical_resource: T::Loaded,
     ) -> Option<T::Loaded> {
         self.slot
-            .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
+            .get_mut(DefaultSlot::new(
+                virtual_resource.uid,
+                virtual_resource.generation,
+            ))
             .and_then(|option| {
                 // reset lifetime
                 if let Some(deferred) = self.deferred_deletion.get_mut(&virtual_resource) {
@@ -213,7 +219,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     /// Attempt to resolve a virtual resource
     pub fn resolve(&mut self, virtual_resource: &VirtualResource) -> Option<&T::Loaded> {
         self.slot
-            .get(Slot::new(virtual_resource.uid, virtual_resource.generation))
+            .get(DefaultSlot::new(
+                virtual_resource.uid,
+                virtual_resource.generation,
+            ))
             .and_then(|option| match option.as_ref() {
                 None => None,
                 Some(r) => {
@@ -249,7 +258,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
             // find each loaded, update virtual resource to reflect new asset
             let old = self
                 .slot
-                .get_mut(Slot::new(virtual_resource.uid, virtual_resource.generation))
+                .get_mut(DefaultSlot::new(
+                    virtual_resource.uid,
+                    virtual_resource.generation,
+                ))
                 .unwrap();
             if !old.is_some() {
                 old.replace(physical_resource);
@@ -271,10 +283,10 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         }
         // remove dropped
         while let Ok(virtual_resource) = self.drop_recv.try_recv() {
-            if let Ok(t) = self
-                .slot
-                .remove(Slot::new(virtual_resource.uid, virtual_resource.generation))
-            {
+            if let Ok(t) = self.slot.remove(DefaultSlot::new(
+                virtual_resource.uid,
+                virtual_resource.generation,
+            )) {
                 self.asset_mapping_reverse
                     .remove(&virtual_resource)
                     .map(|vr| self.asset_mapping.remove(&vr));
@@ -293,7 +305,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     ) {
         let finished_queue = self.loaded_send.clone();
         let virtual_handle = self.asset_mapping.get(asset_handle).unwrap();
-        let slot = Slot::new(virtual_handle.uid, virtual_handle.generation);
+        let slot = DefaultSlot::new(virtual_handle.uid, virtual_handle.generation);
         let is_unloaded = self
             .slot
             .get(slot.clone())
@@ -374,7 +386,7 @@ impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
             .and_then(|vr| vr.upgrade())
         {
             self.slot
-                .get(Slot::new(vr.uid, vr.generation))?
+                .get(DefaultSlot::new(vr.uid, vr.generation))?
                 .as_ref()
                 .map(|buf| {
                     if let Some(deferred) = self.deferred_deletion.get_mut(&vr) {

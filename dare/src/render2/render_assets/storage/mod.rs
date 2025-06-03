@@ -6,7 +6,7 @@ use bevy_ecs::prelude as becs;
 use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dare_containers as containers;
-use dare_containers::prelude::Slot;
+use dare_containers::prelude::DefaultSlot;
 use futures::FutureExt;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -51,7 +51,7 @@ pub struct RenderAssetManagerStorage<T: MetaDataRenderAsset> {
     dropped_handles_recv: crossbeam_channel::Receiver<HandleRCDelta<T>>,
     dropped_handles_send: crossbeam_channel::Sender<HandleRCDelta<T>>,
     /// Maintain a list of active handles (ref counting)
-    handle_references: HashMap<Slot<AssetHandle<T::Asset>>, u32>,
+    handle_references: HashMap<DefaultSlot<AssetHandle<T::Asset>>, u32>,
     /// Links the loaded assets to the asset handle
     internal_loaded: HashMap<RenderAssetHandle<T>, T::Loaded>,
     /// A queue used to handle loaded assets

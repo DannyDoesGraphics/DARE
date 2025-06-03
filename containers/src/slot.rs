@@ -3,14 +3,14 @@ use std::marker::PhantomData;
 
 #[derive(Derivative)]
 #[derivative(Debug, PartialEq, Eq, Hash)]
-pub struct Slot<T> {
+pub struct DefaultSlot<T> {
     pub(crate) id: u64,
     pub(crate) generation: u64,
     #[derivative(Debug = "ignore", PartialEq = "ignore", Hash = "ignore")]
     _marker: PhantomData<T>,
 }
 
-impl<T> Clone for Slot<T> {
+impl<T> Clone for DefaultSlot<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -20,7 +20,7 @@ impl<T> Clone for Slot<T> {
     }
 }
 
-impl<T> Slot<T> {
+impl<T> DefaultSlot<T> {
     pub fn new(id: u64, generation: u64) -> Self {
         Self {
             id,
@@ -39,13 +39,13 @@ impl<T> Slot<T> {
 
     /// # Safety
     /// This allows you to arbitrarily change the generic
-    pub unsafe fn transmute<A>(self) -> Slot<A> {
-        Slot::new(self.id, self.generation)
+    pub unsafe fn transmute<A>(self) -> DefaultSlot<A> {
+        DefaultSlot::new(self.id, self.generation)
     }
 
     /// # Safety
     /// No type safety guarantees are made here
-    pub unsafe fn transmute_ref<A>(&self) -> &Slot<A> {
+    pub unsafe fn transmute_ref<A>(&self) -> &DefaultSlot<A> {
         unsafe { std::mem::transmute(self) }
     }
 }

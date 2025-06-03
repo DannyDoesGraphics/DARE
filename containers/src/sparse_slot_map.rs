@@ -1,19 +1,19 @@
 use crate::error::ContainerErrors;
-use crate::slot::Slot;
+use crate::slot::DefaultSlot;
 use crate::traits::Container;
 
 struct SlotUnion<T> {
-    pub slot: Slot<T>,
+    pub slot: DefaultSlot<T>,
     pub data: Option<T>,
 }
 
 pub struct SparseSlotMap<T: 'static> {
     data: Vec<SlotUnion<T>>,
-    free_list: Vec<Slot<T>>,
+    free_list: Vec<DefaultSlot<T>>,
 }
 
 impl<T: 'static> Container<T> for SparseSlotMap<T> {
-    type Slot = Slot<T>;
+    type Slot = DefaultSlot<T>;
 
     fn new() -> Self {
         Self {
@@ -24,7 +24,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
 
     fn insert(&mut self, element: T) -> Self::Slot {
         let next_free_slot = self.free_list.pop().unwrap_or_else(|| {
-            let slot = Slot::new(self.data.len() as u64, 0);
+            let slot = DefaultSlot::new(self.data.len() as u64, 0);
             self.data.push(SlotUnion {
                 slot: slot.clone(),
                 data: None,
@@ -50,7 +50,7 @@ impl<T: 'static> Container<T> for SparseSlotMap<T> {
         self.data
             .get_mut(slot.id() as usize)
             .map(|slot_union| {
-                slot_union.slot = Slot::new(slot.id(), slot.generation() + 1);
+                slot_union.slot = DefaultSlot::new(slot.id(), slot.generation() + 1);
                 self.free_list.push(slot_union.slot.clone());
                 Ok(slot_union.data.take().unwrap())
             })

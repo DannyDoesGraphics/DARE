@@ -1,6 +1,6 @@
 use crate::prelude::asset2::AssetHandle;
 use crate::render2::render_assets::traits::MetaDataRenderAsset;
-use dare_containers::prelude::Slot;
+use dare_containers::prelude::DefaultSlot;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
@@ -14,15 +14,15 @@ pub(super) enum HandleRCDelta<T: MetaDataRenderAsset> {
 #[derive(Debug)]
 pub enum RenderAssetHandle<T: MetaDataRenderAsset> {
     Strong {
-        handle: Slot<AssetHandle<T::Asset>>,
+        handle: DefaultSlot<AssetHandle<T::Asset>>,
         dropped_handles_send: crossbeam_channel::Sender<HandleRCDelta<T>>,
     },
     Weak {
-        handle: Slot<AssetHandle<T::Asset>>,
+        handle: DefaultSlot<AssetHandle<T::Asset>>,
     },
 }
-impl<T: MetaDataRenderAsset> AsRef<Slot<AssetHandle<T::Asset>>> for RenderAssetHandle<T> {
-    fn as_ref(&self) -> &Slot<AssetHandle<T::Asset>> {
+impl<T: MetaDataRenderAsset> AsRef<DefaultSlot<AssetHandle<T::Asset>>> for RenderAssetHandle<T> {
+    fn as_ref(&self) -> &DefaultSlot<AssetHandle<T::Asset>> {
         match self {
             RenderAssetHandle::Strong { handle, .. } => handle,
             RenderAssetHandle::Weak { handle } => handle,
@@ -30,7 +30,7 @@ impl<T: MetaDataRenderAsset> AsRef<Slot<AssetHandle<T::Asset>>> for RenderAssetH
     }
 }
 impl<T: MetaDataRenderAsset> Deref for RenderAssetHandle<T> {
-    type Target = Slot<AssetHandle<T::Asset>>;
+    type Target = DefaultSlot<AssetHandle<T::Asset>>;
 
     fn deref(&self) -> &Self::Target {
         match &self {

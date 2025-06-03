@@ -1,14 +1,14 @@
 use anyhow::Result;
 
-use crate::slot::Slot;
+use crate::slot::DefaultSlot;
 
 pub struct SlotUnion<'a, T> {
-    pub slot: Slot<T>,
+    pub slot: DefaultSlot<T>,
     pub data: Option<&'a T>,
 }
 
 pub struct SlotUnionMut<'a, T> {
-    pub slot: Slot<T>,
+    pub slot: DefaultSlot<T>,
     pub data: Option<&'a mut T>,
 }
 

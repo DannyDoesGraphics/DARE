@@ -2,17 +2,17 @@ use anyhow::Result;
 
 use crate::error::ContainerErrors;
 use crate::prelude::{SlotUnion, SlotUnionMut};
-use crate::slot::Slot;
+use crate::slot::DefaultSlot;
 use crate::traits::Container;
 
 #[derive(Debug)]
 pub struct FreeList<T: 'static> {
     data: Vec<Option<T>>,
-    free_list: Vec<Slot<T>>,
+    free_list: Vec<DefaultSlot<T>>,
 }
 
 impl<T: 'static> Container<T> for FreeList<T> {
-    type Slot = Slot<T>;
+    type Slot = DefaultSlot<T>;
 
     fn new() -> Self {
         Self {
@@ -21,10 +21,10 @@ impl<T: 'static> Container<T> for FreeList<T> {
         }
     }
 
-    fn insert(&mut self, element: T) -> Slot<T> {
+    fn insert(&mut self, element: T) -> DefaultSlot<T> {
         let next_free_slot = self.free_list.pop().unwrap_or_else(|| {
             self.data.push(None);
-            Slot::new(self.data.len() as u64, 0)
+            DefaultSlot::new(self.data.len() as u64, 0)
         });
         self.data.push(Some(element));
         next_free_slot
@@ -71,7 +71,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
 
     fn iter(&self) -> impl Iterator<Item = SlotUnion<T>> {
         self.data.iter().enumerate().map(|(index, data)| SlotUnion {
-            slot: Slot::new(index as u64, 0),
+            slot: DefaultSlot::new(index as u64, 0),
             data: data.as_ref(),
         })
     }
@@ -81,7 +81,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
             .iter_mut()
             .enumerate()
             .map(|(index, data)| SlotUnionMut {
-                slot: Slot::new(index as u64, 0),
+                slot: DefaultSlot::new(index as u64, 0),
                 data: data.as_mut(),
             })
     }

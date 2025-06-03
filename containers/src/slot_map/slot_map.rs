@@ -1,5 +1,5 @@
 use crate::error::ContainerErrors;
-use crate::prelude::Slot;
+use crate::prelude::DefaultSlot;
 use std::slice::{Iter, IterMut};
 
 /// Regular slot map implementation
@@ -7,7 +7,7 @@ use std::slice::{Iter, IterMut};
 pub struct SlotMap<T> {
     // usize is a reference to the proxy slot index
     pub(crate) data: Vec<(T, u64)>,
-    pub(crate) slots: Vec<Slot<T>>,
+    pub(crate) slots: Vec<DefaultSlot<T>>,
     pub(crate) free_list: Vec<u64>,
 }
 impl<T> Default for SlotMap<T> {
@@ -21,14 +21,14 @@ impl<T> Default for SlotMap<T> {
 }
 
 impl<T> SlotMap<T> {
-    pub fn insert(&mut self, element: T) -> Slot<T> {
+    pub fn insert(&mut self, element: T) -> DefaultSlot<T> {
         // find the next free slot for indirect
         let free_slot_index;
-        let free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {
+        let free_slot: &mut DefaultSlot<T> = if let Some(index) = self.free_list.pop() {
             free_slot_index = index;
             self.slots.get_mut(index as usize).unwrap()
         } else {
-            let slot = Slot::new(0, 0);
+            let slot = DefaultSlot::new(0, 0);
             free_slot_index = self.slots.len() as u64;
             self.slots.push(slot);
             self.slots.last_mut().unwrap()
@@ -40,17 +40,17 @@ impl<T> SlotMap<T> {
 
         // produce and out slot from mapping to the proxy slot
 
-        Slot::new(free_slot_index, free_slot.generation)
+        DefaultSlot::new(free_slot_index, free_slot.generation)
     }
 
-    pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
+    pub fn remove(&mut self, slot: DefaultSlot<T>) -> Result<T, ContainerErrors> {
         if let Some(proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
             proxy_slot.generation += 1;
-            Ok::<Slot<T>, ContainerErrors>(proxy_slot.clone())
+            Ok::<DefaultSlot<T>, ContainerErrors>(proxy_slot.clone())
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
@@ -75,7 +75,7 @@ impl<T> SlotMap<T> {
         }
     }
 
-    pub fn get(&self, slot: Slot<T>) -> Option<&T> {
+    pub fn get(&self, slot: DefaultSlot<T>) -> Option<&T> {
         self.slots.get(slot.id as usize).and_then(|proxy_slot| {
             if proxy_slot.generation == slot.generation {
                 self.data.get(proxy_slot.id as usize).map(|data| &data.0)
@@ -85,7 +85,7 @@ impl<T> SlotMap<T> {
         })
     }
 
-    pub fn get_mut(&mut self, slot: Slot<T>) -> Option<&mut T> {
+    pub fn get_mut(&mut self, slot: DefaultSlot<T>) -> Option<&mut T> {
         self.slots.get(slot.id as usize).and_then(|proxy_slot| {
             if proxy_slot.generation == slot.generation {
                 self.data
@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn test_nonexistent_slot() {
         let mut slot_map: SlotMap<i32> = SlotMap::default();
-        let invalid_slot = Slot::new(999, 0); // Assuming we have less than 999 slots
+        let invalid_slot = DefaultSlot::new(999, 0); // Assuming we have less than 999 slots
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_slot() {
         let mut slot_map: SlotMap<u64> = SlotMap::default();
-        let slot = Slot::new(0, 0);
+        let slot = DefaultSlot::new(0, 0);
         match slot_map.remove(slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -281,7 +281,7 @@ mod tests {
     fn test_remove_invalid_generation() {
         let mut slot_map = SlotMap::default();
         let slot = slot_map.insert(42);
-        let invalid_slot = Slot::new(slot.id, slot.generation + 1);
+        let invalid_slot = DefaultSlot::new(slot.id, slot.generation + 1);
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::GenerationMismatch) => {}
             _ => panic!("Expected GenerationMismatch error"),

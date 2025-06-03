@@ -1,5 +1,5 @@
 use crate::error::ContainerErrors;
-use crate::prelude::Slot;
+use crate::prelude::DefaultSlot;
 use std::ops::{Deref, DerefMut};
 
 /// Regular slot map implementation
@@ -34,7 +34,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord> DerefMut for InsertionSortSlotMap<T> 
 
 impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMap<T> {
     /// Insertion cost is O(n^2) and is very computationally expensive
-    pub fn insertion_sort(&mut self, element: T) -> Result<Slot<T>, ContainerErrors> {
+    pub fn insertion_sort(&mut self, element: T) -> Result<DefaultSlot<T>, ContainerErrors> {
         let position_in_vec = self
             .handle
             .data
@@ -45,7 +45,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         let free_slot_index: usize = if let Some(index) = self.free_list.pop() {
             index
         } else {
-            self.slots.push(Slot::new(0, 0));
+            self.slots.push(DefaultSlot::new(0, 0));
             (self.slots.len() - 1) as u64
         } as usize;
         // update id
@@ -67,7 +67,7 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
         }
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(
+        let out_slot = DefaultSlot::new(
             free_slot_index as u64,
             self.slots[free_slot_index].generation,
         );
@@ -75,14 +75,14 @@ impl<T: Eq + PartialEq + PartialOrd + Ord + std::fmt::Debug> InsertionSortSlotMa
     }
 
     /// Removes a slot as according to insertion removal
-    pub fn insertion_removal(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
+    pub fn insertion_removal(&mut self, slot: DefaultSlot<T>) -> Result<T, ContainerErrors> {
         if let Some(proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
             if slot.generation != proxy_slot.generation {
                 return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
             proxy_slot.generation += 1;
-            Ok::<Slot<T>, ContainerErrors>(proxy_slot.clone())
+            Ok::<DefaultSlot<T>, ContainerErrors>(proxy_slot.clone())
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn test_insertion_sort_nonexistent_slot() {
         let mut slot_map: InsertionSortSlotMap<i32> = InsertionSortSlotMap::default();
-        let invalid_slot = Slot::new(999, 0); // Assuming we have less than 999 slots
+        let invalid_slot = DefaultSlot::new(999, 0); // Assuming we have less than 999 slots
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_insertion_sort_remove_nonexistent_slot() {
         let mut slot_map: InsertionSortSlotMap<usize> = InsertionSortSlotMap::default();
-        let slot = Slot::new(0, 0);
+        let slot = DefaultSlot::new(0, 0);
         match slot_map.remove(slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -349,7 +349,7 @@ mod tests {
     fn test_insertion_sort_remove_invalid_generation() {
         let mut slot_map = InsertionSortSlotMap::default();
         let slot = slot_map.insertion_sort(42).unwrap();
-        let invalid_slot = Slot::new(slot.id, slot.generation + 1);
+        let invalid_slot = DefaultSlot::new(slot.id, slot.generation + 1);
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::GenerationMismatch) => {}
             _ => panic!("Expected GenerationMismatch error"),
