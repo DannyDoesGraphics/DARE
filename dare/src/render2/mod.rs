@@ -6,6 +6,7 @@ pub mod mesh_render_system;
 pub mod physical_resource;
 pub mod prelude;
 pub mod present_system;
+pub mod render_assets;
 pub mod render_context;
 pub mod resources;
 pub mod server;

@@ -3,7 +3,6 @@ pub mod send_types;
 use crate::prelude as dare;
 use crate::render2::physical_resource;
 use crate::render2::prelude as render;
-use crate::render2::render_assets::storage::RenderAssetManagerStorage;
 use crate::render2::render_context::{RenderContext, RenderContextCreateInfo};
 use crate::render2::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
@@ -68,12 +67,6 @@ impl RenderServer {
                 world.insert_resource(asset_server.clone());
                 world.insert_resource(render::components::camera::Camera::default());
                 // physical resource storage
-                world.insert_resource(RenderAssetManagerStorage::<
-                    physical_resource::RenderBuffer<GPUAllocatorImpl>,
-                >::new(asset_server.clone()));
-                world.insert_resource(RenderAssetManagerStorage::<
-                    physical_resource::RenderImage<GPUAllocatorImpl>,
-                >::new(asset_server.clone()));
                 world.insert_resource(physical_resource::PhysicalResourceStorage::<
                     dare::asset2::assets::SamplerAsset,
                 >::new(asset_server.clone()));
