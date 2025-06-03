@@ -263,6 +263,7 @@ pub fn build_instancing_data(
                 let id: usize = unique_materials.len();
                 if let Some(material) = material.cloned() {
                     material.albedo_texture.as_ref().map(|texture| {
+                        /*
                         textures.load_or_create_asset_handle(
                             texture.asset_handle.clone(),
                             (
@@ -273,7 +274,7 @@ pub fn build_instancing_data(
                             ),
                             (),
                             128,
-                        );
+                        );*/
                         /*
                         samplers.load_or_create(
                             texture.sampler.clone(),
