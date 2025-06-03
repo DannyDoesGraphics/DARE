@@ -141,7 +141,7 @@ pub fn build_instancing_data(
                 BUFFER_LIFETIME,
             );
             //println!("Normal: {:?}", &surface.normal_buffer);
-            surface.normal_buffer.as_ref().map(|buffer| {
+            if let Some(buffer) = surface.normal_buffer.as_ref() {
                 buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
@@ -163,9 +163,9 @@ pub fn build_instancing_data(
                     },
                     BUFFER_LIFETIME,
                 );
-            });
+            }
             //println!("UV: {:?}", &surface.uv_buffer);
-            surface.uv_buffer.as_ref().map(|buffer| {
+            if let Some(buffer) = surface.uv_buffer.as_ref() {
                 buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
@@ -187,8 +187,8 @@ pub fn build_instancing_data(
                     },
                     BUFFER_LIFETIME,
                 );
-            });
-            surface.tangent_buffer.as_ref().map(|buffer| {
+            }
+            if let Some(buffer) = surface.tangent_buffer.as_ref() {
                 buffers.load_or_create_asset_handle(
                     buffer.clone(),
                     BufferPrepareInfo {
@@ -210,7 +210,7 @@ pub fn build_instancing_data(
                     },
                     BUFFER_LIFETIME,
                 );
-            });
+            }
 
             let mut buffer_resolve =
                 |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
@@ -219,13 +219,12 @@ pub fn build_instancing_data(
                         .resolve_virtual_resource(virtual_resource)
                         .map(|vr| vr.upgrade())
                         .flatten()
-                        .map(|vr| {
+                        .and_then(|vr| {
                             buffers.resolve(&vr).map(|_| {
                                 used_resources.insert(vr.clone());
                                 vr
                             })
                         })
-                        .flatten()
                 };
 
             // Check if the required buffers can be resolved and upgrade them
@@ -323,7 +322,7 @@ pub fn build_instancing_data(
                     .map(|material| *material_map.get(material).unwrap() as u64)
                     .unwrap_or(0),
             ))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(transform.get_transform_matrix());
     }
 

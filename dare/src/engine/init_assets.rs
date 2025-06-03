@@ -13,8 +13,8 @@ pub fn init_assets(
             std::path::PathBuf::from(
                 //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/Box/glTF/Box.gltf",
                 //"C:/Users/Danny/Documents/main1_sponza/main1_sponza/NewSponza_Main_glTF_003.gltf",
-                //"C:/Users/Danny/Documents/bistro/5_2/bistro_5_2.gltf",
-                "C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/BoxTextured/glTF/BoxTextured.gltf",
+                "C:/Users/Danny/Documents/bistro/5_2/bistro_5_2.gltf",
+                //"C:/Users/danny/Documents/glTF-Sample-Assets-main/Models/BoxTextured/glTF/BoxTextured.gltf",
                 //"C:/Users/danny/Documents/blender_splashes/test/instances/instances.gltf",
                 //"C:/Users/danny/Downloads/deccer-cubes-main/deccer-cubes-main/SM_Deccer_Cubes.gltf",
                 //"C:/Users/Danny/Documents/Assets/junk_shop/Blender.gltf",

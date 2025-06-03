@@ -97,15 +97,15 @@ impl RenderServer {
                 schedule.add_systems(super::components::camera::camera_system);
                 // rendering
                 schedule.add_systems(super::present_system::present_system_begin);
-                
+
                 let mut is_rendering = false;
-                
+
                 loop {
                     // close server
                     if packet_recv.is_closed() {
                         break;
                     }
-                    
+
                     // Always try to receive packets without blocking
                     while let Ok(packet) = packet_recv.try_recv() {
                         match packet.request {
@@ -117,7 +117,9 @@ impl RenderServer {
                             }
                             render::RenderServerRequest::Stop => {
                                 let mut shutdown_schedule = becs::Schedule::default();
-                                shutdown_schedule.add_systems(render::systems::shutdown_system::render_server_shutdown_system);
+                                shutdown_schedule.add_systems(
+                                    render::systems::shutdown_system::render_server_shutdown_system,
+                                );
                                 shutdown_schedule.run(&mut world);
                                 return; // Exit the loop and function
                             }
@@ -132,12 +134,12 @@ impl RenderServer {
                         };
                         packet.callback.map(|v| v.send(()));
                     }
-                    
+
                     // If we're in rendering mode, run a frame
                     if is_rendering {
                         schedule.run(&mut world);
                     }
-                    
+
                     // Small yield to prevent blocking the async runtime completely
                     tokio::task::yield_now().await;
                 }
