@@ -7,6 +7,7 @@ use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dare_containers::prelude as containers;
+use dare_containers::slot::{Slot, SlotWithGeneration};
 use futures::TryFutureExt;
 use std::any::TypeId;
 use std::collections::HashMap;

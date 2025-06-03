@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::error::ContainerErrors;
 use crate::prelude::{SlotUnion, SlotUnionMut};
-use crate::slot::DefaultSlot;
+use crate::slot::{DefaultSlot, Slot};
 use crate::traits::Container;
 
 #[derive(Debug)]

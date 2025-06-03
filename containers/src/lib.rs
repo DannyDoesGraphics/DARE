@@ -6,7 +6,6 @@ pub mod hashmap;
 pub mod prelude;
 pub mod slot;
 pub mod slot_map;
-pub mod sparse_slot_map;
 pub mod traits;
 
 pub use dashmap;
