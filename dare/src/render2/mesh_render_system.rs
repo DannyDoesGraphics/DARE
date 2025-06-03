@@ -64,6 +64,8 @@ pub fn build_instancing_data(
     Vec<[f32; 16]>,
     HashSet<VirtualResource>,
 ) {
+    let build_instancing_data_span = tracy_client::span!("build_instancing_data_span");
+    build_instancing_data_span.emit_value(query.iter().len() as u64);
     // Acquire a tightly packed map
     let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> =
         HashMap::with_capacity(query.iter().len());
@@ -343,7 +345,7 @@ pub fn build_instancing_data(
                 .collect::<Vec<[f32; 16]>>(),
         );
     }
-
+    drop(build_instancing_data_span);
     (
         asset_unique_surfaces,
         unique_surfaces,
@@ -379,10 +381,11 @@ pub async fn mesh_render(
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) {
+    let mesh_render_span = tracy_client::span!("mesh_render");
     #[cfg(feature = "tracing")]
     tracing::trace!("Rendering meshes into {frame_number}");
     {
-        let cmd_recording = match &frame.command_buffer {
+        match &frame.command_buffer {
             CommandBufferState::Ready(_) => {
                 panic!("Mesh recording invalid cmd buffer state")
             }
@@ -404,9 +407,9 @@ pub async fn mesh_render(
                         &surfaces,
                         render_context.inner.allocator.clone(),
                         render_context.transfer_pool(),
-                        &mut textures,
+                        textures,
                         samplers,
-                        &mut buffers,
+                        buffers,
                     )
                 };
                 frame.resources.clear();
@@ -461,48 +464,42 @@ pub async fn mesh_render(
                     .unwrap();
 
                 // upload surface information
-                frame
+                let surface_slice = surfaces
+                    .iter()
+                    .flat_map(bytemuck::bytes_of)
+                    .copied()
+                    .collect::<Vec<u8>>();
+                let material_slice = materials
+                    .iter()
+                    .flat_map(bytemuck::bytes_of)
+                    .copied()
+                    .collect::<Vec<u8>>();
+                let transform_slice = transforms
+                    .iter()
+                    .flat_map(bytemuck::bytes_of)
+                    .copied()
+                    .collect::<Vec<u8>>();
+                tokio::try_join!(
+                    frame
                     .surface_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        surfaces
-                            .iter()
-                            .flat_map(|surface| bytemuck::bytes_of(surface))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
-                    )
-                    .await
-                    .unwrap();
-                // upload material information
-                frame
+                        &surface_slice,
+                    ),
+                    frame
                     .material_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        materials
-                            .iter()
-                            .flat_map(|material| bytemuck::bytes_of(material))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
-                    )
-                    .await
-                    .unwrap();
-                // upload transform information
-                frame
+                        &material_slice,
+                    ),
+                    frame
                     .transform_buffer
                     .upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        transforms
-                            .iter()
-                            .flat_map(|transform| bytemuck::bytes_of(transform))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
+                        &transform_slice,
                     )
-                    .await
-                    .unwrap();
-
+                )
+                .unwrap();
                 // begin rendering
                 let dynamic_rendering = unsafe {
                     recording
@@ -638,4 +635,5 @@ pub async fn mesh_render(
             }
         };
     }
+    drop(mesh_render_span);
 }
