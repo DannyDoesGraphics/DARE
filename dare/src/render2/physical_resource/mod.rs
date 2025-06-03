@@ -1,6 +1,5 @@
 use crate::asset2::prelude::AssetHandle;
 use crate::asset2::traits::Asset;
-use crate::render2::render_assets::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
 use containers::DefaultSlot;
 use dagal::allocators::Allocator;
@@ -12,12 +11,15 @@ use futures::TryFutureExt;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::hash::Hash;
+use traits::MetaDataRenderAsset;
 
 pub mod gpu_stream;
 pub use gpu_stream::*;
 pub mod handle;
 pub mod render_buffer;
 pub mod render_image;
+/// Handles render components
+pub mod traits;
 
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude as asset;

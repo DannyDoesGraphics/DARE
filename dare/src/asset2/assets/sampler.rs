@@ -1,7 +1,7 @@
 use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude::Asset;
-use crate::render2::render_assets::traits::MetaDataRenderAsset;
+use crate::render2::physical_resource::traits::MetaDataRenderAsset;
 use bevy_tasks::futures_lite::FutureExt;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;

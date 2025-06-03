@@ -8,6 +8,5 @@ pub mod util;
 
 pub use super::c;
 pub use super::physical_resource;
-pub use super::render_assets;
 pub use super::resources;
 pub use super::server::send_types::*;
