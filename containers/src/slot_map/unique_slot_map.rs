@@ -390,11 +390,11 @@ mod tests {
         let mut slot_map = UniqueSlotMap::default();
 
         // First call should create new slot
-        let slot1: DefaultSlot<String> = slot_map.entry(String::from("hello"));
+        let slot1: DefaultSlot<String> = slot_map.insert_or_get(String::from("hello"));
         assert_eq!(slot_map.get(slot1.clone()), Some(&String::from("hello")));
 
         // Second call with same value should return same slot
-        let slot2 = slot_map.entry(String::from("hello"));
+        let slot2 = slot_map.insert_or_get(String::from("hello"));
         assert_eq!(slot1, slot2);
         assert_eq!(slot_map.data.len(), 1); // Only one element stored
     }
@@ -404,7 +404,7 @@ mod tests {
         let mut slot_map = UniqueSlotMap::default();
 
         // Insert value
-        let slot1: DefaultSlot<i32> = slot_map.entry(42);
+        let slot1: DefaultSlot<i32> = slot_map.insert_or_get(42);
         assert_eq!(slot_map.get(slot1.clone()), Some(&42));
 
         // Remove value
@@ -412,7 +412,7 @@ mod tests {
         assert_eq!(removed, 42);
 
         // Entry should create new slot (different from slot1 due to generation)
-        let slot2 = slot_map.entry(42);
+        let slot2 = slot_map.insert_or_get(42);
         assert_ne!(slot1, slot2); // Different due to generation increment
         assert_eq!(slot_map.get(slot2), Some(&42));
         assert_eq!(slot_map.get(slot1), None); // Old slot should be invalid
@@ -424,7 +424,7 @@ mod tests {
         let mut slot_map2: UniqueSlotMap<i32> = UniqueSlotMap::default();
 
         // Use entry() on first map
-        let slot1: DefaultSlot<i32> = slot_map1.entry(100);
+        let slot1: DefaultSlot<i32> = slot_map1.insert_or_get(100);
 
         // Use insert() on second map
         let slot2: DefaultSlot<i32> = slot_map2.insert(100).unwrap();
