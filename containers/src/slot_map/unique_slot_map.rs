@@ -65,6 +65,15 @@ where
         false
     }
 
+    pub fn new() -> Self {
+        Self {
+            data: Default::default(),
+            slots: Default::default(),
+            free_list: Default::default(),
+            hash_to_slot: Default::default(),
+        }
+    }
+
     pub fn insert(&mut self, element: T) -> Result<S, ContainerErrors> {
         // Check for duplicates first
         if self.is_duplicate(&element) {
