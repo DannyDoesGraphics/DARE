@@ -22,11 +22,10 @@ pub trait SlotWithGeneration: Slot {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq, Eq, Hash)]
+#[derivative(Debug, PartialEq, Eq)]
 pub struct DefaultSlot<T> {
     pub(crate) id: u64,
     pub(crate) generation: u64,
-    #[derivative(Debug = "ignore", PartialEq = "ignore", Hash = "ignore")]
     _marker: PhantomData<T>,
 }
 unsafe impl<T> Send for DefaultSlot<T> {}
@@ -37,6 +36,12 @@ impl<T> Clone for DefaultSlot<T> {
             generation: self.generation,
             _marker: Default::default(),
         }
+    }
+}
+impl<T> std::hash::Hash for DefaultSlot<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let raw: u128 = (self.id as u128) << 64 | self.generation as u128;
+        state.write_u128(raw);
     }
 }
 
