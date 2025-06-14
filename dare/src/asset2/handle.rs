@@ -199,7 +199,7 @@ impl AssetHandleUntyped {
     pub fn downgrade(self) -> Self {
         match self {
             AssetHandleUntyped::Strong(arc) => AssetHandleUntyped::Weak {
-                id: arc.id.clone(),
+                id: arc.id,
                 weak_ref: Arc::downgrade(&arc),
             },
             AssetHandleUntyped::Weak { .. } => self,
@@ -286,7 +286,7 @@ mod tests {
         let untyped_id = typed_id.as_untyped_id();
 
         let strong_untyped = StrongAssetHandleUntyped {
-            id: untyped_id.clone(),
+            id: untyped_id,
             drop_send: tx,
         };
 
