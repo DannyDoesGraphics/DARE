@@ -292,10 +292,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             device: self.device.clone(),
             name: Some(format!(
                 "Transfer {}",
-                self.name
-                    .as_ref()
-                    .map(|v| v.as_str())
-                    .unwrap_or("Swap buffer")
+                self.name.as_deref().unwrap_or("Swap buffer")
             )),
             allocator: &mut self.allocator,
             size: size_of_val(items) as vk::DeviceSize,
