@@ -479,23 +479,17 @@ pub async fn mesh_render(
                     .copied()
                     .collect::<Vec<u8>>();
                 tokio::try_join!(
-                    frame
-                    .surface_buffer
-                    .upload_to_buffer(
+                    frame.surface_buffer.upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        &surface_slice,
+                        surface_slice.as_slice(),
                     ),
-                    frame
-                    .material_buffer
-                    .upload_to_buffer(
+                    frame.material_buffer.upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        &material_slice,
+                        material_slice.as_slice(),
                     ),
-                    frame
-                    .transform_buffer
-                    .upload_to_buffer(
+                    frame.transform_buffer.upload_to_buffer(
                         &render_context.inner.immediate_submit,
-                        &transform_slice,
+                        transform_slice.as_slice(),
                     )
                 )
                 .unwrap();
