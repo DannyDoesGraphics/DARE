@@ -224,7 +224,7 @@ mod tests {
     use std::hash::{Hash, Hasher};
 
     // Define a simple test asset that meets the trait requirements.
-    #[derive(Hash, Clone)]
+    #[derive(Clone)]
     struct TestAssetMetadata(u64);
     impl asset::AssetMetadata for TestAssetMetadata {}
 
@@ -236,7 +236,13 @@ mod tests {
 
     impl PartialEq for TestAssetMetadata {
         fn eq(&self, other: &Self) -> bool {
-            todo!()
+            self.0 == other.0
+        }
+    }
+
+    impl Hash for TestAssetMetadata {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            state.write_u64(self.0);
         }
     }
 
@@ -246,10 +252,7 @@ mod tests {
 
     impl asset::loaders::MetaDataLoad for TestAssetMetadata {
         type Loaded = TestAssetLoaded;
-        type LoadInfo<'a>
-        where
-            Self: 'a,
-        = ();
+        type LoadInfo<'a> = ();
 
         async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
             todo!()
