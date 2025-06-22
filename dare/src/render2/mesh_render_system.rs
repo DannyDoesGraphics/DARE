@@ -555,8 +555,7 @@ pub async fn mesh_render(
                     let camera_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     );
-                    let view_proj = camera_proj * camera_view;
-                    view_proj
+                    camera_proj * camera_view
                 };
 
                 let mut push_constant = CPushConstant {
