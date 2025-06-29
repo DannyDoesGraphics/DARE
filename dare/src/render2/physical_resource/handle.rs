@@ -1,11 +1,12 @@
 use crate::util::either::Either;
+use dare_containers::slot::{Slot, SlotWithGeneration};
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 
 /// Responsible to dealing with dropping of virtual resources
 #[derive(Debug, Clone)]
-struct VirtualResourceDrop {
+pub(crate) struct VirtualResourceDrop {
     /// Internal weak reference
     weak: VirtualResource,
     /// Send to a channel to indicate drop
@@ -13,10 +14,8 @@ struct VirtualResourceDrop {
 }
 impl Drop for VirtualResourceDrop {
     fn drop(&mut self) {
-        // SAFETY: it is fine if we fail to indicate a resource needs to be dropped
-        unsafe {
-            self.send.send(self.weak.clone()).unwrap_or({});
-        }
+        // It is fine if we fail to indicate a resource needs to be dropped
+        let _ = self.send.send(self.weak.clone());
     }
 }
 impl PartialEq for VirtualResourceDrop {
@@ -32,12 +31,12 @@ impl Hash for VirtualResourceDrop {
 }
 
 /// Internalized virtual resource handles
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VirtualResource {
     pub uid: u64,
     pub generation: u64,
     /// determines if current handle is considered to be a strong handle and should ref count
-    pub ref_count: Option<Either<Weak<VirtualResourceDrop>, Arc<VirtualResourceDrop>>>,
+    pub(crate) ref_count: Option<Either<Weak<VirtualResourceDrop>, Arc<VirtualResourceDrop>>>,
     pub type_id: TypeId,
 }
 impl Hash for VirtualResource {
@@ -57,38 +56,21 @@ impl PartialEq for VirtualResource {
 impl Eq for VirtualResource {}
 
 impl VirtualResource {
-    pub fn new(
-        uid: u64,
-        generation: u64,
-        send: Option<crossbeam_channel::Sender<VirtualResource>>,
-        type_id: TypeId,
-    ) -> Self {
-        Self {
-            uid,
-            generation,
-            ref_count: send.map(|send| {
-                Either::Right(Arc::new(VirtualResourceDrop {
-                    weak: VirtualResource {
-                        uid,
-                        generation,
-                        ref_count: None,
-                        type_id,
-                    },
-                    send,
-                }))
-            }),
-            type_id,
+    /// Set the drop semantics for this virtual resource
+    pub fn set_drop_semantics(&mut self, send: Option<crossbeam_channel::Sender<VirtualResource>>) {
+        if let Some(send) = send {
+            self.ref_count = Some(Either::Right(Arc::new(VirtualResourceDrop {
+                weak: VirtualResource {
+                    uid: self.uid,
+                    generation: self.generation,
+                    ref_count: None,
+                    type_id: self.type_id,
+                },
+                send,
+            })));
+        } else {
+            self.ref_count = None;
         }
-    }
-
-    pub fn get_uid(&self) -> u64 {
-        self.uid
-    }
-    pub fn get_gen(&self) -> u64 {
-        self.generation
-    }
-    pub fn get_type_id(&self) -> TypeId {
-        self.type_id
     }
 
     /// Downgrade a virtual resource to not ref count
@@ -126,3 +108,55 @@ impl VirtualResource {
             .flatten()
     }
 }
+
+impl Slot for VirtualResource {
+    fn id(&self) -> u64 {
+        self.uid
+    }
+
+    fn set_id(&mut self, id: u64) {
+        self.uid = id;
+    }
+
+    fn new(id: u64) -> Self {
+        Self {
+            uid: id,
+            generation: 0,
+            ref_count: None,
+            type_id: TypeId::of::<()>(),
+        }
+    }
+}
+
+impl SlotWithGeneration for VirtualResource {
+    fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    fn set_generation(&mut self, generation: u64) {
+        self.generation = generation;
+    }
+
+    fn new_with_gen(id: u64, generation: u64) -> Self {
+        Self {
+            uid: id,
+            generation,
+            ref_count: None,
+            type_id: TypeId::of::<()>(),
+        }
+    }
+}
+
+impl std::fmt::Debug for VirtualResource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtualResource")
+            .field("uid", &self.uid)
+            .field("generation", &self.generation)
+            .field("type_id", &self.type_id)
+            .field("has_ref_count", &self.ref_count.is_some())
+            .finish()
+    }
+}
+
+// Make VirtualResource Send since it's used across threads
+unsafe impl Send for VirtualResource {}
