@@ -1,4 +1,5 @@
 use crate::util::either::Either;
+use dare_containers::slot::{Slot, SlotWithGeneration};
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
@@ -32,7 +33,7 @@ impl Hash for VirtualResourceDrop {
 }
 
 /// Internalized virtual resource handles
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VirtualResource {
     pub uid: u64,
     pub generation: u64,
@@ -126,3 +127,55 @@ impl VirtualResource {
             .flatten()
     }
 }
+
+impl Slot for VirtualResource {
+    fn id(&self) -> u64 {
+        self.uid
+    }
+
+    fn set_id(&mut self, id: u64) {
+        self.uid = id;
+    }
+
+    fn new(id: u64) -> Self {
+        Self {
+            uid: id,
+            generation: 0,
+            ref_count: None,
+            type_id: TypeId::of::<()>(),
+        }
+    }
+}
+
+impl SlotWithGeneration for VirtualResource {
+    fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    fn set_generation(&mut self, generation: u64) {
+        self.generation = generation;
+    }
+
+    fn new_with_gen(id: u64, generation: u64) -> Self {
+        Self {
+            uid: id,
+            generation,
+            ref_count: None,
+            type_id: TypeId::of::<()>(),
+        }
+    }
+}
+
+impl std::fmt::Debug for VirtualResource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtualResource")
+            .field("uid", &self.uid)
+            .field("generation", &self.generation)
+            .field("type_id", &self.type_id)
+            .field("has_ref_count", &self.ref_count.is_some())
+            .finish()
+    }
+}
+
+// Make VirtualResource Send since it's used across threads
+unsafe impl Send for VirtualResource {}
