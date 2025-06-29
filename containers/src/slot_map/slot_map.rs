@@ -44,9 +44,9 @@ impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
         S::new_with_gen(free_slot_index, free_slot.generation())
     }
 
-    pub fn remove(&mut self, slot: DefaultSlot<T>) -> Result<T, ContainerErrors> {
-        if let Some(proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
-            if slot.generation != proxy_slot.generation() {
+    pub fn remove(&mut self, slot: S) -> Result<T, ContainerErrors> {
+        if let Some(proxy_slot) = self.slots.get_mut(slot.id() as usize).map(|proxy_slot| {
+            if slot.generation() != proxy_slot.generation() {
                 return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
@@ -69,7 +69,7 @@ impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
             }
             // to be removed must be last in data and slots
             let data = self.data.pop().unwrap();
-            self.free_list.push(slot.id);
+            self.free_list.push(slot.id());
             Ok(data.0)
         } else {
             Err(ContainerErrors::NonexistentSlot)
@@ -86,8 +86,8 @@ impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
         })
     }
 
-    pub fn get_mut(&mut self, slot: DefaultSlot<T>) -> Option<&mut T> {
-        self.slots.get(slot.id as usize).and_then(|proxy_slot| {
+    pub fn get_mut(&mut self, slot: S) -> Option<&mut T> {
+        self.slots.get(slot.id() as usize).and_then(|proxy_slot| {
             if proxy_slot.generation() == slot.generation() {
                 self.data
                     .get_mut(proxy_slot.id() as usize)
