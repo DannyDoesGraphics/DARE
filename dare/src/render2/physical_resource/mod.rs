@@ -390,7 +390,6 @@ impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
 ///
 /// This is primarily useful if we have certain objects such as Samplers which are universal across
 /// images
-#[allow(dead_code)]
 pub struct PhysicalResourceHashMap<
     T: MetaDataRenderAsset<Loaded = L, Asset = A>,
     A: Hash + PartialEq + Eq + Clone,
@@ -400,7 +399,6 @@ pub struct PhysicalResourceHashMap<
     map: HashMap<A, VirtualResource>,
 }
 
-#[allow(dead_code)]
 impl<
     T: MetaDataRenderAsset<Loaded = L, Asset = A>,
     A: Hash + PartialEq + Eq + Clone,
