@@ -37,20 +37,17 @@ pub struct VirtualResource {
     pub generation: u64,
     /// determines if current handle is considered to be a strong handle and should ref count
     pub(crate) ref_count: Option<Either<Weak<VirtualResourceDrop>, Arc<VirtualResourceDrop>>>,
-    pub type_id: TypeId,
 }
 impl Hash for VirtualResource {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.uid.hash(state);
         self.generation.hash(state);
-        self.type_id.hash(state);
     }
 }
 impl PartialEq for VirtualResource {
     fn eq(&self, other: &Self) -> bool {
         self.uid == other.uid
             && self.generation == other.generation
-            && self.type_id == other.type_id
     }
 }
 impl Eq for VirtualResource {}
@@ -64,7 +61,6 @@ impl VirtualResource {
                     uid: self.uid,
                     generation: self.generation,
                     ref_count: None,
-                    type_id: self.type_id,
                 },
                 send,
             })));
@@ -82,7 +78,6 @@ impl VirtualResource {
                 Either::Left(weak) => Either::Left(weak.clone()),
                 Either::Right(strong) => Either::Left(Arc::downgrade(strong)),
             }),
-            type_id: self.type_id,
         }
     }
 
@@ -102,7 +97,6 @@ impl VirtualResource {
                     uid: self.uid,
                     generation: self.generation,
                     ref_count,
-                    type_id: self.type_id,
                 })
             })
             .flatten()
@@ -123,7 +117,6 @@ impl Slot for VirtualResource {
             uid: id,
             generation: 0,
             ref_count: None,
-            type_id: TypeId::of::<()>(),
         }
     }
 }
@@ -142,7 +135,6 @@ impl SlotWithGeneration for VirtualResource {
             uid: id,
             generation,
             ref_count: None,
-            type_id: TypeId::of::<()>(),
         }
     }
 }
@@ -152,7 +144,6 @@ impl std::fmt::Debug for VirtualResource {
         f.debug_struct("VirtualResource")
             .field("uid", &self.uid)
             .field("generation", &self.generation)
-            .field("type_id", &self.type_id)
             .field("has_ref_count", &self.ref_count.is_some())
             .finish()
     }
