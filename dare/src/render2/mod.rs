@@ -7,7 +7,6 @@ pub mod physical_resource;
 pub mod prelude;
 pub mod present_system;
 pub mod render_context;
-pub mod resources;
 pub mod server;
 pub mod surface_context;
 pub mod system;
