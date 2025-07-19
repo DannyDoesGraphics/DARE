@@ -1,5 +1,5 @@
 use std::ptr;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use anyhow::Result;
@@ -36,14 +36,6 @@ const BUFFER_BINDING_INDEX: u32 = 3;
 const STORAGE_IMAGE_BINDING_INDEX: u32 = 2;
 const SAMPLED_IMAGE_BINDING_INDEX: u32 = 1;
 const SAMPLER_BINDING_INDEX: u32 = 0;
-
-pub enum ResourceInput<'a, T: Resource> {
-    ResourceHandle(T),
-    ResourceArc(Arc<T>),
-    ResourceWeak(Weak<T>),
-    ResourceCIHandle(T::CreateInfo<'a>),
-    ResourceCIArc(T::CreateInfo<'a>),
-}
 
 impl<A: Allocator> GPUResourceTable<A> {
     pub fn new(
