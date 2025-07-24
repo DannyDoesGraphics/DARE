@@ -1,13 +1,13 @@
 use crate::prelude as dare;
-use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
+use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource::BufferCreateInfo;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
+use std::mem::size_of_val;
 use std::ptr;
 use std::sync::Arc;
-use std::mem::size_of_val;
 
 /// Growth strategy for the growable buffer
 #[derive(Debug, Clone, Copy)]
@@ -74,12 +74,12 @@ pub struct GrowableBuffer<A: Allocator + 'static> {
 }
 
 impl<A: Allocator + 'static> GrowableBuffer<A> {
-    pub fn new<'a>(handle_ci: dagal::resource::BufferCreateInfo<'a, A>) -> anyhow::Result<Self> {
+    pub fn new(handle_ci: dagal::resource::BufferCreateInfo<A>) -> anyhow::Result<Self> {
         Self::with_config(handle_ci, GrowableBufferConfig::default())
     }
 
-    pub fn with_config<'a>(
-        handle_ci: dagal::resource::BufferCreateInfo<'a, A>,
+    pub fn with_config(
+        handle_ci: dagal::resource::BufferCreateInfo<A>,
         config: GrowableBufferConfig,
     ) -> anyhow::Result<Self> {
         // sanity check
@@ -179,7 +179,11 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
     fn get_staging_buffer(&mut self, size: u64) -> anyhow::Result<dagal::resource::Buffer<A>> {
         if self.config.enable_staging_pool {
             // Try to find a suitable buffer in the pool
-            if let Some(index) = self.staging_pool.iter().position(|buf| buf.get_size() >= size) {
+            if let Some(index) = self
+                .staging_pool
+                .iter()
+                .position(|buf| buf.get_size() >= size)
+            {
                 return Ok(self.staging_pool.remove(index));
             }
         }
@@ -230,7 +234,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
     ) -> anyhow::Result<()> {
         if self.needs_grow(required_size) {
             let new_capacity = self.calculate_new_size(required_size);
-            self.grow_to_capacity(immediate_submit, new_capacity).await?;
+            self.grow_to_capacity(immediate_submit, new_capacity)
+                .await?;
         }
         Ok(())
     }
@@ -348,7 +353,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         src_stage_mask: vk::PipelineStageFlags2::COPY,
                         src_access_mask: vk::AccessFlags2::TRANSFER_WRITE,
                         dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                        dst_access_mask: vk::AccessFlags2::MEMORY_READ | vk::AccessFlags2::MEMORY_WRITE,
+                        dst_access_mask: vk::AccessFlags2::MEMORY_READ
+                            | vk::AccessFlags2::MEMORY_WRITE,
                         src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                         dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                         buffer: *dst_buffer.as_raw(),
@@ -432,7 +438,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
 
         // Return staging buffer to pool
         self.return_staging_buffer(staging_buffer);
-        
+
         // Update logical size
         self.size = data_size;
         Ok(())
