@@ -450,4 +450,69 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         self.size = data_size;
         Ok(())
     }
+
+    /// Upload data to the buffer at a specific offset, growing it if necessary
+    pub async fn upload_to_buffer_at_offset<T: Sized>(
+        &mut self,
+        immediate_submit: &dare::render::util::ImmediateSubmit,
+        offset: u64,
+        items: &[T],
+    ) -> anyhow::Result<()> {
+        let data_size = size_of_val(items) as u64;
+        if data_size == 0 {
+            return Ok(());
+        }
+
+        // Calculate required total size including the offset
+        let required_total_size = offset + data_size;
+        
+        // Reserve capacity if needed
+        self.reserve(immediate_submit, required_total_size).await?;
+
+        // Check if using cpu to gpu memory type to write directly
+        if matches!(self.memory_type, MemoryLocation::CpuToGpu) {
+            unsafe {
+                self.handle.as_ref().unwrap().write_unsafe(offset, items)?;
+            }
+        } else {
+            // Use staging buffer for other memory types
+            let mut staging_buffer = self.get_staging_buffer(data_size)?;
+            staging_buffer.write(0, items)?;
+
+            // Perform the upload
+            immediate_submit
+                .submit(vk::QueueFlags::TRANSFER, |_, cmd_buffer_recording| unsafe {
+                    cmd_buffer_recording
+                        .get_device()
+                        .get_handle()
+                        .cmd_copy_buffer2(
+                            *cmd_buffer_recording.get_handle(),
+                            &vk::CopyBufferInfo2 {
+                                s_type: vk::StructureType::COPY_BUFFER_INFO_2,
+                                p_next: ptr::null(),
+                                src_buffer: *staging_buffer.as_raw(),
+                                dst_buffer: *self.handle.as_ref().unwrap().as_raw(),
+                                region_count: 1,
+                                p_regions: &vk::BufferCopy2 {
+                                    s_type: vk::StructureType::BUFFER_COPY_2,
+                                    p_next: ptr::null(),
+                                    src_offset: 0,
+                                    dst_offset: offset,
+                                    size: data_size,
+                                    _marker: Default::default(),
+                                },
+                                _marker: Default::default(),
+                            },
+                        );
+                })
+                .await?;
+
+            // Return staging buffer to pool
+            self.return_staging_buffer(staging_buffer);
+        }
+
+        // Update logical size to accommodate the new data if it extends beyond current size
+        self.size = self.size.max(required_total_size);
+        Ok(())
+    }
 }
