@@ -404,40 +404,47 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
         // Reserve capacity if needed
         self.reserve(immediate_submit, data_size).await?;
 
-        // Create staging buffer (try to reuse from pool)
-        let mut staging_buffer = self.get_staging_buffer(data_size)?;
-        staging_buffer.write(0, items)?;
+        // Check if using cpu to gpu memory type to write directly
+        if matches!(self.memory_type, MemoryLocation::CpuToGpu) {
+            unsafe {
+                self.handle.as_ref().unwrap().write_unsafe(0, items)?;
+            }
+        } else {
+            // Use staging buffer for other memory types
+            let mut staging_buffer = self.get_staging_buffer(data_size)?;
+            staging_buffer.write(0, items)?;
 
-        // Perform the upload
-        immediate_submit
-            .submit(vk::QueueFlags::TRANSFER, |_, cmd_buffer_recording| unsafe {
-                cmd_buffer_recording
-                    .get_device()
-                    .get_handle()
-                    .cmd_copy_buffer2(
-                        *cmd_buffer_recording.get_handle(),
-                        &vk::CopyBufferInfo2 {
-                            s_type: vk::StructureType::COPY_BUFFER_INFO_2,
-                            p_next: ptr::null(),
-                            src_buffer: *staging_buffer.as_raw(),
-                            dst_buffer: *self.handle.as_ref().unwrap().as_raw(),
-                            region_count: 1,
-                            p_regions: &vk::BufferCopy2 {
-                                s_type: vk::StructureType::BUFFER_COPY_2,
+            // Perform the upload
+            immediate_submit
+                .submit(vk::QueueFlags::TRANSFER, |_, cmd_buffer_recording| unsafe {
+                    cmd_buffer_recording
+                        .get_device()
+                        .get_handle()
+                        .cmd_copy_buffer2(
+                            *cmd_buffer_recording.get_handle(),
+                            &vk::CopyBufferInfo2 {
+                                s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                 p_next: ptr::null(),
-                                src_offset: 0,
-                                dst_offset: 0,
-                                size: data_size,
+                                src_buffer: *staging_buffer.as_raw(),
+                                dst_buffer: *self.handle.as_ref().unwrap().as_raw(),
+                                region_count: 1,
+                                p_regions: &vk::BufferCopy2 {
+                                    s_type: vk::StructureType::BUFFER_COPY_2,
+                                    p_next: ptr::null(),
+                                    src_offset: 0,
+                                    dst_offset: 0,
+                                    size: data_size,
+                                    _marker: Default::default(),
+                                },
                                 _marker: Default::default(),
                             },
-                            _marker: Default::default(),
-                        },
-                    );
-            })
-            .await?;
+                        );
+                })
+                .await?;
 
-        // Return staging buffer to pool
-        self.return_staging_buffer(staging_buffer);
+            // Return staging buffer to pool
+            self.return_staging_buffer(staging_buffer);
+        }
 
         // Update logical size
         self.size = data_size;
