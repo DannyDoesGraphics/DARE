@@ -3,7 +3,7 @@ use crate::prelude::render;
 use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::command::CommandBufferState;
 use dagal::traits::AsRaw;
@@ -13,7 +13,10 @@ use std::sync::atomic::Ordering;
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
     frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
-    render_context: becs::Res<'_, super::render_context::RenderContext>,
+    device_context: becs::Res<'_, crate::render2::contexts::DeviceContext>,
+    graphics_context: becs::Res<'_, crate::render2::contexts::GraphicsContext>,
+    transfer_context: becs::Res<'_, crate::render2::contexts::TransferContext>,
+    window_context: becs::Res<'_, crate::render2::contexts::WindowContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     surfaces: Query<
         '_,
@@ -46,10 +49,7 @@ pub fn present_system_begin(
 ) {
     rt.clone().runtime.block_on(async {
         let frame_count = frame_count.clone();
-        let render_context = render_context.clone();
-        let mut surface_guard = render_context
-            .inner
-            .window_context
+        let mut surface_guard = window_context
             .surface_context
             .write()
             .unwrap();
@@ -94,7 +94,7 @@ pub fn present_system_begin(
                 };
                 frame.draw_image.transition(
                     recording_cmd,
-                    &render_context.inner.window_context.present_queue,
+                    &window_context.present_queue,
                     vk::ImageLayout::UNDEFINED,
                     vk::ImageLayout::GENERAL,
                 );
@@ -128,13 +128,13 @@ pub fn present_system_begin(
                     // transition image states first
                     frame.draw_image.transition(
                         recording_cmd,
-                        &render_context.inner.window_context.present_queue,
+                        &window_context.present_queue,
                         vk::ImageLayout::GENERAL,
                         vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     );
                     frame.depth_image.transition(
                         recording_cmd,
-                        &render_context.inner.window_context.present_queue,
+                        &window_context.present_queue,
                         vk::ImageLayout::UNDEFINED,
                         vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
                     );
@@ -142,7 +142,9 @@ pub fn present_system_begin(
                 // mesh render
                 super::mesh_render_system::mesh_render(
                     frame_number,
-                    render_context.clone(),
+                    &device_context,
+                    &graphics_context,
+                    &transfer_context,
                     &camera,
                     frame,
                     surfaces,
@@ -154,7 +156,7 @@ pub fn present_system_begin(
                 // end present
                 present_system_end(
                     frame_count.clone(),
-                    render_context.clone(),
+                    &window_context,
                     surface_context,
                     frame,
                     swapchain_image_index,
@@ -166,10 +168,12 @@ pub fn present_system_begin(
             Err(e) => {
                 tracing::error!("Failed to acquire next swapchain image due to: {e}");
                 // early return
-                render_context
-                    .inner
-                    .new_swapchain_requested
-                    .store(true, Ordering::Release);
+                // TODO: Implement new_swapchain_requested with separate contexts
+                // render_context
+                //     .inner
+                //     .new_swapchain_requested
+                //     .store(true, Ordering::Release);
+                tracing::warn!("Swapchain recreation not yet implemented with separate contexts");
                 return;
             }
         };
@@ -178,8 +182,8 @@ pub fn present_system_begin(
 
 pub async fn present_system_end(
     frame_count: super::frame_number::FrameCount,
-    render_context: super::render_context::RenderContext,
-    surface_context: &super::surface_context::SurfaceContext,
+    window_context: &crate::render2::contexts::WindowContext,
+    surface_context: &crate::render2::contexts::SurfaceContext,
     frame: &mut super::frame::Frame,
     swapchain_image_index: u32,
     textures: &mut physical_resource::PhysicalResourceStorage<
@@ -189,7 +193,6 @@ pub async fn present_system_end(
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) {
-    let window_context = render_context.inner.window_context.clone();
     let frame_count = frame_count.0.clone();
 
     #[cfg(feature = "tracing")]

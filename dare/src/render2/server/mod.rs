@@ -1,9 +1,9 @@
 pub mod send_types;
 
 use crate::prelude as dare;
+use crate::render2::contexts::{create_contexts, ContextsCreateInfo};
 use crate::render2::physical_resource;
 use crate::render2::prelude as render;
-use crate::render2::render_context::{RenderContext, RenderContextCreateInfo};
 use crate::render2::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
 use anyhow::Result;
@@ -14,7 +14,6 @@ use derivative::Derivative;
 #[derive(Debug)]
 pub struct RenderServer {
     thread: tokio::task::JoinHandle<()>,
-    render_context: RenderContext,
 }
 impl RenderServer {
     pub async fn new(
@@ -22,7 +21,7 @@ impl RenderServer {
         asset_server: dare::asset2::server::AssetServer,
         mut packet_recv: tokio::sync::mpsc::UnboundedReceiver<RenderServerPacket>,
         input_recv: EventReceiver<dare::window::input::Input>,
-        ci: RenderContextCreateInfo,
+        ci: ContextsCreateInfo,
         surface_link_recv: dare::util::entity_linker::ComponentsLinkerReceiver<
             dare::engine::components::Surface,
         >,
@@ -41,18 +40,21 @@ impl RenderServer {
     ) -> Self {
         println!("Starting");
         //let (new_send, mut new_recv) = crossbeam_channel::unbounded::<RenderServerPacket>();
-        let render_context = RenderContext::new(ci).unwrap();
+        let created_contexts = create_contexts(ci).unwrap();
         let mut world = dare::util::world::World::new();
         let thread = {
-            let render_context = render_context.clone();
+            let device_context = created_contexts.device_context;
+            let graphics_context = created_contexts.graphics_context;
+            let transfer_context = created_contexts.transfer_context;
+            let window_context = created_contexts.window_context;
             let rt = dare::concurrent::BevyTokioRunTime::new(runtime);
             // Render thread
             tokio::task::spawn(async move {
                 {
-                    let mut allocator = render_context.inner.allocator.clone();
+                    let mut allocator = device_context.allocator.clone();
                     world.insert_resource(
                         render::util::GPUResourceTable::<GPUAllocatorImpl>::new(
-                            render_context.inner.device.clone(),
+                            device_context.device.clone(),
                             &mut allocator,
                         )
                         .unwrap(),
@@ -60,8 +62,11 @@ impl RenderServer {
                 }
                 // add senders
                 world.insert_resource(input_recv);
-                // add necessary resources
-                world.insert_resource(render_context.clone());
+                // add necessary resources - insert the new separate contexts
+                world.insert_resource(device_context);
+                world.insert_resource(graphics_context);
+                world.insert_resource(transfer_context);
+                world.insert_resource(window_context);
                 world.insert_resource(super::frame_number::FrameCount::default());
                 world.insert_resource(rt);
                 world.insert_resource(asset_server.clone());
@@ -120,8 +125,29 @@ impl RenderServer {
                                 dimensions: _,
                                 raw_handles: _,
                             } => {
-                                if let Err(e) = render_context.update_surface() {
-                                    eprintln!("Failed to update surface: {}", e);
+                                // Implement surface update with separate contexts
+                                // Get the device context for instance and physical device
+                                if let Some(device_context) = world.get_resource::<super::contexts::DeviceContext>() {
+                                    if let Some(window_context) = world.get_resource::<super::contexts::WindowContext>() {
+                                        match window_context.update_surface(
+                                            super::contexts::SurfaceContextUpdateInfo {
+                                                instance: &device_context.instance,
+                                                physical_device: &device_context.physical_device,
+                                                allocator: device_context.allocator.clone(),
+                                                raw_handles: window_context.window_handles.clone(), // Use existing handles
+                                                frames_in_flight: None, // Use default
+                                            }
+                                        ) {
+                                            Ok(()) => {}
+                                            Err(e) => {
+                                                tracing::error!("Failed to update surface: {}", e);
+                                            }
+                                        }
+                                    } else {
+                                        tracing::error!("WindowContext not found in world");
+                                    }
+                                } else {
+                                    tracing::error!("DeviceContext not found in world");
                                 }
                             }
                         };
@@ -137,17 +163,22 @@ impl RenderServer {
                     tokio::task::yield_now().await;
                 }
                 tracing::trace!("Stopping render manager");
-                // drop world
+                // Manually extract contexts in dependency order to ensure proper Vulkan cleanup
+                // Graphics and Transfer contexts depend on Device, so drop them first
+                let _graphics_context = world.remove_resource::<super::contexts::GraphicsContext>();
+                let _transfer_context = world.remove_resource::<super::contexts::TransferContext>();
+                let _window_context = world.remove_resource::<super::contexts::WindowContext>();
+                // Device context contains the core Vulkan objects and should be dropped last
+                let _device_context = world.remove_resource::<super::contexts::DeviceContext>();
+                // Now drop the world with remaining resources
                 drop(world);
+                // Contexts will drop in reverse order of declaration (device_context last)
                 tracing::trace!("RENDER SERVER STOPPED");
             })
         };
-        render_context
-            .bind_render_thread(thread.abort_handle())
-            .await;
+        // Note: Render thread management is now simplified without RenderContext
         Self {
             thread,
-            render_context,
         }
     }
 }

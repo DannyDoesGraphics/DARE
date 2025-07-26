@@ -58,9 +58,9 @@ fn main() {
             asset_server.clone(),
             rs_recv,
             input_recv,
-            render::create_infos::RenderContextCreateInfo {
+            render::contexts::ContextsCreateInfo {
                 raw_handles,
-                configuration: render::create_infos::RenderContextConfiguration {
+                configuration: render::contexts::ContextsConfiguration {
                     target_frames_in_flight: 3,
                     target_extent: vk::Extent2D {
                         width: 800,

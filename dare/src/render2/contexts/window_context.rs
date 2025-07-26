@@ -1,4 +1,4 @@
-use crate::render2::surface_context::SurfaceContext;
+use crate::render2::contexts::SurfaceContext;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use std::sync::RwLock;

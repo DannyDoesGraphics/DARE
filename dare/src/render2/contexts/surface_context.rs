@@ -13,7 +13,7 @@ pub struct SurfaceContext {
     pub swapchain_image_index: RwLock<u32>,
 
     pub image_extent: vk::Extent2D,
-    pub frames: Box<[Mutex<super::frame::Frame>]>,
+    pub frames: Box<[Mutex<super::super::frame::Frame>]>,
 
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub swapchain: dagal::wsi::Swapchain,
@@ -32,7 +32,7 @@ pub struct SurfaceContextUpdateInfo<'a> {
 }
 
 /// Information to create a window context
-pub(super) struct InnerSurfaceContextCreateInfo<'a> {
+pub struct InnerSurfaceContextCreateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub surface: Option<dagal::wsi::Surface>,
     pub physical_device: &'a dagal::device::PhysicalDevice,
@@ -129,7 +129,7 @@ impl SurfaceContext {
     pub fn create_frames(&mut self, present_queue: &dagal::device::Queue) -> Result<()> {
         let mut frames = Vec::with_capacity(self.frames_in_flight);
         for frame_number in 0..self.frames_in_flight {
-            frames.push(Mutex::new(super::frame::Frame::new(
+            frames.push(Mutex::new(super::super::frame::Frame::new(
                 self,
                 present_queue,
                 Some(frame_number),

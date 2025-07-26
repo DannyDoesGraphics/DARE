@@ -7,7 +7,7 @@ use derivative::Derivative;
 use crate::traits::Destructible;
 
 /// Represents a Vulkan Instance
-#[derive(Derivative, Clone)]
+#[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Instance {
     #[derivative(Debug = "ignore")]

@@ -357,7 +357,9 @@ pub fn build_instancing_data(
 
 pub async fn mesh_render(
     frame_number: usize,
-    render_context: super::render_context::RenderContext,
+    device_context: &crate::render2::contexts::DeviceContext,
+    graphics_context: &crate::render2::contexts::GraphicsContext,
+    transfer_context: &crate::render2::contexts::TransferContext,
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     surfaces: Query<
@@ -404,8 +406,8 @@ pub async fn mesh_render(
                     build_instancing_data(
                         view_proj,
                         &surfaces,
-                        render_context.inner.allocator.clone(),
-                        render_context.transfer_pool(),
+                        device_context.allocator.clone(),
+                        transfer_context.transfer_pool.clone(),
                         textures,
                         samplers,
                         buffers,
@@ -436,7 +438,7 @@ pub async fn mesh_render(
                 frame
                     .indirect_buffer
                     .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         indirect_calls.as_slice(),
                     )
                     .await
@@ -445,7 +447,7 @@ pub async fn mesh_render(
                 frame
                     .instanced_buffer
                     .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         instancing_information
                             .iter()
                             .flat_map(|instancing| {
@@ -480,15 +482,15 @@ pub async fn mesh_render(
                     .collect::<Vec<u8>>();
                 tokio::try_join!(
                     frame.surface_buffer.upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         surface_slice.as_slice(),
                     ),
                     frame.material_buffer.upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         material_slice.as_slice(),
                     ),
                     frame.transform_buffer.upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         transform_slice.as_slice(),
                     )
                 )
@@ -520,7 +522,7 @@ pub async fn mesh_render(
                     max_depth: 1.0,
                 };
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_set_viewport(
+                    device_context.device.get_handle().cmd_set_viewport(
                         recording.handle(),
                         0,
                         &[viewport],
@@ -535,7 +537,7 @@ pub async fn mesh_render(
                 };
 
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_set_scissor(
+                    device_context.device.get_handle().cmd_set_scissor(
                         recording.handle(),
                         0,
                         &[scissor],
@@ -544,10 +546,10 @@ pub async fn mesh_render(
 
                 // bind pipeline
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_bind_pipeline(
+                    device_context.device.get_handle().cmd_bind_pipeline(
                         recording.handle(),
                         vk::PipelineBindPoint::GRAPHICS,
-                        render_context.inner.graphics_pipeline.handle(),
+                        graphics_context.graphics_pipeline.handle(),
                     );
                 }
                 let view_proj = {
@@ -585,9 +587,9 @@ pub async fn mesh_render(
                             &push_constant as *const CPushConstant as *const u8,
                             size_of::<CPushConstant>(),
                         );
-                        render_context.inner.device.get_handle().cmd_push_constants(
+                        device_context.device.get_handle().cmd_push_constants(
                             recording.handle(),
-                            *render_context.inner.graphics_layout.as_raw(),
+                            *graphics_context.graphics_layout.as_raw(),
                             vk::ShaderStageFlags::VERTEX,
                             0,
                             bytes,
@@ -596,8 +598,7 @@ pub async fn mesh_render(
 
                     // indirect draw
                     unsafe {
-                        render_context
-                            .inner
+                        device_context
                             .device
                             .get_handle()
                             .cmd_bind_index_buffer(
@@ -606,8 +607,7 @@ pub async fn mesh_render(
                                 0,
                                 vk::IndexType::UINT32,
                             );
-                        render_context
-                            .inner
+                        device_context
                             .device
                             .get_handle()
                             .cmd_draw_indexed_indirect(
