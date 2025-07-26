@@ -126,29 +126,29 @@ impl RenderServer {
                                 raw_handles: _,
                             } => {
                                 // Implement surface update with separate contexts
-                                // Get the device context for instance and physical device
-                                if let Some(device_context) = world.get_resource::<super::contexts::DeviceContext>() {
-                                    if let Some(window_context) = world.get_resource::<super::contexts::WindowContext>() {
-                                        match window_context.update_surface(
-                                            super::contexts::SurfaceContextUpdateInfo {
-                                                instance: &device_context.instance,
-                                                physical_device: &device_context.physical_device,
-                                                allocator: device_context.allocator.clone(),
-                                                raw_handles: window_context.window_handles.clone(), // Use existing handles
-                                                frames_in_flight: None, // Use default
-                                            }
-                                        ) {
-                                            Ok(()) => {}
-                                            Err(e) => {
-                                                tracing::error!("Failed to update surface: {}", e);
-                                            }
+                                // Use a system-style approach to handle the borrow checker properly
+                                let mut update_schedule = becs::Schedule::default();
+                                update_schedule.add_systems(|
+                                    device_context: becs::Res<'_, super::contexts::DeviceContext>,
+                                    mut window_context: becs::ResMut<'_, super::contexts::WindowContext>,
+                                | {
+                                    let window_handles = window_context.window_handles.clone();
+                                    match window_context.update_surface(
+                                        super::contexts::SurfaceContextUpdateInfo {
+                                            instance: &device_context.instance,
+                                            physical_device: &device_context.physical_device,
+                                            allocator: device_context.allocator.clone(),
+                                            raw_handles: window_handles,
+                                            frames_in_flight: None, // Use default
                                         }
-                                    } else {
-                                        tracing::error!("WindowContext not found in world");
+                                    ) {
+                                        Ok(()) => {}
+                                        Err(e) => {
+                                            tracing::error!("Failed to update surface: {}", e);
+                                        }
                                     }
-                                } else {
-                                    tracing::error!("DeviceContext not found in world");
-                                }
+                                });
+                                update_schedule.run(&mut world);
                             }
                         };
                         packet.callback.map(|v| v.send(()));

@@ -1,12 +1,11 @@
 use crate::render2::contexts::SurfaceContext;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use std::sync::RwLock;
 
 #[derive(Debug, becs::Resource)]
 pub struct WindowContext {
     pub present_queue: dagal::device::Queue,
-    pub surface_context: RwLock<Option<SurfaceContext>>,
+    pub surface_context: Option<SurfaceContext>,
     pub window_handles: crate::window::WindowHandles,
 }
 
@@ -20,22 +19,21 @@ pub struct WindowContextCreateInfo {
 impl WindowContext {
     pub fn new(ci: WindowContextCreateInfo) -> Self {
         Self {
-            surface_context: RwLock::new(ci.surface),
+            surface_context: ci.surface,
             present_queue: ci.present_queue,
             window_handles: ci.window_handles,
         }
     }
 
     pub fn update_surface(
-        &self,
+        &mut self,
         ci: super::surface_context::SurfaceContextUpdateInfo<'_>,
     ) -> Result<()> {
         // remove old
-        if let Some(sc) = self.surface_context.write().unwrap().take() {
+        if let Some(sc) = self.surface_context.take() {
             drop(sc);
         }
-        let mut surface_guard = self.surface_context.write().unwrap();
-        *surface_guard = Some(SurfaceContext::new(
+        self.surface_context = Some(SurfaceContext::new(
             super::surface_context::InnerSurfaceContextCreateInfo {
                 instance: ci.instance,
                 surface: None,
@@ -47,7 +45,7 @@ impl WindowContext {
                 frames_in_flight: ci.frames_in_flight,
             },
         )?);
-        let surface_context = surface_guard.as_mut().unwrap();
+        let surface_context = self.surface_context.as_mut().unwrap();
         surface_context.create_frames(&self.present_queue)?;
         Ok(())
     }

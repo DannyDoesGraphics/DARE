@@ -1,19 +1,17 @@
 use anyhow::Result;
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::ash::vk::Handle;
 use dagal::traits::AsRaw;
-use tokio::sync::{Mutex, RwLock};
 
 /// Relating to anything that relies on window resizing
 #[derive(Debug)]
 pub struct SurfaceContext {
-    pub swapchain_images: Box<[std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>]>,
+    pub swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]>,
     pub swapchain_image_view: Box<[dagal::resource::ImageView]>,
-    pub swapchain_image_index: RwLock<u32>,
+    pub swapchain_image_index: u32,
 
     pub image_extent: vk::Extent2D,
-    pub frames: Box<[Mutex<super::super::frame::Frame>]>,
+    pub frames: Box<[super::super::frame::Frame]>,
 
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub swapchain: dagal::wsi::Swapchain,
@@ -103,12 +101,8 @@ impl SurfaceContext {
                     .collect::<Vec<vk::Image>>(),
             )?
             .into_boxed_slice();
-        let swapchain_images: Box<[std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>]> =
-            swapchain_images
-                .into_iter()
-                .map(|image: dagal::resource::Image<GPUAllocatorImpl>| std::sync::Mutex::new(image))
-                .collect::<Vec<std::sync::Mutex<dagal::resource::Image<GPUAllocatorImpl>>>>()
-                .into_boxed_slice();
+        let swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]> =
+            swapchain_images.into_boxed_slice();
         let frames_in_flight =
             frames_in_flight.unwrap_or(surface.get_capabilities().min_image_count) as usize;
         Ok(SurfaceContext {
@@ -119,7 +113,7 @@ impl SurfaceContext {
             frames: Vec::new().into_boxed_slice(),
             swapchain_images,
             swapchain_image_view,
-            swapchain_image_index: RwLock::new(0),
+            swapchain_image_index: 0,
 
             frames_in_flight,
         })
@@ -129,11 +123,11 @@ impl SurfaceContext {
     pub fn create_frames(&mut self, present_queue: &dagal::device::Queue) -> Result<()> {
         let mut frames = Vec::with_capacity(self.frames_in_flight);
         for frame_number in 0..self.frames_in_flight {
-            frames.push(Mutex::new(super::super::frame::Frame::new(
+            frames.push(super::super::frame::Frame::new(
                 self,
                 present_queue,
                 Some(frame_number),
-            )?));
+            )?);
         }
         self.frames = frames.into_boxed_slice();
         Ok(())
@@ -146,11 +140,8 @@ impl Drop for SurfaceContext {
 
         // Collect all valid fences
         for frame in self.frames.iter() {
-            // Use blocking lock instead of async
-            if let Ok(locked_frame) = frame.try_lock() {
-                if locked_frame.render_fence.get_fence_status().unwrap_or(true) {
-                    vk_fences.push(unsafe { *locked_frame.render_fence.as_raw() });
-                }
+            if frame.render_fence.get_fence_status().unwrap_or(true) {
+                vk_fences.push(unsafe { *frame.render_fence.as_raw() });
             }
         }
 

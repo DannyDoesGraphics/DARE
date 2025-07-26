@@ -15,14 +15,12 @@ pub fn render_server_shutdown_system(
             .unwrap();
     }
     rt.runtime.block_on(async {
-        let surface_context_guard = window_context.surface_context.read().unwrap();
-        if let Some(surface_context) = &*surface_context_guard {
-            for frame_mutex in surface_context.frames.as_ref() {
-                let frame_guard = frame_mutex.lock().await;
-                if frame_guard.render_fence.get_fence_status().unwrap_or(true) == true {
+        if let Some(surface_context) = &window_context.surface_context {
+            for frame in surface_context.frames.as_ref() {
+                if frame.render_fence.get_fence_status().unwrap_or(true) == true {
                     continue;
                 }
-                frame_guard.render_fence.wait(u64::MAX).unwrap();
+                frame.render_fence.wait(u64::MAX).unwrap();
             }
         }
     });
