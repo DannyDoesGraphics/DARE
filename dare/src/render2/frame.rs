@@ -320,12 +320,6 @@ impl Frame {
             command_buffer,
         })
     }
-
-    /// Wait until the frame can be rendered into again
-    pub async fn await_render(&self) -> Result<()> {
-        //self.render_semaphore.clone().await;
-        Ok(())
-    }
 }
 
 impl Drop for Frame {
