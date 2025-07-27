@@ -23,6 +23,8 @@ bitflags! {
 #[derive(Debug, Clone, Copy)]
 pub struct CSurface {
     pub transform: [f32; 16],
+    pub min: [f32; 3],
+    pub max: [f32; 3],
     pub material: u64,
     pub bit_flag: u32,
     pub _padding: u32,
@@ -55,11 +57,14 @@ impl CSurface {
         >,
         surface: &dare::engine::components::Surface,
         transform: &dare::physics::components::Transform,
+        bounding_box: &dare::render::components::BoundingBox,
     ) -> Option<Self> {
         let positions = buffers.get_bda(&surface.vertex_buffer)?;
         let indices = buffers.get_bda(&surface.index_buffer)?;
         Some(Self {
             transform: transform.get_transform_matrix().transpose().to_cols_array(),
+            min: bounding_box.min.to_array(),
+            max: bounding_box.max.to_array(),
             material: 1,
             bit_flag: 2,
             _padding: 0,

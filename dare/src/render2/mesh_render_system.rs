@@ -237,7 +237,7 @@ pub fn build_instancing_data(
             }
 
             if let Some(c_surface) =
-                dare::render::c::CSurface::from_surface(buffers, surface, transform)
+                dare::render::c::CSurface::from_surface(buffers, surface, transform, bounding_box)
             {
                 unique_surfaces.push(c_surface);
                 asset_unique_surfaces.push((*surface).clone());
