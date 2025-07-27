@@ -1,7 +1,11 @@
 #include "material.slang"
 
 struct Surface {
+    // information used for aabb plane test
     const float4x4 transform;
+    const float3 min;
+    const float3 max;
+    // information used for rendering
     const uint64_t material;
     const uint32_t bit_flag;
     const uint32_t _padding;
