@@ -55,8 +55,7 @@ pub fn present_system_begin(
         let frame_number = frame_count.get();
         #[cfg(feature = "tracing")]
         tracing::trace!("Starting frame {frame_number}");
-        let frame = &mut surface_context.frames
-            [frame_number % surface_context.frames_in_flight];
+        let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
         // wait until semaphore is ready
         // wait for frame to finish rendering before rendering again
         frame.render_fence.wait(u64::MAX).unwrap();
@@ -70,7 +69,7 @@ pub fn present_system_begin(
             Some(&frame.swapchain_semaphore),
             None,
         );
-        let _swapchain_image_index = match swapchain_image_index {
+        match swapchain_image_index {
             Ok(swapchain_image_index) => {
                 surface_context.swapchain_image_index = swapchain_image_index;
                 //let swapchain_image = &window_context.swapchain_images[swapchain_image_index as usize];
@@ -167,7 +166,7 @@ pub fn present_system_begin(
                 return;
             }
         };
-        
+
         // progress to next frame
         frame_count.increment();
     });
@@ -185,7 +184,6 @@ pub async fn present_system_end(
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) {
-
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
     let frame = &mut surface_context.frames[frame_count % surface_context.frames_in_flight];
@@ -239,10 +237,7 @@ pub async fn present_system_end(
             frame
                 .command_buffer
                 .submit(
-                    *present_queue
-                        .acquire_queue_async()
-                        .await
-                        .unwrap(),
+                    *present_queue.acquire_queue_async().await.unwrap(),
                     &[submit_info],
                     unsafe { *frame.render_fence.as_raw() },
                 )
@@ -260,10 +255,7 @@ pub async fn present_system_end(
             };
             unsafe {
                 match surface_context.swapchain.get_ext().queue_present(
-                    *present_queue
-                        .acquire_queue_async()
-                        .await
-                        .unwrap(),
+                    *present_queue.acquire_queue_async().await.unwrap(),
                     &present_info,
                 ) {
                     Ok(_) => {}
