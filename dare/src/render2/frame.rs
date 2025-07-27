@@ -33,8 +33,6 @@ pub struct Frame {
     pub instanced_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold surface information
     pub surface_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
-    /// Contains buffer for transformation
-    pub transform_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// staging buffers used
     pub staging_buffers: Vec<dagal::resource::Buffer<GPUAllocatorImpl>>,
 
@@ -288,30 +286,6 @@ impl Frame {
                     min_size: 8192,
                     alignment: 256,
                     enable_staging_pool: false,
-                    ..Default::default()
-                },
-            )?,
-            transform_buffer: dare::render::util::GrowableBuffer::with_config(
-                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                    device: surface_context.allocator.device(),
-                    name: Some(String::from(format!(
-                        "Transform buffer for frame {}",
-                        image_number.as_ref().unwrap_or(&0)
-                    ))),
-                    allocator: &mut allocator,
-                    size: size_of::<glam::Mat4>() as u64 * 64, // Start with 64 transforms
-                    memory_type: MemoryLocation::GpuOnly,
-                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
-                        | vk::BufferUsageFlags::TRANSFER_DST
-                        | vk::BufferUsageFlags::TRANSFER_SRC
-                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                        | vk::BufferUsageFlags::VERTEX_BUFFER,
-                },
-                dare::render::util::GrowableBufferConfig {
-                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
-                    min_size: size_of::<glam::Mat4>() as u64 * 64,
-                    alignment: 256, // Good for matrix data
-                    enable_staging_pool: true,
                     ..Default::default()
                 },
             )?,

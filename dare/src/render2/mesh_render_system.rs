@@ -61,7 +61,6 @@ pub fn build_instancing_data(
     Vec<dare::render::c::CSurface>,
     Vec<dare::render::c::CMaterial>,
     Vec<dare::render::c::InstancedSurfacesInfo>,
-    Vec<[f32; 16]>,
     HashSet<VirtualResource>,
 ) {
     let build_instancing_data_span = tracy_client::span!("build_instancing_data_span");
@@ -238,7 +237,7 @@ pub fn build_instancing_data(
             }
 
             if let Some(c_surface) =
-                dare::render::c::CSurface::from_surface(buffers, (*surface).clone())
+                dare::render::c::CSurface::from_surface(buffers, surface, transform)
             {
                 unique_surfaces.push(c_surface);
                 asset_unique_surfaces.push((*surface).clone());
@@ -329,20 +328,12 @@ pub fn build_instancing_data(
     // turn all transformations into one global buffer
     let mut instancing_information: Vec<dare::render::c::InstancedSurfacesInfo> =
         Vec::with_capacity(instance_groups.len());
-    let mut transforms: Vec<[f32; 16]> = Vec::new();
     for ((surface, material), transformations) in instance_groups.iter() {
         instancing_information.push(dare::render::c::InstancedSurfacesInfo {
             surface: *surface,
             material: *material,
             instances: transformations.len() as u64,
-            transformation_offset: transforms.len() as u64,
         });
-        transforms.append(
-            &mut transformations
-                .iter()
-                .map(|transform| transform.transpose().to_cols_array())
-                .collect::<Vec<[f32; 16]>>(),
-        );
     }
     drop(build_instancing_data_span);
     (
@@ -350,7 +341,6 @@ pub fn build_instancing_data(
         unique_surfaces,
         unique_materials,
         instancing_information,
-        transforms,
         used_resources,
     )
 }
@@ -397,7 +387,6 @@ pub async fn mesh_render(
                     surfaces,
                     materials,
                     instancing_information,
-                    transforms,
                     used_virtual_resources,
                 ) = {
                     let view_proj = camera.get_projection(
@@ -475,11 +464,6 @@ pub async fn mesh_render(
                     .flat_map(bytemuck::bytes_of)
                     .copied()
                     .collect::<Vec<u8>>();
-                let transform_slice = transforms
-                    .iter()
-                    .flat_map(bytemuck::bytes_of)
-                    .copied()
-                    .collect::<Vec<u8>>();
                 tokio::try_join!(
                     frame.surface_buffer.upload_to_buffer(
                         &transfer_context.immediate_submit,
@@ -489,10 +473,6 @@ pub async fn mesh_render(
                         &transfer_context.immediate_submit,
                         material_slice.as_slice(),
                     ),
-                    frame.transform_buffer.upload_to_buffer(
-                        &transfer_context.immediate_submit,
-                        transform_slice.as_slice(),
-                    )
                 )
                 .unwrap();
                 // begin rendering
@@ -564,7 +544,6 @@ pub async fn mesh_render(
                     transform: view_proj.to_cols_array(),
                     instanced_surface_info: frame.instanced_buffer.get_buffer().address(),
                     surface_infos: frame.surface_buffer.get_buffer().address(),
-                    transforms: frame.transform_buffer.get_buffer().address(),
                     draw_id: 0,
                 };
                 for (index, instancing) in instancing_information.iter().enumerate() {
@@ -598,15 +577,12 @@ pub async fn mesh_render(
 
                     // indirect draw
                     unsafe {
-                        device_context
-                            .device
-                            .get_handle()
-                            .cmd_bind_index_buffer(
-                                recording.handle(),
-                                *index_buffer.as_raw(),
-                                0,
-                                vk::IndexType::UINT32,
-                            );
+                        device_context.device.get_handle().cmd_bind_index_buffer(
+                            recording.handle(),
+                            *index_buffer.as_raw(),
+                            0,
+                            vk::IndexType::UINT32,
+                        );
                         device_context
                             .device
                             .get_handle()

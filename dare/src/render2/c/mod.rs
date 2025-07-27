@@ -22,6 +22,7 @@ bitflags! {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CSurface {
+    pub transform: [f32; 16],
     pub material: u64,
     pub bit_flag: u32,
     pub _padding: u32,
@@ -52,11 +53,13 @@ impl CSurface {
         buffers: &mut physical_resource::PhysicalResourceStorage<
             physical_resource::RenderBuffer<GPUAllocatorImpl>,
         >,
-        surface: dare::engine::components::Surface,
+        surface: &dare::engine::components::Surface,
+        transform: &dare::physics::components::Transform,
     ) -> Option<Self> {
         let positions = buffers.get_bda(&surface.vertex_buffer)?;
         let indices = buffers.get_bda(&surface.index_buffer)?;
         Some(Self {
+            transform: transform.get_transform_matrix().transpose().to_cols_array(),
             material: 1,
             bit_flag: 2,
             _padding: 0,
@@ -131,7 +134,6 @@ pub struct CPushConstant {
     pub transform: [f32; 16],
     pub instanced_surface_info: u64,
     pub surface_infos: u64,
-    pub transforms: u64,
     pub draw_id: u64,
 }
 unsafe impl Zeroable for CPushConstant {}

@@ -1,6 +1,7 @@
 #include "material.slang"
 
 struct Surface {
+    const float4x4 transform;
     const uint64_t material;
     const uint32_t bit_flag;
     const uint32_t _padding;

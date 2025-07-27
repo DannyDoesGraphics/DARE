@@ -17,7 +17,6 @@ struct PushConstant {
     const float4x4 view_proj;
     const InstancedSurfacesInfo *instanced_surface_info;
     const Surface *surface_infos;
-    const float4x4 *transforms;
     const uint64_t draw_id;
 };
 
@@ -36,8 +35,7 @@ VSout vertex_main(
     VSout out;
     float3 vertex = float3(surface_info.positions[vertex_index]);
     float4 local_position = float4(vertex, 1.0);
-    float4x4 instance_transform = pc.transforms[instanced_info.instances_offset + instance_id];
-    float4 world_position = mul(local_position, instance_transform);
+    float4 world_position = mul(local_position, surface_info.transform);
 
     float4 clip_space = mul(pc.view_proj, world_position);
     out.sv_position = clip_space;
