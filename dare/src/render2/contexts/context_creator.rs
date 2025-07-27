@@ -166,7 +166,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
                     present_queue,
                     raw_handles: ci.raw_handles.clone(),
                     extent: (0, 0),
-                    frames_in_flight: Some(3),
+                    frames_in_flight: Some(4),
                 },
             )?),
             window_handles: ci.raw_handles.clone(),

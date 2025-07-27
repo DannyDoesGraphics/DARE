@@ -358,6 +358,22 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         }
         self.load_asset_handle(&asset_handle, prepare_info, load_info);
     }
+
+    /// Given an asset handle, keep it's respective virtual resource alive
+    pub fn keep_alive_from_asset_handle(
+        &mut self,
+        asset_handle: &AssetHandle<T::Asset>,
+    ) -> Option<VirtualResource> {
+        if let Some(vr) = self.asset_mapping.get(asset_handle) {
+            // keep alive
+            if let Some(deferred) = self.deferred_deletion.get_mut(vr) {
+                deferred.reset();
+            }
+            Some(vr.clone())
+        } else {
+            None
+        }
+    }
 }
 
 impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
