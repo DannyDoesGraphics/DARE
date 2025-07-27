@@ -35,6 +35,8 @@ pub struct Frame {
     pub surface_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// staging buffers used
     pub staging_buffers: Vec<dagal::resource::Buffer<GPUAllocatorImpl>>,
+    /// Surface information buffer
+    pub surface_buffer_2: dare::render::util::PersistentBuffer<GPUAllocatorImpl, dare::render::c::CSurface>,
 
     // cmd buffers
     pub command_pool: dagal::command::CommandPool,
@@ -268,10 +270,10 @@ impl Frame {
             surface_buffer: dare::render::util::GrowableBuffer::with_config(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
-                    name: Some(String::from(format!(
+                    name: Some(format!(
                         "Render surface buffer for buffer {}",
                         image_number.as_ref().unwrap_or(&0)
-                    ))),
+                    )),
                     allocator: &mut allocator,
                     size: 8192, // Start reasonable for surface data
                     memory_type: MemoryLocation::GpuOnly,
@@ -290,6 +292,30 @@ impl Frame {
                 },
             )?,
             staging_buffers: Vec::new(),
+            surface_buffer_2: dare::render::util::PersistentBuffer::new(dare::render::util::GrowableBuffer::with_config(
+                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(format!(
+                        "Render surface persistent buffer | Frame {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    )),
+                    allocator: &mut allocator,
+                    size: 8192, // Start reasonable for surface data
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                        | vk::BufferUsageFlags::VERTEX_BUFFER,
+                },
+                dare::render::util::GrowableBufferConfig {
+                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                    min_size: 8192,
+                    alignment: 256,
+                    enable_staging_pool: false,
+                    ..Default::default()
+                },
+            )?),
             command_pool,
             command_buffer,
         })

@@ -17,7 +17,7 @@ bitflags = "2.6.0"
 image = "0.25.6"
 tokio = { version = "1.45.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
 derivative = "2.2.0"
-bevy_ecs = { version = "0.16.0", features = ["default", "multi_threaded"] }
+bevy_ecs = { version = "0.16.1", features = ["default", "multi_threaded"] }
 reqwest = { version = "0.12.15", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 async-stream = "0.3.6"

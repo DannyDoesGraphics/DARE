@@ -8,3 +8,4 @@ pub use super::super::util::immediate_submit::ImmediateSubmit;
 pub use super::super::util::transfer::{
     TransferBufferToBuffer, TransferBufferToImage, TransferPool,
 };
+pub use super::super::util::persistent_buffer::*;

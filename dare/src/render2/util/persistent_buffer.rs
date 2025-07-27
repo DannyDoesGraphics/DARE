@@ -16,6 +16,16 @@ pub enum PersistentDelta<T> {
     Removed(u64)
 }
 
+impl<T: Clone> Clone for PersistentDelta<T> {
+    fn clone(&self) -> Self {
+        match self {
+            PersistentDelta::Added(id, value) => PersistentDelta::Added(*id, value.clone()),
+            PersistentDelta::Updated(id, value) => PersistentDelta::Updated(*id, value.clone()),
+            PersistentDelta::Removed(id) => PersistentDelta::Removed(*id),
+        }
+    }
+}
+
 /// Responsible for handling fine additions, removals, and updates to buffers
 /// Uses a free list to manage allocations within the GPU buffer without keeping CPU copies
 #[derive(Debug, Resource)]
@@ -50,26 +60,28 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
             return Ok(());
         }
         
-        // sort to process removals first
+        // sort to process removals first, then updates, then additions
         self.update_queue.sort_by_key(|delta| match delta {
             PersistentDelta::Removed(_) => 0, // handle removals first
             PersistentDelta::Updated(_, _) => 1, // handle updates next
-            _ => u64::MAX, // Ensure removals are processed first
+            PersistentDelta::Added(_, _) => 2, // handle additions last
         });
 
         let deltas = std::mem::take(&mut self.update_queue);
         
         // Calculate total required capacity
-        let mut max_required_slots = self.free_list.total_data_len();
+        let mut additional_slots_needed = 0;
         for delta in &deltas {
             match delta {
-                PersistentDelta::Added(_, _) => max_required_slots += 1,
+                PersistentDelta::Added(_, _) => additional_slots_needed += 1,
                 _ => {}
             }
         }
         
         // Ensure we have enough capacity in the buffer
-        let required_size = max_required_slots * self.element_size;
+        let current_total_slots = self.free_list.total_data_len();
+        let required_total_slots = current_total_slots + additional_slots_needed;
+        let required_size = required_total_slots * self.element_size;
         self.growable_buffer.reserve(immediate_submit, required_size as u64).await?;
         
         // Use BTreeMap to maintain sorted order by offset for optimal batching
@@ -147,18 +159,30 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
     }
 }
 
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    // Example of batching efficiency:
-    // Updates to slots [0, 1, 2, 5, 6, 10] become 3 GPU calls instead of 6:
-    // - Range 1: offsets [0, 4, 8] -> single upload_to_buffer_at_offset call
-    // - Range 2: offsets [20, 24] -> single upload_to_buffer_at_offset call  
-    // - Range 3: offset [40] -> single upload_to_buffer_at_offset call
-    //
-    // The BTreeMap automatically sorts by offset and the iterator-based batching
-    // finds contiguous ranges for optimal GPU utilization.
-}
-*/
+// NOTE: This implementation now uses a PROPERLY FIXED FreeList:
+//
+// 1. FIXED: Broken FreeList slot allocation where slot IDs didn't match actual data positions
+//    - Original FreeList::insert() had critical bugs:
+//      * Pushed None then calculated wrong slot ID
+//      * Always pushed to end regardless of slot reuse
+//      * Returned slot ID that didn't match where data was placed
+//    - Fixed FreeList now:
+//      * Properly reuses freed slots by writing to the correct index
+//      * Returns slot IDs that actually correspond to data positions
+//      * Only grows the data vector when no free slots exist
+//
+// 2. FIXED: Wrong remove() method that invalidated all slot indices
+//    - Original used Vec::remove() which shifts elements, breaking all indices
+//    - Fixed version sets slot to None and adds to free list for reuse
+//
+// 3. MAINTAINED: Optimal batching via BTreeMap for contiguous GPU uploads
+//    - Still groups contiguous offset ranges into single upload operations
+//    - Significantly reduces GPU upload calls for dense updates
+//
+// The batching example still applies:
+// Updates to slots [0, 1, 2, 5, 6, 10] become 3 GPU calls instead of 6:
+// - Range 1: offsets [0, 4, 8] -> single upload_to_buffer_at_offset call
+// - Range 2: offsets [20, 24] -> single upload_to_buffer_at_offset call  
+// - Range 3: offset [40] -> single upload_to_buffer_at_offset call
+//
+// Now with the fixed FreeList, slot IDs reliably map to correct memory offsets!

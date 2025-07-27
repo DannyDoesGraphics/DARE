@@ -7,7 +7,7 @@ use crate::render2::prelude as render;
 use crate::render2::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
 use anyhow::Result;
-use bevy_ecs::prelude as becs;
+use bevy_ecs::prelude::*;
 use dagal::allocators::GPUAllocatorImpl;
 use derivative::Derivative;
 
@@ -76,7 +76,7 @@ impl RenderServer {
                     dare::asset2::assets::SamplerAsset,
                 >::new(asset_server.clone()));
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
-                let mut schedule = becs::Schedule::default();
+                let mut schedule = Schedule::default();
                 // links
                 surface_link_recv.attach_to_world(&mut world, &mut schedule);
                 texture_link_recv.attach_to_world(&mut world, &mut schedule);
@@ -93,8 +93,8 @@ impl RenderServer {
                 // misc
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
-                // rendering
-                schedule.add_systems(super::present_system::present_system_begin);
+                schedule.add_systems(super::systems::update_system::update_frame_buffer);
+                schedule.add_systems(super::present_system::present_system_begin.after(super::systems::update_system::update_frame_buffer));
 
                 let mut is_rendering = false;
 
@@ -114,7 +114,7 @@ impl RenderServer {
                                 is_rendering = false;
                             }
                             render::RenderServerRequest::Stop => {
-                                let mut shutdown_schedule = becs::Schedule::default();
+                                let mut shutdown_schedule = Schedule::default();
                                 shutdown_schedule.add_systems(
                                     render::systems::shutdown_system::render_server_shutdown_system,
                                 );
@@ -127,10 +127,10 @@ impl RenderServer {
                             } => {
                                 // Implement surface update with separate contexts
                                 // Use a system-style approach to handle the borrow checker properly
-                                let mut update_schedule = becs::Schedule::default();
+                                let mut update_schedule = Schedule::default();
                                 update_schedule.add_systems(|
-                                    device_context: becs::Res<'_, super::contexts::DeviceContext>,
-                                    mut window_context: becs::ResMut<'_, super::contexts::WindowContext>,
+                                    device_context: Res<'_, super::contexts::DeviceContext>,
+                                    mut window_context: ResMut<'_, super::contexts::WindowContext>,
                                 | {
                                     let window_handles = window_context.window_handles.clone();
                                     match window_context.update_surface(

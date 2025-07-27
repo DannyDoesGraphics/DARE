@@ -83,6 +83,42 @@ impl CSurface {
             uv: 0,
         })
     }
+
+    /// Similar to [`Self::from_surface`], but will fill empty with 0
+    pub fn from_surface_zero(
+        buffers: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
+        >,
+        surface: &dare::engine::components::Surface,
+        transform: &dare::physics::components::Transform,
+        bounding_box: &dare::render::components::BoundingBox,
+    ) -> Self {
+        let positions = buffers.get_bda(&surface.vertex_buffer).unwrap_or(0);
+        let indices = buffers.get_bda(&surface.index_buffer).unwrap_or(0);
+        Self {
+            transform: transform.get_transform_matrix().transpose().to_cols_array(),
+            min: bounding_box.min.to_array(),
+            max: bounding_box.max.to_array(),
+            material: 1,
+            bit_flag: 2,
+            index_count: surface.index_count as u32,
+            positions,
+            indices,
+            normals: surface
+                .normal_buffer
+                .as_ref()
+                .map(|buffer| buffers.get_bda(buffer))
+                .flatten()
+                .unwrap_or(0),
+            tangents: surface
+                .tangent_buffer
+                .as_ref()
+                .map(|buffer| buffers.get_bda(buffer))
+                .flatten()
+                .unwrap_or(0),
+            uv: 0,
+        }
+    }
 }
 
 #[repr(C)]
