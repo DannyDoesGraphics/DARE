@@ -27,7 +27,7 @@ pub struct CSurface {
     pub max: [f32; 3],
     pub material: u64,
     pub bit_flag: u32,
-    pub _padding: u32,
+    pub index_count: u32,
     pub positions: u64,
     pub indices: u64,
     pub normals: u64,
@@ -67,7 +67,7 @@ impl CSurface {
             max: bounding_box.max.to_array(),
             material: 1,
             bit_flag: 2,
-            _padding: 0,
+            index_count: surface.index_count as u32,
             positions,
             indices,
             normals: surface
