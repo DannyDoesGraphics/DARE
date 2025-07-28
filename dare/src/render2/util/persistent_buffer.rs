@@ -158,31 +158,3 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
         &self.growable_buffer
     }
 }
-
-// NOTE: This implementation now uses a PROPERLY FIXED FreeList:
-//
-// 1. FIXED: Broken FreeList slot allocation where slot IDs didn't match actual data positions
-//    - Original FreeList::insert() had critical bugs:
-//      * Pushed None then calculated wrong slot ID
-//      * Always pushed to end regardless of slot reuse
-//      * Returned slot ID that didn't match where data was placed
-//    - Fixed FreeList now:
-//      * Properly reuses freed slots by writing to the correct index
-//      * Returns slot IDs that actually correspond to data positions
-//      * Only grows the data vector when no free slots exist
-//
-// 2. FIXED: Wrong remove() method that invalidated all slot indices
-//    - Original used Vec::remove() which shifts elements, breaking all indices
-//    - Fixed version sets slot to None and adds to free list for reuse
-//
-// 3. MAINTAINED: Optimal batching via BTreeMap for contiguous GPU uploads
-//    - Still groups contiguous offset ranges into single upload operations
-//    - Significantly reduces GPU upload calls for dense updates
-//
-// The batching example still applies:
-// Updates to slots [0, 1, 2, 5, 6, 10] become 3 GPU calls instead of 6:
-// - Range 1: offsets [0, 4, 8] -> single upload_to_buffer_at_offset call
-// - Range 2: offsets [20, 24] -> single upload_to_buffer_at_offset call  
-// - Range 3: offset [40] -> single upload_to_buffer_at_offset call
-//
-// Now with the fixed FreeList, slot IDs reliably map to correct memory offsets!

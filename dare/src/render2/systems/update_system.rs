@@ -24,6 +24,11 @@ pub fn update_frame_buffer(
     >,
 ) {
     rt.clone().runtime.block_on(async {
+        // Batch update physical resources first for better performance
+        let update_span = tracy_client::span!("buffers_update");
+        buffers.update();
+        update_span.emit_text("Buffer updates processed");
+        
         // Check if we have a surface context
         if window_context.surface_context.is_none() {
             return;

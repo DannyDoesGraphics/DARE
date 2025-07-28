@@ -213,17 +213,19 @@ pub fn build_instancing_data(
 
             let mut buffer_resolve =
                 |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
-                    // retrieve virtual resource, if we can, resolve for physical
-                    buffers
-                        .resolve_virtual_resource(virtual_resource)
-                        .map(|vr| vr.upgrade())
-                        .flatten()
-                        .and_then(|vr| {
-                            buffers.resolve(&vr).map(|_| {
+                    // Optimized: Try direct resolution first
+                    if let Some(_buffer) = buffers.resolve_asset(virtual_resource) {
+                        // Get the virtual resource handle for tracking
+                        buffers
+                            .resolve_virtual_resource(virtual_resource)
+                            .and_then(|vr| vr.upgrade())
+                            .map(|vr| {
                                 used_resources.insert(vr.clone());
                                 vr
                             })
-                        })
+                    } else {
+                        None
+                    }
                 };
 
             // Check if the required buffers can be resolved and upgrade them

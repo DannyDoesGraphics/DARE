@@ -9,6 +9,7 @@ pub use deltas::AssetServerDelta;
 use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 pub enum AssetServerErrors {
@@ -18,7 +19,14 @@ pub enum AssetServerErrors {
     NullHandle(asset::AssetIdUntyped),
 }
 
-/// Asset manager (engine side)
+/// Batched state change for efficient processing
+#[derive(Debug, Clone)]
+pub struct StateChange {
+    pub id: asset::AssetIdUntyped,
+    pub new_state: asset::AssetState,
+}
+
+/// Asset manager (engine side) - optimized for high performance
 #[derive(Debug)]
 pub struct AssetServerInner {
     delta_send: crossbeam_channel::Sender<AssetServerDelta>,
@@ -28,17 +36,26 @@ pub struct AssetServerInner {
     drop_send: crossbeam_channel::Sender<asset::AssetIdUntyped>,
     /// Receives all drop requests
     drop_recv: crossbeam_channel::Receiver<asset::AssetIdUntyped>,
+    /// Channel for batching state changes
+    state_changes_send: crossbeam_channel::Sender<StateChange>,
+    state_changes_recv: crossbeam_channel::Receiver<StateChange>,
+    /// Generation counter for cache invalidation
+    generation: AtomicU64,
 }
 
 impl Default for AssetServerInner {
     fn default() -> Self {
         let (delta_send, delta_recv) = crossbeam_channel::unbounded();
         let (drop_send, drop_recv) = crossbeam_channel::unbounded();
+        let (state_changes_send, state_changes_recv) = crossbeam_channel::unbounded();
         Self {
             delta_send,
             delta_recv,
             drop_send,
             drop_recv,
+            state_changes_send,
+            state_changes_recv,
+            generation: AtomicU64::new(0),
         }
     }
 }
@@ -65,19 +82,64 @@ impl AssetServer {
     /// Since all state is stored behind a RwLock shard, write will be attempted, but upon
     /// failure, will not be done and simply skipped.
     pub fn try_flush(&self) -> anyhow::Result<()> {
+        // Collect all drop requests first
+        let mut drop_requests = Vec::new();
         while let Ok(drop_id) = self.inner.drop_recv.try_recv() {
-            match self.infos.states.try_get_mut(&drop_id) {
-                TryResult::Present(mut asset_info) => {
-                    // order unloading to start
-                    asset_info.asset_state = asset::AssetState::Unloading;
-                }
-                TryResult::Absent | TryResult::Locked => {
-                    // ignore
-                    continue;
-                }
+            drop_requests.push(drop_id);
+        }
+        
+        // Process drops in batch - convert to state changes
+        for drop_id in drop_requests {
+            if let Err(_) = self.inner.state_changes_send.try_send(StateChange {
+                id: drop_id,
+                new_state: asset::AssetState::Unloading,
+            }) {
+                // Channel full, which is unusual but non-critical
+                tracing::warn!("State changes channel is full, skipping drop request");
             }
         }
+        
+        // Process all queued state changes
+        let mut changes_applied = 0;
+        let max_batch_size = 256; // Prevent excessive processing in one frame
+        
+        while changes_applied < max_batch_size {
+            match self.inner.state_changes_recv.try_recv() {
+                Ok(change) => {
+                    // Try to apply the state change - if locked, queue it back
+                    match self.infos.states.try_get_mut(&change.id) {
+                        TryResult::Present(mut asset_info) => {
+                            asset_info.asset_state = change.new_state;
+                            changes_applied += 1;
+                        }
+                        TryResult::Absent => {
+                            // Asset was removed, ignore
+                        }
+                        TryResult::Locked => {
+                            // Re-queue for next frame instead of silently dropping
+                            if let Err(_) = self.inner.state_changes_send.try_send(change) {
+                                // If we can't re-queue, we'll have to drop it this time
+                                tracing::warn!("Unable to re-queue locked state change");
+                            }
+                            break; // Exit to prevent infinite loops
+                        }
+                    }
+                }
+                Err(_) => break, // No more changes to process
+            }
+        }
+        
+        // Increment generation for cache invalidation
+        if changes_applied > 0 {
+            self.inner.generation.fetch_add(1, Ordering::Relaxed);
+        }
+        
         Ok(())
+    }
+
+    /// Get current generation for cache invalidation
+    pub fn generation(&self) -> u64 {
+        self.inner.generation.load(Ordering::Relaxed)
     }
 
     pub fn get_deltas(&self) -> Vec<AssetServerDelta> {
@@ -216,58 +278,56 @@ impl AssetServer {
         handle: &asset::AssetIdUntyped,
         state: asset::AssetState,
     ) -> Option<()> {
-        match self.infos.states.get_mut(&handle).map(|mut info| {
-            info.asset_state = state;
+        // Check if the asset exists first
+        if !self.infos.states.contains_key(handle) {
+            return None;
+        }
+        
+        // Queue the state change for batched processing
+        if let Err(_) = self.inner.state_changes_send.try_send(StateChange {
+            id: handle.clone(),
+            new_state: state,
         }) {
-            None => None,
-            Some(_) => {
-                let handle = self
-                    .infos
-                    .states
-                    .get(&handle)
-                    .unwrap()
-                    .handle
-                    .clone()
-                    .upgrade();
-                if let Some(handle) = handle {
-                    match &state {
-                        asset::AssetState::Unloaded => {}
-                        asset::AssetState::Loading => {
-                            match self.inner.delta_send.send(AssetServerDelta::HandleLoading(
-                                asset::AssetHandleUntyped::Weak {
-                                    id: handle.id,
-                                    weak_ref: Arc::downgrade(&handle),
-                                },
-                            )) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    tracing::error!("Failed to send delta: {:?}", e);
-                                }
-                            }
-                        }
-                        asset::AssetState::Loaded => {}
-                        asset::AssetState::Unloading => {
-                            match self
-                                .inner
-                                .delta_send
-                                .send(AssetServerDelta::HandleUnloading(
-                                    asset::AssetHandleUntyped::Weak {
-                                        id: handle.id,
-                                        weak_ref: Arc::downgrade(&handle),
-                                    },
-                                )) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    tracing::error!("Failed to send delta: {:?}", e);
-                                }
-                            }
-                        }
-                        asset::AssetState::Failed => {}
-                    }
+            // Channel full - fall back to immediate processing
+            tracing::warn!("State changes channel full, applying immediately");
+            match self.infos.states.try_get_mut(handle) {
+                TryResult::Present(mut asset_info) => {
+                    asset_info.asset_state = state;
                 }
-                Some(())
+                _ => return None,
             }
         }
+        
+        // Handle delta notifications immediately for critical state changes
+        if let Some(info) = self.infos.states.get(handle) {
+            if let Some(handle_arc) = info.handle.upgrade() {
+                match &state {
+                    asset::AssetState::Loading => {
+                        if let Err(e) = self.inner.delta_send.send(AssetServerDelta::HandleLoading(
+                            asset::AssetHandleUntyped::Weak {
+                                id: handle_arc.id,
+                                weak_ref: Arc::downgrade(&handle_arc),
+                            },
+                        )) {
+                            tracing::error!("Failed to send delta: {:?}", e);
+                        }
+                    }
+                    asset::AssetState::Unloading => {
+                        if let Err(e) = self.inner.delta_send.send(AssetServerDelta::HandleUnloading(
+                            asset::AssetHandleUntyped::Weak {
+                                id: handle_arc.id,
+                                weak_ref: Arc::downgrade(&handle_arc),
+                            },
+                        )) {
+                            tracing::error!("Failed to send delta: {:?}", e);
+                        }
+                    }
+                    _ => {} // Other states don't need immediate delta notifications
+                }
+            }
+        }
+        
+        Some(())
     }
 
     /// Attempt to transition an asset from unloaded -> loading

@@ -47,6 +47,13 @@ pub fn present_system_begin(
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
     rt.clone().runtime.block_on(async {
+        // Batch update all physical resource storages for better performance
+        let update_span = tracy_client::span!("physical_resources_update");
+        textures.update();
+        samplers.update();
+        buffers.update();
+        update_span.emit_text("Physical resources updated");
+        
         let present_queue = window_context.present_queue.clone();
         let surface_context = match window_context.surface_context.as_mut() {
             Some(surface) => surface,

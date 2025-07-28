@@ -8,6 +8,9 @@ use dare_containers::prelude as containers;
 use futures::TryFutureExt;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use traits::MetaDataRenderAsset;
 
 pub mod gpu_stream;
@@ -413,6 +416,199 @@ pub struct PhysicalResourceHashMap<
 > {
     resource: PhysicalResourceStorage<T>,
     map: HashMap<A, VirtualResource>,
+}
+
+/// Optimized direct resource storage with minimal indirection
+/// 
+/// This replaces the complex virtual resource system with direct mapping
+/// for better performance in hot paths.
+#[derive(Resource)]
+pub struct DirectResourceStorage<T: MetaDataRenderAsset> {
+    /// Direct mapping from asset handle to physical resource
+    resources: dare_containers::dashmap::DashMap<AssetHandle<T::Asset>, Arc<T::Loaded>>,
+    /// Usage tracking for cleanup - only track recently used resources
+    usage_tracker: dare_containers::dashmap::DashMap<AssetHandle<T::Asset>, Instant>,
+    /// Generation counter for cache invalidation
+    generation: AtomicU64,
+    /// Asset server reference for metadata
+    asset_server: AssetServer,
+    /// Cleanup threshold - resources unused for this long get cleaned up
+    cleanup_threshold: Duration,
+}
+
+impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
+    pub fn new(asset_server: AssetServer) -> Self {
+        Self {
+            resources: dare_containers::dashmap::DashMap::new(),
+            usage_tracker: dare_containers::dashmap::DashMap::new(),
+            generation: AtomicU64::new(0),
+            asset_server,
+            cleanup_threshold: Duration::from_secs(30), // 30 seconds cleanup threshold
+        }
+    }
+    
+    /// Fast path resource resolution with minimal overhead
+    pub fn resolve(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<Arc<T::Loaded>> {
+        if let Some(resource) = self.resources.get(asset_handle) {
+            // Update usage time for this resource
+            self.usage_tracker.insert(asset_handle.clone(), Instant::now());
+            Some(resource.clone())
+        } else {
+            None
+        }
+    }
+    
+    /// Batch resolve multiple resources - more efficient than individual calls
+    pub fn resolve_batch(&self, asset_handles: &[AssetHandle<T::Asset>]) -> Vec<Option<Arc<T::Loaded>>> {
+        let now = Instant::now();
+        asset_handles.iter().map(|handle| {
+            if let Some(resource) = self.resources.get(handle) {
+                self.usage_tracker.insert(handle.clone(), now);
+                Some(resource.clone())
+            } else {
+                None
+            }
+        }).collect()
+    }
+    
+    /// Insert a resource directly (for immediate loading)
+    pub fn insert(&self, asset_handle: AssetHandle<T::Asset>, resource: T::Loaded) {
+        let arc_resource = Arc::new(resource);
+        self.resources.insert(asset_handle.clone(), arc_resource);
+        self.usage_tracker.insert(asset_handle, Instant::now());
+        self.generation.fetch_add(1, Ordering::Relaxed);
+    }
+    
+    /// Efficient cleanup of unused resources
+    pub fn cleanup_unused(&self) {
+        let now = Instant::now();
+        let threshold = self.cleanup_threshold;
+        
+        // Collect handles to remove
+        let mut to_remove = Vec::new();
+        for entry in self.usage_tracker.iter() {
+            if now.duration_since(*entry.value()) > threshold {
+                to_remove.push(entry.key().clone());
+            }
+        }
+        
+        // Remove unused resources
+        let mut removed_count = 0;
+        for handle in to_remove {
+            if self.resources.remove(&handle).is_some() {
+                self.usage_tracker.remove(&handle);
+                removed_count += 1;
+            }
+        }
+        
+        if removed_count > 0 {
+            self.generation.fetch_add(1, Ordering::Relaxed);
+            tracing::debug!("Cleaned up {} unused resources", removed_count);
+        }
+    }
+    
+    /// Force cleanup of specific resource
+    pub fn remove(&self, asset_handle: &AssetHandle<T::Asset>) -> bool {
+        let removed = self.resources.remove(asset_handle).is_some();
+        self.usage_tracker.remove(asset_handle);
+        if removed {
+            self.generation.fetch_add(1, Ordering::Relaxed);
+        }
+        removed
+    }
+    
+    /// Get current generation for cache invalidation
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+    
+    /// Check if a resource exists without updating usage
+    pub fn contains(&self, asset_handle: &AssetHandle<T::Asset>) -> bool {
+        self.resources.contains_key(asset_handle)
+    }
+    
+    /// Get resource count for monitoring
+    pub fn resource_count(&self) -> usize {
+        self.resources.len()
+    }
+    
+    /// Get metadata for an asset
+    pub fn get_metadata(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<<T::Asset as Asset>::Metadata> {
+        self.asset_server.get_metadata(asset_handle)
+    }
+}
+
+/// Cache-friendly resource resolver for hot paths
+/// 
+/// This provides a small cache for the most frequently accessed resources
+/// to minimize hash map lookups in critical rendering loops.
+pub struct CachedResourceResolver<T: MetaDataRenderAsset> {
+    /// The underlying storage
+    storage: Arc<DirectResourceStorage<T>>,
+    /// Simple cache entry
+    hot_cache: std::sync::Mutex<Vec<(AssetHandle<T::Asset>, Arc<T::Loaded>, u64)>>,
+    /// Cache generation for invalidation
+    cache_generation: AtomicU64,
+}
+
+impl<T: MetaDataRenderAsset> CachedResourceResolver<T> {
+    pub fn new(storage: Arc<DirectResourceStorage<T>>) -> Self {
+        Self {
+            storage,
+            hot_cache: std::sync::Mutex::new(Vec::with_capacity(16)),
+            cache_generation: AtomicU64::new(0),
+        }
+    }
+    
+    /// Ultra-fast resource resolution with caching
+    pub fn resolve_cached(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<Arc<T::Loaded>> {
+        let current_generation = self.storage.generation();
+        
+        // Check cache first
+        if let Ok(cache) = self.hot_cache.try_lock() {
+            for (cached_handle, cached_resource, cached_generation) in cache.iter() {
+                if cached_generation == &current_generation && cached_handle == asset_handle {
+                    return Some(cached_resource.clone());
+                }
+            }
+        }
+        
+        // Cache miss - go to storage
+        if let Some(resource) = self.storage.resolve(asset_handle) {
+            // Try to update cache
+            if let Ok(mut cache) = self.hot_cache.try_lock() {
+                // Simple replacement strategy - if cache is full, remove oldest
+                if cache.len() >= 16 {
+                    cache.remove(0);
+                }
+                cache.push((asset_handle.clone(), resource.clone(), current_generation));
+            }
+            
+            Some(resource)
+        } else {
+            None
+        }
+    }
+    
+    /// Invalidate cache when storage changes
+    pub fn invalidate_cache(&self) {
+        self.cache_generation.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut cache) = self.hot_cache.try_lock() {
+            cache.clear();
+        }
+    }
+}
+
+impl<A: Allocator + 'static> DirectResourceStorage<RenderBuffer<A>> {
+    /// Fast path for getting buffer device address
+    pub fn get_bda(&self, asset_handle: &AssetHandle<asset::assets::Buffer>) -> Option<vk::DeviceAddress> {
+        self.resolve(asset_handle).map(|buffer| buffer.address())
+    }
+    
+    /// Batch get multiple BDAs for efficiency
+    pub fn get_bdas(&self, asset_handles: &[AssetHandle<asset::assets::Buffer>]) -> Vec<Option<vk::DeviceAddress>> {
+        asset_handles.iter().map(|handle| self.get_bda(handle)).collect()
+    }
 }
 
 impl<
