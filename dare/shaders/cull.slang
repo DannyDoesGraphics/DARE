@@ -7,8 +7,8 @@ struct PushConstant {
    const float4x4 view_proj;
    const InstancedSurfacesInfo *instanced_surface_info;
    const Surface *surface_infos;
-   const uint* draw_mask;
 };
+[vk::binding(0)] RWStructuredBuffer<uint> draw_mask;
 
 struct Plane {
   float3 normal;
@@ -71,6 +71,9 @@ void main(uint3 dispatch_id: SV_DispatchThreadID) {
     Plane frustum[6];
     extract_frustum_plane(pc.view_proj, frustum);
     bool visible = aabb_in_frustum(frustum, surface.min, surface.max);
+
+    // ballot mask
+    uint4 ballot_mask = WaveActiveBallot(visible);
     // gather visibility across waves
     uint4 wave_mask_4 = WaveActiveBallot(visible);
     uint wave_mask = wave_mask_4.x;
@@ -78,10 +81,11 @@ void main(uint3 dispatch_id: SV_DispatchThreadID) {
     if (WaveGetLaneIndex() == 0) {
         // compute byte offset: one 32-bit word per lane
         uint wave_size = WaveGetLaneCount();
-        uint word_index = dispatch_id.x / wave_size;
-
-        // write the packed mask
-        pc.draw_mask[word_index] = wave_mask;
+        uint wave_number = dispatch_id.x / wave_size;
+        // cover full subgroup width
+        draw_mask[wave_number * 4 + 0] = ballot_mask.x;
+        draw_mask[wave_number * 4 + 1] = ballot_mask.y;
+        draw_mask[wave_number * 4 + 2] = ballot_mask.z;
+        draw_mask[wave_number * 4 + 3] = ballot_mask.w;
     }
-
 }
