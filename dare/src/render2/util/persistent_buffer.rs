@@ -27,12 +27,12 @@ impl<T: Clone> Clone for PersistentDelta<T> {
 }
 
 /// Responsible for handling fine additions, removals, and updates to buffers
-/// Uses a free list to manage allocations within the GPU buffer without keeping CPU copies
+/// Uses a free list to manage allocations within the GPU buffer
 #[derive(Debug, Resource)]
 pub struct PersistentBuffer<A: Allocator + 'static, T: 'static> {
     growable_buffer: GrowableBuffer<A>,
     update_queue: Vec<PersistentDelta<T>>,
-    /// Free list to track available slots in the buffer (stores unit type, not actual data)
+    /// Free list to track available slots in the buffer
     free_list: containers::FreeList<()>,
     /// Maps external IDs to internal slots for efficient lookups
     id_to_slot: HashMap<u64, DefaultSlot<()>>,
