@@ -7,7 +7,6 @@ use std::hash::{Hash, Hasher};
 pub struct VirtualResource {
     pub uid: u64,
     pub gen: u64,
-    pub drop_send: Option<crossbeam_channel::Sender<VirtualResource>>,
     pub type_id: TypeId,
 }
 impl PartialEq for VirtualResource {
@@ -21,31 +20,5 @@ impl Hash for VirtualResource {
         self.uid.hash(state);
         self.gen.hash(state);
         self.type_id.hash(state);
-    }
-}
-impl Drop for VirtualResource {
-    fn drop(&mut self) {
-        if let Some(drop_send) = &self.drop_send {
-            drop_send
-                .send(Self {
-                    uid: self.uid,
-                    gen: self.gen,
-                    drop_send: None,
-                    type_id: self.type_id,
-                })
-                .unwrap();
-        }
-    }
-}
-impl VirtualResource {
-    /// If a virtual resource will destroy the physical resource upon being, dropped, this allows
-    /// you to downgrade the virtual resource
-    pub fn downgrade(&self) -> Self {
-        Self {
-            uid: self.uid,
-            gen: self.gen,
-            drop_send: None,
-            type_id: self.type_id,
-        }
     }
 }
