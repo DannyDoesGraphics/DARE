@@ -44,10 +44,10 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
         shader_name: &str,
     ) -> Result<Vec<u32>> {
         let options = shaderc::CompileOptions::new();
-        if options.is_none() {
+        if options.is_ok() {
             return Err(anyhow::Error::from(crate::DagalError::ShadercError));
         }
-        let mut options = options.unwrap();
+        let mut options = options?;
         let include_context = Arc::new(Mutex::new(super::glsl_preprocessor::IncludeContext::new()));
 
         options.set_include_callback({

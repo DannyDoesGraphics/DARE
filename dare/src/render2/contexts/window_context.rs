@@ -41,7 +41,7 @@ impl WindowContext {
                 allocator: ci.allocator,
                 present_queue: self.present_queue.clone(),
                 raw_handles: self.window_handles.clone(),
-                extent: (0, 0),
+                extent: ci.dimensions.unwrap_or((800, 600)),
                 frames_in_flight: ci.frames_in_flight,
             },
         )?);

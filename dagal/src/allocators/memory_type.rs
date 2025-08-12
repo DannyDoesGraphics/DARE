@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum MemoryLocation {
     /// Memory useful in device accessible memory
     GpuOnly,

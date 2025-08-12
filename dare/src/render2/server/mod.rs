@@ -1,7 +1,7 @@
 pub mod send_types;
 
 use crate::prelude as dare;
-use crate::render2::contexts::{create_contexts, ContextsCreateInfo};
+use crate::render2::contexts::{ContextsCreateInfo, create_contexts};
 use crate::render2::physical_resource;
 use crate::render2::prelude as render;
 use crate::render2::server::send_types::RenderServerPacket;
@@ -94,7 +94,10 @@ impl RenderServer {
                 schedule.add_systems(super::systems::delta_time::delta_time_update);
                 schedule.add_systems(super::components::camera::camera_system);
                 schedule.add_systems(super::systems::update_system::update_frame_buffer);
-                schedule.add_systems(super::present_system::present_system_begin.after(super::systems::update_system::update_frame_buffer));
+                schedule.add_systems(
+                    super::present_system::present_system_begin
+                        .after(super::systems::update_system::update_frame_buffer),
+                );
 
                 let mut is_rendering = false;
 
@@ -122,32 +125,39 @@ impl RenderServer {
                                 return; // Exit the loop and function
                             }
                             render::RenderServerRequest::SurfaceUpdate {
-                                dimensions: _,
+                                dimensions,
                                 raw_handles: _,
                             } => {
                                 // Implement surface update with separate contexts
                                 // Use a system-style approach to handle the borrow checker properly
                                 let mut update_schedule = Schedule::default();
-                                update_schedule.add_systems(|
-                                    device_context: Res<'_, super::contexts::DeviceContext>,
-                                    mut window_context: ResMut<'_, super::contexts::WindowContext>,
-                                | {
-                                    let window_handles = window_context.window_handles.clone();
-                                    match window_context.update_surface(
-                                        super::contexts::SurfaceContextUpdateInfo {
-                                            instance: &device_context.instance,
-                                            physical_device: &device_context.physical_device,
-                                            allocator: device_context.allocator.clone(),
-                                            raw_handles: window_handles,
-                                            frames_in_flight: None, // Use default
+                                update_schedule.add_systems(
+                                    move |device_context: Res<
+                                        '_,
+                                        super::contexts::DeviceContext,
+                                    >,
+                                          mut window_context: ResMut<
+                                        '_,
+                                        super::contexts::WindowContext,
+                                    >| {
+                                        let window_handles = window_context.window_handles.clone();
+                                        match window_context.update_surface(
+                                            super::contexts::SurfaceContextUpdateInfo {
+                                                instance: &device_context.instance,
+                                                physical_device: &device_context.physical_device,
+                                                allocator: device_context.allocator.clone(),
+                                                raw_handles: window_handles,
+                                                dimensions,
+                                                frames_in_flight: None, // Use default
+                                            },
+                                        ) {
+                                            Ok(()) => {}
+                                            Err(e) => {
+                                                tracing::error!("Failed to update surface: {}", e);
+                                            }
                                         }
-                                    ) {
-                                        Ok(()) => {}
-                                        Err(e) => {
-                                            tracing::error!("Failed to update surface: {}", e);
-                                        }
-                                    }
-                                });
+                                    },
+                                );
                                 update_schedule.run(&mut world);
                             }
                         };
@@ -165,21 +175,23 @@ impl RenderServer {
                 tracing::trace!("Stopping render manager");
                 // Manually extract contexts in dependency order to ensure proper Vulkan cleanup
                 // Graphics and Transfer contexts depend on Device, so drop them first
-                let _graphics_context = world.remove_resource::<super::contexts::GraphicsContext>();
-                let _transfer_context = world.remove_resource::<super::contexts::TransferContext>();
-                let _window_context = world.remove_resource::<super::contexts::WindowContext>();
+                let graphics_context = world.remove_resource::<super::contexts::GraphicsContext>();
+                let transfer_context = world.remove_resource::<super::contexts::TransferContext>();
+                let window_context = world.remove_resource::<super::contexts::WindowContext>();
                 // Device context contains the core Vulkan objects and should be dropped last
-                let _device_context = world.remove_resource::<super::contexts::DeviceContext>();
+                let device_context = world.remove_resource::<super::contexts::DeviceContext>();
                 // Now drop the world with remaining resources
                 drop(world);
+                drop(transfer_context);
+                drop(graphics_context);
+                drop(window_context);
+                drop(device_context);
                 // Contexts will drop in reverse order of declaration (device_context last)
                 tracing::trace!("RENDER SERVER STOPPED");
             })
         };
         // Note: Render thread management is now simplified without RenderContext
-        Self {
-            thread,
-        }
+        Self { thread }
     }
 }
 

@@ -48,6 +48,15 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         memory_type: crate::allocators::MemoryLocation,
         usage_flags: vk::BufferUsageFlags,
     },
+    /// Create a buffer with an existing memory allocation
+    NewBufferWithAllocation {
+        device: crate::device::LogicalDevice,
+        name: Option<String>,
+        allocator: &'a mut ArcAllocator<A>,
+        size: vk::DeviceSize,
+        allocation: ArcAllocation<A>,
+        usage_flags: vk::BufferUsageFlags,
+    },
 }
 
 impl<A: Allocator> Destructible for Buffer<A> {
@@ -216,6 +225,7 @@ impl<A: Allocator> Resource for Buffer<A> {
 
                 Ok(buffer)
             }
+            _ => unimplemented!(),
         }
     }
     fn get_device(&self) -> &crate::device::LogicalDevice {

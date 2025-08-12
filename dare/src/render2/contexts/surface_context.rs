@@ -25,6 +25,7 @@ pub struct SurfaceContextUpdateInfo<'a> {
     pub physical_device: &'a dagal::device::PhysicalDevice,
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     pub raw_handles: crate::window::WindowHandles,
+    pub dimensions: Option<(u32, u32)>,
 
     pub frames_in_flight: Option<usize>,
 }
