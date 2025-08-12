@@ -19,7 +19,6 @@ pub struct Image<A: Allocator> {
     mip_levels: u32,
     /// Queue families for concurrent access only
     concurrent_queue_families: Option<Box<[u32]>>,
-    layout: vk::ImageLayout,
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
@@ -379,7 +378,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format,
                     extent,
                     mip_levels,
-                    layout,
                     usage_flags,
                     image_type,
                     allocation: None,
@@ -403,7 +401,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format: image_ci.format,
                     extent: image_ci.extent,
                     mip_levels: image_ci.mip_levels,
-                    layout: image_ci.initial_layout,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
                     device,
