@@ -93,10 +93,12 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                     usage_flags
                 );
             }
+            _ => unimplemented!(),
         }
 
         let initial_size = match &handle_ci {
             BufferCreateInfo::NewEmptyBuffer { size, .. } => *size,
+            _ => unimplemented!(),
         };
 
         // Align the initial size
@@ -119,25 +121,31 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                 memory_type,
                 usage_flags,
             },
+            _ => unimplemented!(),
         };
 
         Ok(Self {
             device: match &modified_ci {
                 BufferCreateInfo::NewEmptyBuffer { device, .. } => device.clone(),
+                _ => unimplemented!(),
             },
             name: match &modified_ci {
                 BufferCreateInfo::NewEmptyBuffer { name, .. } => name.clone(),
+                _ => unimplemented!(),
             },
             allocator: match &modified_ci {
                 BufferCreateInfo::NewEmptyBuffer { allocator, .. } => (*allocator).clone(),
+                _ => unimplemented!(),
             },
             capacity: aligned_size,
             size: initial_size,
             memory_type: match &modified_ci {
                 BufferCreateInfo::NewEmptyBuffer { memory_type, .. } => memory_type.clone(),
+                _ => unimplemented!(),
             },
             usage_flags: match &modified_ci {
                 BufferCreateInfo::NewEmptyBuffer { usage_flags, .. } => usage_flags.clone(),
+                _ => unimplemented!(),
             },
             handle: Some(Arc::new(dagal::resource::Buffer::new(modified_ci)?)),
             config,
@@ -465,7 +473,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
 
         // Calculate required total size including the offset
         let required_total_size = offset + data_size;
-        
+
         // Reserve capacity if needed
         self.reserve(immediate_submit, required_total_size).await?;
 
