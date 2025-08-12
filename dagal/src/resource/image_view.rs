@@ -6,7 +6,7 @@ use ash::vk;
 use ash::vk::Handle;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 pub struct ImageView {
     handle: vk::ImageView,
     device: crate::device::LogicalDevice,
