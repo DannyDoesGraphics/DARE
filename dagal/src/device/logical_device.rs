@@ -6,8 +6,10 @@ use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
+use log::Log;
 use std::collections::HashSet;
 use std::ffi::c_char;
+use std::hash::Hash;
 use std::sync::{Arc, Weak};
 
 #[derive(Clone, Derivative)]
@@ -26,6 +28,17 @@ struct LogicalDeviceInner {
     /// Acceleration structure
     #[derivative(PartialEq = "ignore", Debug = "ignore")]
     acceleration_structure: Option<ash::khr::acceleration_structure::Device>,
+}
+impl PartialEq for LogicalDeviceInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle.handle() == other.handle.handle()
+    }
+}
+impl Eq for LogicalDeviceInner {}
+impl Hash for LogicalDeviceInner {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.handle.handle().hash(state);
+    }
 }
 
 impl LogicalDeviceInner {
@@ -53,12 +66,6 @@ impl LogicalDeviceInner {
     }
 }
 
-impl PartialEq for LogicalDeviceInner {
-    fn eq(&self, other: &Self) -> bool {
-        self.handle.handle() == other.handle.handle()
-    }
-}
-
 impl Destructible for LogicalDeviceInner {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
@@ -69,8 +76,6 @@ impl Destructible for LogicalDeviceInner {
         }
     }
 }
-
-impl Eq for LogicalDeviceInner {}
 
 #[cfg(feature = "raii")]
 impl Drop for LogicalDeviceInner {
@@ -91,6 +96,11 @@ impl Drop for LogicalDeviceInner {
 pub struct LogicalDevice {
     #[derivative(Debug = "ignore")]
     inner: Arc<LogicalDeviceInner>,
+}
+impl Hash for LogicalDevice {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.handle.handle().hash(state);
+    }
 }
 
 /// A weak reference to a logical device

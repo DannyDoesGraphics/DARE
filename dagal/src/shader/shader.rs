@@ -5,7 +5,7 @@ use ash::vk;
 
 use crate::traits::Destructible;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Shader {
     handle: vk::ShaderModule,
     device: crate::device::LogicalDevice,
@@ -13,10 +13,7 @@ pub struct Shader {
 
 impl Shader {
     /// Creates a shader from a file
-    pub fn from_file(
-        device: crate::device::LogicalDevice,
-        path: std::path::PathBuf,
-    ) -> Result<Self> {
+    pub fn from_file(device: crate::device::LogicalDevice, path: &std::path::Path) -> Result<Self> {
         let mut buf: Vec<u8> = Vec::new();
         let mut file = std::fs::File::open(path)?;
         file.read_to_end(&mut buf)?;
