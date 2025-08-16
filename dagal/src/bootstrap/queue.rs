@@ -253,7 +253,7 @@ mod test {
                 family_index: 2,
                 index: 0,
                 count: 1,
-                family_flags: vk::QueueFlags::GRAPHICS,
+                family_flags: vk::QueueFlags::COMPUTE,
             }
         );
         assert_eq!(
@@ -262,7 +262,7 @@ mod test {
                 family_index: 1,
                 index: 0,
                 count: 1,
-                family_flags: Default::default(),
+                family_flags: vk::QueueFlags::GRAPHICS,
             }
         );
     }

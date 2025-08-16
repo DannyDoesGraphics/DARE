@@ -32,7 +32,7 @@ use derivative::Derivative;
 ///         .add_physical_device_extension(ash::khr::swapchain::NAME.as_ptr())
 /// 	);
 ///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
-///     surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
+///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
 ///     let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface)
 /// 	.request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
 /// 	.request_image_format(vk::Format::R8G8B8A8_SRGB)
@@ -40,7 +40,7 @@ use derivative::Derivative;
 ///     .request_present_mode(vk::PresentModeKHR::FIFO) // If not, falls back to FIFO (Hence, FIFO)
 ///     .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
 ///     .query_extent_from_window(window)
-/// 	.build(test_vulkan.instance.get_instance(), test_vulkan.device.as_ref().unwrap().clone());///
+/// 	.build(test_vulkan.instance.get_instance(), test_vulkan.device.as_ref().unwrap().clone()).unwrap();
 ///     drop(swapchain);
 ///     drop(surface);
 ///     drop(test_vulkan);

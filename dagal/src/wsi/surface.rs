@@ -77,7 +77,7 @@ impl Surface {
     ///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
     ///     assert!(surface.get_capabilities().min_image_count > 0);
     ///     assert!(surface.get_formats().len() > 0);
-    ///     assert!(surface.get_present_modes().as_ref().unwrap().len() > 0);
+    ///     assert!(surface.get_present_modes().len() > 0);
     ///     drop(surface);
     /// }).run();
     /// ```
