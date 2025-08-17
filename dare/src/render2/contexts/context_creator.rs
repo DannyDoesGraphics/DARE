@@ -1,6 +1,8 @@
 use crate::prelude as dare;
 use crate::render2::c::CPushConstant;
-use crate::render2::contexts::{DeviceContext, GraphicsContext, TransferContext, InnerSurfaceContextCreateInfo, WindowContext};
+use crate::render2::contexts::{
+    DeviceContext, GraphicsContext, InnerSurfaceContextCreateInfo, TransferContext, WindowContext,
+};
 use anyhow::Result;
 use dagal::ash::vk;
 use dagal::bootstrap::app_info::{Expected, QueueRequest};
@@ -32,91 +34,88 @@ pub struct CreatedContexts {
 /// Create all the separate contexts that replace the monolithic RenderContext
 pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
     let (instance, physical_device, surface, device, allocator) =
-        dagal::bootstrap::init::WindowedContext::init(
-            dagal::bootstrap::app_info::AppSettings {
-                name: "DARE".to_string(),
-                version: 0,
-                engine_name: "DARE".to_string(),
-                engine_version: 0,
-                api_version: (1, 3, 0, 0),
-                enable_validation: true,
-                debug_utils: cfg!(debug_assertions),
-                raw_display_handle: Some(*ci.raw_handles.raw_display_handle),
-                raw_window_handle: Some(*ci.raw_handles.raw_window_handle),
-                surface_format: Some(Expected::Preferred(vk::SurfaceFormatKHR {
-                    format: vk::Format::B8G8R8_SRGB,
-                    color_space: Default::default(),
-                })),
-                present_mode: Some(Expected::Required(vk::PresentModeKHR::MAILBOX)),
-                gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
-                    dedicated: Expected::Required(true),
-                    features: vk::PhysicalDeviceFeatures {
-                        shader_int64: vk::TRUE,
-                        ..Default::default()
-                    },
-                    features_1: vk::PhysicalDeviceVulkan11Features {
-                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-                        variable_pointers: vk::TRUE,
-                        variable_pointers_storage_buffer: vk::TRUE,
-                        shader_draw_parameters: vk::TRUE,
-                        ..Default::default()
-                    },
-                    features_2: vk::PhysicalDeviceVulkan12Features {
-                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                        buffer_device_address: vk::TRUE,
-                        descriptor_indexing: vk::TRUE,
-                        descriptor_binding_partially_bound: vk::TRUE,
-                        descriptor_binding_update_unused_while_pending: vk::TRUE,
-                        descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
-                        descriptor_binding_storage_image_update_after_bind: vk::TRUE,
-                        descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
-                        shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
-                        shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
-                        shader_storage_image_array_non_uniform_indexing: vk::TRUE,
-                        runtime_descriptor_array: vk::TRUE,
-                        scalar_block_layout: vk::TRUE,
-                        ..Default::default()
-                    },
-                    features_3: vk::PhysicalDeviceVulkan13Features {
-                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-                        dynamic_rendering: vk::TRUE,
-                        synchronization2: vk::TRUE,
-                        ..Default::default()
-                    },
-                    device_extensions: vec![
-                        Expected::Required(
-                            dagal::ash::khr::swapchain::NAME
-                                .to_string_lossy()
-                                .to_string(),
-                        ),
-                        Expected::Preferred(
-                            dagal::ash::ext::debug_utils::NAME
-                                .to_string_lossy()
-                                .to_string(),
-                        ),
-                    ],
-                    queues: vec![
-                        QueueRequest {
-                            strict: false,
-                            queue_type: vec![Expected::Required(
-                                vk::QueueFlags::GRAPHICS
-                                    | vk::QueueFlags::TRANSFER
-                                    | vk::QueueFlags::COMPUTE,
-                            )]
-                            .into(),
-                            count: Expected::Required(2),
-                        },
-                        QueueRequest {
-                            strict: false,
-                            queue_type: vec![Expected::Required(vk::QueueFlags::TRANSFER)]
-                                .into(),
-                            count: Expected::Preferred(u32::MAX),
-                        },
-                    ],
+        dagal::bootstrap::init::WindowedContext::init(dagal::bootstrap::app_info::AppSettings {
+            name: "DARE".to_string(),
+            version: 0,
+            engine_name: "DARE".to_string(),
+            engine_version: 0,
+            api_version: (1, 3, 0, 0),
+            enable_validation: true,
+            debug_utils: cfg!(debug_assertions),
+            raw_display_handle: Some(*ci.raw_handles.raw_display_handle),
+            raw_window_handle: Some(*ci.raw_handles.raw_window_handle),
+            surface_format: Some(Expected::Preferred(vk::SurfaceFormatKHR {
+                format: vk::Format::B8G8R8_SRGB,
+                color_space: Default::default(),
+            })),
+            present_mode: Some(Expected::Required(vk::PresentModeKHR::MAILBOX)),
+            gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
+                dedicated: Expected::Required(true),
+                features: vk::PhysicalDeviceFeatures {
+                    shader_int64: vk::TRUE,
+                    ..Default::default()
                 },
+                features_1: vk::PhysicalDeviceVulkan11Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                    variable_pointers: vk::TRUE,
+                    variable_pointers_storage_buffer: vk::TRUE,
+                    shader_draw_parameters: vk::TRUE,
+                    ..Default::default()
+                },
+                features_2: vk::PhysicalDeviceVulkan12Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                    buffer_device_address: vk::TRUE,
+                    descriptor_indexing: vk::TRUE,
+                    descriptor_binding_partially_bound: vk::TRUE,
+                    descriptor_binding_update_unused_while_pending: vk::TRUE,
+                    descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                    descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+                    descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+                    shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+                    shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                    shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                    runtime_descriptor_array: vk::TRUE,
+                    scalar_block_layout: vk::TRUE,
+                    ..Default::default()
+                },
+                features_3: vk::PhysicalDeviceVulkan13Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                    dynamic_rendering: vk::TRUE,
+                    synchronization2: vk::TRUE,
+                    ..Default::default()
+                },
+                device_extensions: vec![
+                    Expected::Required(
+                        dagal::ash::khr::swapchain::NAME
+                            .to_string_lossy()
+                            .to_string(),
+                    ),
+                    Expected::Preferred(
+                        dagal::ash::ext::debug_utils::NAME
+                            .to_string_lossy()
+                            .to_string(),
+                    ),
+                ],
+                queues: vec![
+                    QueueRequest {
+                        strict: false,
+                        queue_type: vec![Expected::Required(
+                            vk::QueueFlags::GRAPHICS
+                                | vk::QueueFlags::TRANSFER
+                                | vk::QueueFlags::COMPUTE,
+                        )]
+                        .into(),
+                        count: Expected::Required(2),
+                    },
+                    QueueRequest {
+                        strict: false,
+                        queue_type: vec![Expected::Required(vk::QueueFlags::TRANSFER)].into(),
+                        count: Expected::Preferred(u32::MAX),
+                    },
+                ],
             },
-        )?;
-    
+        })?;
+
     let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from({
         physical_device
             .get_active_queues()
@@ -138,10 +137,9 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
             })
             .collect::<Vec<dagal::device::Queue>>()
     });
-    
+
     // Get queues
-    let mut graphics_queue =
-        queue_allocator.retrieve_queues(None, vk::QueueFlags::GRAPHICS, 2)?;
+    let mut graphics_queue = queue_allocator.retrieve_queues(None, vk::QueueFlags::GRAPHICS, 2)?;
     let queues = graphics_queue
         .iter()
         .map(|queue| (queue.get_index(), queue.get_family_index()))
@@ -154,24 +152,22 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
     let present_queue = graphics_queue.pop().unwrap();
 
     // Create window context first (needs to borrow instance and physical_device)
-    let window_context = WindowContext::new(
-        crate::render2::contexts::WindowContextCreateInfo {
-            present_queue: present_queue.clone(),
-            surface: Some(dare::render::contexts::SurfaceContext::new(
-                InnerSurfaceContextCreateInfo {
-                    instance: &instance,
-                    surface,
-                    physical_device: &physical_device,
-                    allocator: allocator.clone(),
-                    present_queue,
-                    raw_handles: ci.raw_handles.clone(),
-                    extent: (0, 0),
-                    frames_in_flight: Some(4),
-                },
-            )?),
-            window_handles: ci.raw_handles.clone(),
-        },
-    );
+    let window_context = WindowContext::new(crate::render2::contexts::WindowContextCreateInfo {
+        present_queue: present_queue.clone(),
+        surface: Some(dare::render::contexts::SurfaceContext::new(
+            InnerSurfaceContextCreateInfo {
+                instance: &instance,
+                surface,
+                physical_device: &physical_device,
+                allocator: allocator.clone(),
+                present_queue,
+                raw_handles: ci.raw_handles.clone(),
+                extent: (0, 0),
+                frames_in_flight: Some(4),
+            },
+        )?),
+        window_handles: ci.raw_handles.clone(),
+    });
 
     // Create device context (takes ownership of instance and physical_device)
     let device_context = DeviceContext::new(

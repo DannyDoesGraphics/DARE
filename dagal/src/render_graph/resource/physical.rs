@@ -73,6 +73,4 @@ impl PhysicalResourceStorage {
             });
         }
     }
-
-    
 }

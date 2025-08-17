@@ -6,7 +6,6 @@ use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-use log::Log;
 use std::collections::HashSet;
 use std::ffi::c_char;
 use std::hash::Hash;
@@ -41,8 +40,7 @@ impl Hash for LogicalDeviceInner {
     }
 }
 
-impl LogicalDeviceInner {
-}
+impl LogicalDeviceInner {}
 
 impl Destructible for LogicalDeviceInner {
     fn destroy(&mut self) {

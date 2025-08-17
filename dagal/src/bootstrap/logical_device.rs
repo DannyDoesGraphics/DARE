@@ -158,7 +158,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
             .extensions
             .iter()
             .map(|ext| {
-                println!("loading: {:?}", ext);
+                println!("loading: {ext:?}");
                 CString::new(ext.clone()).unwrap()
             })
             .collect();

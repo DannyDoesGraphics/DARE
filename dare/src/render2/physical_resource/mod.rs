@@ -8,8 +8,8 @@ use dare_containers::prelude as containers;
 use futures::TryFutureExt;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use traits::MetaDataRenderAsset;
 
@@ -128,20 +128,17 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
     #[allow(dead_code)]
     pub fn get_virtual_handle(&mut self, lifetime: Option<u32>) -> VirtualResource {
         let mut slot = self.slot.insert(PhysicalState::Loading);
-        
+
         // Set up drop semantics if this is not a deferred deletion resource
         // Deferred deletion resources are managed by lifetime counters, not drop semantics
         if lifetime.is_none() {
             slot.set_drop_semantics(Some(self.drop_send.clone()));
         }
-        
+
         match lifetime {
             None => slot,
             Some(lifetime) => {
-                let deletion_slot = self
-                    .deferred_deletion
-                    .entry(slot.clone())
-                    .or_default();
+                let deletion_slot = self.deferred_deletion.entry(slot.clone()).or_default();
                 deletion_slot.lifetime = lifetime;
                 slot
             }
@@ -250,10 +247,7 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
         // handle inserts
         while let Ok((virtual_resource, physical_resource)) = self.loaded_recv.try_recv() {
             // find each loaded, update virtual resource to reflect new asset
-            let old = self
-                .slot
-                .get_mut(virtual_resource.clone())
-                .unwrap();
+            let old = self.slot.get_mut(virtual_resource.clone()).unwrap();
             if !old.is_some() {
                 old.replace(physical_resource);
             } else {
@@ -343,11 +337,8 @@ impl<T: MetaDataRenderAsset> PhysicalResourceStorage<T> {
             let virtual_resource = {
                 let mut slot = self.slot.insert(PhysicalState::Empty);
                 slot.set_drop_semantics(Some(self.drop_send.clone()));
-                
-                let deletion_slot = self
-                    .deferred_deletion
-                    .entry(slot.downgrade())
-                    .or_default();
+
+                let deletion_slot = self.deferred_deletion.entry(slot.downgrade()).or_default();
                 deletion_slot.virtual_resource = Some(slot.clone());
                 deletion_slot.lifetime = lifetime;
                 slot
@@ -389,15 +380,12 @@ impl<A: Allocator + 'static> PhysicalResourceStorage<RenderBuffer<A>> {
             .get(asset_handle)
             .and_then(|vr| vr.upgrade())
         {
-            self.slot
-                .get(vr.clone())?
-                .as_ref()
-                .map(|buf| {
-                    if let Some(deferred) = self.deferred_deletion.get_mut(&vr) {
-                        deferred.reset()
-                    }
-                    buf.address()
-                })
+            self.slot.get(vr.clone())?.as_ref().map(|buf| {
+                if let Some(deferred) = self.deferred_deletion.get_mut(&vr) {
+                    deferred.reset()
+                }
+                buf.address()
+            })
         } else {
             None
         }
@@ -419,7 +407,7 @@ pub struct PhysicalResourceHashMap<
 }
 
 /// Optimized direct resource storage with minimal indirection
-/// 
+///
 /// This replaces the complex virtual resource system with direct mapping
 /// for better performance in hot paths.
 #[derive(Resource)]
@@ -446,31 +434,38 @@ impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
             cleanup_threshold: Duration::from_secs(30), // 30 seconds cleanup threshold
         }
     }
-    
+
     /// Fast path resource resolution with minimal overhead
     pub fn resolve(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<Arc<T::Loaded>> {
         if let Some(resource) = self.resources.get(asset_handle) {
             // Update usage time for this resource
-            self.usage_tracker.insert(asset_handle.clone(), Instant::now());
+            self.usage_tracker
+                .insert(asset_handle.clone(), Instant::now());
             Some(resource.clone())
         } else {
             None
         }
     }
-    
+
     /// Batch resolve multiple resources - more efficient than individual calls
-    pub fn resolve_batch(&self, asset_handles: &[AssetHandle<T::Asset>]) -> Vec<Option<Arc<T::Loaded>>> {
+    pub fn resolve_batch(
+        &self,
+        asset_handles: &[AssetHandle<T::Asset>],
+    ) -> Vec<Option<Arc<T::Loaded>>> {
         let now = Instant::now();
-        asset_handles.iter().map(|handle| {
-            if let Some(resource) = self.resources.get(handle) {
-                self.usage_tracker.insert(handle.clone(), now);
-                Some(resource.clone())
-            } else {
-                None
-            }
-        }).collect()
+        asset_handles
+            .iter()
+            .map(|handle| {
+                if let Some(resource) = self.resources.get(handle) {
+                    self.usage_tracker.insert(handle.clone(), now);
+                    Some(resource.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
-    
+
     /// Insert a resource directly (for immediate loading)
     pub fn insert(&self, asset_handle: AssetHandle<T::Asset>, resource: T::Loaded) {
         let arc_resource = Arc::new(resource);
@@ -478,12 +473,12 @@ impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
         self.usage_tracker.insert(asset_handle, Instant::now());
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Efficient cleanup of unused resources
     pub fn cleanup_unused(&self) {
         let now = Instant::now();
         let threshold = self.cleanup_threshold;
-        
+
         // Collect handles to remove
         let mut to_remove = Vec::new();
         for entry in self.usage_tracker.iter() {
@@ -491,7 +486,7 @@ impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
                 to_remove.push(entry.key().clone());
             }
         }
-        
+
         // Remove unused resources
         let mut removed_count = 0;
         for handle in to_remove {
@@ -500,13 +495,13 @@ impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
                 removed_count += 1;
             }
         }
-        
+
         if removed_count > 0 {
             self.generation.fetch_add(1, Ordering::Relaxed);
             tracing::debug!("Cleaned up {} unused resources", removed_count);
         }
     }
-    
+
     /// Force cleanup of specific resource
     pub fn remove(&self, asset_handle: &AssetHandle<T::Asset>) -> bool {
         let removed = self.resources.remove(asset_handle).is_some();
@@ -516,30 +511,33 @@ impl<T: MetaDataRenderAsset> DirectResourceStorage<T> {
         }
         removed
     }
-    
+
     /// Get current generation for cache invalidation
     pub fn generation(&self) -> u64 {
         self.generation.load(Ordering::Relaxed)
     }
-    
+
     /// Check if a resource exists without updating usage
     pub fn contains(&self, asset_handle: &AssetHandle<T::Asset>) -> bool {
         self.resources.contains_key(asset_handle)
     }
-    
+
     /// Get resource count for monitoring
     pub fn resource_count(&self) -> usize {
         self.resources.len()
     }
-    
+
     /// Get metadata for an asset
-    pub fn get_metadata(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<<T::Asset as Asset>::Metadata> {
+    pub fn get_metadata(
+        &self,
+        asset_handle: &AssetHandle<T::Asset>,
+    ) -> Option<<T::Asset as Asset>::Metadata> {
         self.asset_server.get_metadata(asset_handle)
     }
 }
 
 /// Cache-friendly resource resolver for hot paths
-/// 
+///
 /// This provides a small cache for the most frequently accessed resources
 /// to minimize hash map lookups in critical rendering loops.
 pub struct CachedResourceResolver<T: MetaDataRenderAsset> {
@@ -559,11 +557,11 @@ impl<T: MetaDataRenderAsset> CachedResourceResolver<T> {
             cache_generation: AtomicU64::new(0),
         }
     }
-    
+
     /// Ultra-fast resource resolution with caching
     pub fn resolve_cached(&self, asset_handle: &AssetHandle<T::Asset>) -> Option<Arc<T::Loaded>> {
         let current_generation = self.storage.generation();
-        
+
         // Check cache first
         if let Ok(cache) = self.hot_cache.try_lock() {
             for (cached_handle, cached_resource, cached_generation) in cache.iter() {
@@ -572,7 +570,7 @@ impl<T: MetaDataRenderAsset> CachedResourceResolver<T> {
                 }
             }
         }
-        
+
         // Cache miss - go to storage
         if let Some(resource) = self.storage.resolve(asset_handle) {
             // Try to update cache
@@ -583,13 +581,13 @@ impl<T: MetaDataRenderAsset> CachedResourceResolver<T> {
                 }
                 cache.push((asset_handle.clone(), resource.clone(), current_generation));
             }
-            
+
             Some(resource)
         } else {
             None
         }
     }
-    
+
     /// Invalidate cache when storage changes
     pub fn invalidate_cache(&self) {
         self.cache_generation.fetch_add(1, Ordering::Relaxed);
@@ -601,13 +599,22 @@ impl<T: MetaDataRenderAsset> CachedResourceResolver<T> {
 
 impl<A: Allocator + 'static> DirectResourceStorage<RenderBuffer<A>> {
     /// Fast path for getting buffer device address
-    pub fn get_bda(&self, asset_handle: &AssetHandle<asset::assets::Buffer>) -> Option<vk::DeviceAddress> {
+    pub fn get_bda(
+        &self,
+        asset_handle: &AssetHandle<asset::assets::Buffer>,
+    ) -> Option<vk::DeviceAddress> {
         self.resolve(asset_handle).map(|buffer| buffer.address())
     }
-    
+
     /// Batch get multiple BDAs for efficiency
-    pub fn get_bdas(&self, asset_handles: &[AssetHandle<asset::assets::Buffer>]) -> Vec<Option<vk::DeviceAddress>> {
-        asset_handles.iter().map(|handle| self.get_bda(handle)).collect()
+    pub fn get_bdas(
+        &self,
+        asset_handles: &[AssetHandle<asset::assets::Buffer>],
+    ) -> Vec<Option<vk::DeviceAddress>> {
+        asset_handles
+            .iter()
+            .map(|handle| self.get_bda(handle))
+            .collect()
     }
 }
 

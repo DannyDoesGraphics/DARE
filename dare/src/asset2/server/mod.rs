@@ -87,7 +87,7 @@ impl AssetServer {
         while let Ok(drop_id) = self.inner.drop_recv.try_recv() {
             drop_requests.push(drop_id);
         }
-        
+
         // Process drops in batch - convert to state changes
         for drop_id in drop_requests {
             if let Err(_) = self.inner.state_changes_send.try_send(StateChange {
@@ -98,11 +98,11 @@ impl AssetServer {
                 tracing::warn!("State changes channel is full, skipping drop request");
             }
         }
-        
+
         // Process all queued state changes
         let mut changes_applied = 0;
         let max_batch_size = 256; // Prevent excessive processing in one frame
-        
+
         while changes_applied < max_batch_size {
             match self.inner.state_changes_recv.try_recv() {
                 Ok(change) => {
@@ -128,12 +128,12 @@ impl AssetServer {
                 Err(_) => break, // No more changes to process
             }
         }
-        
+
         // Increment generation for cache invalidation
         if changes_applied > 0 {
             self.inner.generation.fetch_add(1, Ordering::Relaxed);
         }
-        
+
         Ok(())
     }
 
@@ -282,7 +282,7 @@ impl AssetServer {
         if !self.infos.states.contains_key(handle) {
             return None;
         }
-        
+
         // Queue the state change for batched processing
         if let Err(_) = self.inner.state_changes_send.try_send(StateChange {
             id: handle.clone(),
@@ -297,7 +297,7 @@ impl AssetServer {
                 _ => return None,
             }
         }
-        
+
         // Handle delta notifications immediately for critical state changes
         if let Some(info) = self.infos.states.get(handle) {
             if let Some(handle_arc) = info.handle.upgrade() {
@@ -313,12 +313,16 @@ impl AssetServer {
                         }
                     }
                     asset::AssetState::Unloading => {
-                        if let Err(e) = self.inner.delta_send.send(AssetServerDelta::HandleUnloading(
-                            asset::AssetHandleUntyped::Weak {
-                                id: handle_arc.id,
-                                weak_ref: Arc::downgrade(&handle_arc),
-                            },
-                        )) {
+                        if let Err(e) =
+                            self.inner
+                                .delta_send
+                                .send(AssetServerDelta::HandleUnloading(
+                                    asset::AssetHandleUntyped::Weak {
+                                        id: handle_arc.id,
+                                        weak_ref: Arc::downgrade(&handle_arc),
+                                    },
+                                ))
+                        {
                             tracing::error!("Failed to send delta: {:?}", e);
                         }
                     }
@@ -326,7 +330,7 @@ impl AssetServer {
                 }
             }
         }
-        
+
         Some(())
     }
 

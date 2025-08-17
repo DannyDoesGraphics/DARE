@@ -1,11 +1,11 @@
 use super::growable_buffer::GrowableBuffer;
-use dagal::allocators::Allocator;
-use bevy_ecs::prelude::*;
-use dare_containers::prelude as containers;
-use dare_containers::traits::Container;
-use dare_containers::slot::{DefaultSlot, Slot};
-use std::collections::{HashMap, BTreeMap};
 use crate::prelude as dare;
+use bevy_ecs::prelude::*;
+use dagal::allocators::Allocator;
+use dare_containers::prelude as containers;
+use dare_containers::slot::{DefaultSlot, Slot};
+use dare_containers::traits::Container;
+use std::collections::{BTreeMap, HashMap};
 
 /// Represents the delta of changes to a persistent buffer
 /// where a unique identifier is passed to identify the change
@@ -13,7 +13,7 @@ use crate::prelude as dare;
 pub enum PersistentDelta<T> {
     Added(u64, T),
     Updated(u64, T),
-    Removed(u64)
+    Removed(u64),
 }
 
 impl<T: Clone> Clone for PersistentDelta<T> {
@@ -55,20 +55,23 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
         self.update_queue.extend(deltas);
     }
 
-    pub async fn flush_queue(&mut self, immediate_submit: &dare::render::util::ImmediateSubmit) -> anyhow::Result<()> {
+    pub async fn flush_queue(
+        &mut self,
+        immediate_submit: &dare::render::util::ImmediateSubmit,
+    ) -> anyhow::Result<()> {
         if self.update_queue.is_empty() {
             return Ok(());
         }
-        
+
         // sort to process removals first, then updates, then additions
         self.update_queue.sort_by_key(|delta| match delta {
-            PersistentDelta::Removed(_) => 0, // handle removals first
+            PersistentDelta::Removed(_) => 0,    // handle removals first
             PersistentDelta::Updated(_, _) => 1, // handle updates next
-            PersistentDelta::Added(_, _) => 2, // handle additions last
+            PersistentDelta::Added(_, _) => 2,   // handle additions last
         });
 
         let deltas = std::mem::take(&mut self.update_queue);
-        
+
         // Calculate total required capacity
         let mut additional_slots_needed = 0;
         for delta in &deltas {
@@ -77,16 +80,18 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
                 _ => {}
             }
         }
-        
+
         // Ensure we have enough capacity in the buffer
         let current_total_slots = self.free_list.total_data_len();
         let required_total_slots = current_total_slots + additional_slots_needed;
         let required_size = required_total_slots * self.element_size;
-        self.growable_buffer.reserve(immediate_submit, required_size as u64).await?;
-        
+        self.growable_buffer
+            .reserve(immediate_submit, required_size as u64)
+            .await?;
+
         // Use BTreeMap to maintain sorted order by offset for optimal batching
         let mut dirty_writes: BTreeMap<u64, T> = BTreeMap::new();
-        
+
         // Process deltas and collect dirty writes
         for delta in deltas {
             match delta {
@@ -112,27 +117,32 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
                 }
             }
         }
-        
+
         // Batch upload all dirty writes in optimal ranges
         if !dirty_writes.is_empty() {
-            self.batch_upload_dirty(immediate_submit, dirty_writes).await?;
+            self.batch_upload_dirty(immediate_submit, dirty_writes)
+                .await?;
         }
-        
+
         Ok(())
     }
 
     /// Optimized batch upload using BTreeMap for automatic sorting and optimal range detection
-    async fn batch_upload_dirty(&mut self, immediate_submit: &dare::render::util::ImmediateSubmit, dirty_writes: BTreeMap<u64, T>) -> anyhow::Result<()> {
+    async fn batch_upload_dirty(
+        &mut self,
+        immediate_submit: &dare::render::util::ImmediateSubmit,
+        dirty_writes: BTreeMap<u64, T>,
+    ) -> anyhow::Result<()> {
         if dirty_writes.is_empty() {
             return Ok(());
         }
-        
+
         let mut writes_iter = dirty_writes.into_iter().peekable();
-        
+
         while let Some((start_offset, first_value)) = writes_iter.next() {
             let mut range_data = vec![first_value];
             let mut current_offset = start_offset;
-            
+
             // Collect all contiguous writes
             while let Some(&(next_offset, _)) = writes_iter.peek() {
                 if next_offset == current_offset + self.element_size as u64 {
@@ -143,13 +153,13 @@ impl<A: Allocator + 'static, T: 'static> PersistentBuffer<A, T> {
                     break;
                 }
             }
-            
+
             // Upload this contiguous range as a single GPU operation
             self.growable_buffer
                 .upload_to_buffer_at_offset(immediate_submit, start_offset, &range_data)
                 .await?;
         }
-        
+
         Ok(())
     }
 

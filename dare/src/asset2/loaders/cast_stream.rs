@@ -1,6 +1,6 @@
 use bytemuck::{NoUninit, Pod};
-use futures::stream::StreamExt;
 use futures::stream::BoxStream;
+use futures::stream::StreamExt;
 use num_traits::{Bounded, FromPrimitive, ToPrimitive};
 use std::marker::PhantomData;
 use std::pin::Pin;

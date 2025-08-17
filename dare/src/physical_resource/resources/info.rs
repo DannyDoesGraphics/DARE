@@ -1,7 +1,6 @@
 use dagal::allocators::GPUAllocatorImpl;
 use derivative::Derivative;
 
-
 /// Used to represent the maximum size a chunk can be sent through a stream
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct StreamInfo {
@@ -18,5 +17,6 @@ pub struct GPUStreamInfo {
     #[derivative(PartialEq = "ignore")]
     pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
     #[derivative(PartialEq = "ignore")]
-    pub buffer: std::sync::Arc<tokio::sync::Mutex<Option<dagal::resource::Buffer<GPUAllocatorImpl>>>>,
+    pub buffer:
+        std::sync::Arc<tokio::sync::Mutex<Option<dagal::resource::Buffer<GPUAllocatorImpl>>>>,
 }

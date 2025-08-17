@@ -2,8 +2,8 @@ use crate::prelude as dare;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::util::format::get_size_from_vk_format;
-use futures::StreamExt;
 use futures::Stream;
+use futures::StreamExt;
 use futures::stream::BoxStream;
 
 /// Streams data from a source stream to a GPU buffer

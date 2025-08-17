@@ -207,21 +207,23 @@ impl<'a> SwapchainBuilder<'a> {
     ) -> Result<crate::wsi::Swapchain> {
         let queue_family_indices: Vec<u32> = self.family_indices.iter().copied().collect();
         let surface_capabilities = self.surface_queried.get_capabilities();
-        
+
         // Get available formats from surface
-        let available_formats: Vec<vk::Format> = self.surface_queried
+        let available_formats: Vec<vk::Format> = self
+            .surface_queried
             .get_formats()
             .iter()
             .map(|format| format.format)
             .collect();
-        
+
         // Get available color spaces from surface
-        let available_color_spaces: Vec<vk::ColorSpaceKHR> = self.surface_queried
+        let available_color_spaces: Vec<vk::ColorSpaceKHR> = self
+            .surface_queried
             .get_formats()
             .iter()
             .map(|format| format.color_space)
             .collect();
-            
+
         let swapchain_ci = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
             p_next: ptr::null(),

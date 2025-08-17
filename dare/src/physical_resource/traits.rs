@@ -1,7 +1,7 @@
-use std::fmt::Debug;
-use std::hash::Hash;
 use futures::StreamExt;
 use futures::stream::{BoxStream, Stream};
+use std::fmt::Debug;
+use std::hash::Hash;
 
 /// Metadata for a resource
 pub trait ResourceMetadata: 'static + Sized + Hash + Clone + Send + Sync {
@@ -19,9 +19,11 @@ pub trait ResourceMetadata: 'static + Sized + Hash + Clone + Send + Sync {
         Self: 'a;
 
     /// Return true if this metadata supports streaming under current conditions.
-    /// 
+    ///
     /// Default: false.
-    fn supports_streaming(&self) -> bool { false }
+    fn supports_streaming(&self) -> bool {
+        false
+    }
 
     /// Loads an asset in
     async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded>;
@@ -30,7 +32,7 @@ pub trait ResourceMetadata: 'static + Sized + Hash + Clone + Send + Sync {
     type Chunk;
 
     /// If streaming is supported, produce a stream of chunks.
-    /// 
+    ///
     /// Default: an empty stream, suitable when [`Self::supports_streaming`] is false.
     async fn stream<'a>(
         &self,
@@ -63,12 +65,12 @@ pub trait GPUUploadable: ResourceMetadata {
         Self: 'a;
 
     /// Expected chunk from a gpu stream
-    type GPUChunk<'a> : 'a
+    type GPUChunk<'a>: 'a
     where
         Self: 'a;
 
     /// Returns true if the resource supports GPU streaming.
-    /// 
+    ///
     /// Default: false
     fn supports_gpu_streaming(&self) -> bool {
         false
@@ -80,11 +82,14 @@ pub trait GPUUploadable: ResourceMetadata {
     async fn gpu_stream<'a>(
         &self,
         stream_info: Self::GPUStreamInfo<'a>,
-    ) -> anyhow::Result<futures::stream::LocalBoxStream<'a, anyhow::Result<Self::GPUChunk<'a>>>> {
+    ) -> anyhow::Result<futures::stream::LocalBoxStream<'a, anyhow::Result<Self::GPUChunk<'a>>>>
+    {
         Ok(futures::stream::empty().boxed_local())
     }
 
     /// Upload a resource directly onto GPU
-    async fn upload_gpu(&self, upload_info: Self::GPULoadInfo<'_>) -> anyhow::Result<Self::GPULoaded>;
-
+    async fn upload_gpu(
+        &self,
+        upload_info: Self::GPULoadInfo<'_>,
+    ) -> anyhow::Result<Self::GPULoaded>;
 }

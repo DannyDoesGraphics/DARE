@@ -1,16 +1,16 @@
 use std::{pin::Pin, task::Poll};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::{stream::LocalBoxStream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream::LocalBoxStream};
 
 /// Builds a stride stream
-/// 
+///
 /// A strided stream will produce a frame of n elements specified. It will buffer up to n * elem_stride bytes
 /// then attempt to process the buffered data accounting for the element stride and size.
-/// 
-/// 
+///
+///
 /// It will then output a frame of the processed bytes of n * elem_size.
-/// 
+///
 /// # Offset
 /// Offsets are simply calculated by skipping over n seen bytes where n is offset.
 pub struct StridedStream<'a> {
@@ -44,10 +44,19 @@ impl<'a> StridedStream<'a> {
         max_elem_count: usize,
         out_frame_count: usize,
     ) -> Self {
-        debug_assert!(elem_size <= elem_stride, "Element size must be less than or equal to stride");
+        debug_assert!(
+            elem_size <= elem_stride,
+            "Element size must be less than or equal to stride"
+        );
         debug_assert!(elem_size > 0, "Element size must be greater than zero");
-        debug_assert!(max_elem_count > 0, "Max element count must be greater than zero");
-        debug_assert!(out_frame_count > 0, "Max elements in output frame must be greater than zero");
+        debug_assert!(
+            max_elem_count > 0,
+            "Max element count must be greater than zero"
+        );
+        debug_assert!(
+            out_frame_count > 0,
+            "Max elements in output frame must be greater than zero"
+        );
         Self {
             stream,
             offset,
@@ -71,7 +80,11 @@ impl<'a> StridedStream<'a> {
 
         // mid-stream: only emit when enough data for a full frame
         // eos: emit any remaining valid full stride data
-        let need: usize = if flush_remaining { 1 } else { self.max_elements_in_output };
+        let need: usize = if flush_remaining {
+            1
+        } else {
+            self.max_elements_in_output
+        };
         if available < need {
             return None;
         }
@@ -119,9 +132,11 @@ impl<'a> StridedStream<'a> {
                 if take == need_data {
                     self.processed_elems += 1;
                 }
-                if i >= chunk.len() { break; }
+                if i >= chunk.len() {
+                    break;
+                }
             }
-            
+
             // skip anything remaining in the stride
             let without_offset: usize = self.seen.saturating_sub(self.offset);
             let pos_in_stride: usize = without_offset % self.elem_stride;
@@ -142,8 +157,11 @@ impl<'a> StridedStream<'a> {
 
 impl<'a> futures::stream::Stream for StridedStream<'a> {
     type Item = anyhow::Result<Bytes>;
-    
-    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         // check if we can emit something
@@ -169,9 +187,7 @@ impl<'a> futures::stream::Stream for StridedStream<'a> {
                         Poll::Pending
                     }
                 }
-                Some(Err(e)) => {
-                    Poll::Ready(Some(Err(e)))
-                }
+                Some(Err(e)) => Poll::Ready(Some(Err(e))),
                 None => {
                     if let Some(frame) = this.emit_ready_frame(true) {
                         Poll::Ready(Some(Ok(frame)))
@@ -186,10 +202,9 @@ impl<'a> futures::stream::Stream for StridedStream<'a> {
                 } else {
                     Poll::Pending
                 }
-            },
+            }
         }
     }
-    
 }
 
 #[cfg(test)]
@@ -270,7 +285,7 @@ mod tests {
             outputs.push(result.unwrap().to_vec());
         }
 
-        assert_eq!(outputs, vec![vec![1,2,4,5,7,8]]);
+        assert_eq!(outputs, vec![vec![1, 2, 4, 5, 7, 8]]);
     }
 
     // Test when data stream ends before expected elements are processed
@@ -302,9 +317,9 @@ mod tests {
         while let Some(result) = stride_stream.next().await {
             outputs.push(result.unwrap().to_vec());
         }
-        
+
         // Expected outputs might be incomplete
-        let expected_frames = vec![vec![1, 2], vec![4,5]];
+        let expected_frames = vec![vec![1, 2], vec![4, 5]];
 
         assert_eq!(outputs, expected_frames);
     }
@@ -319,9 +334,9 @@ mod tests {
 
         let input_data: Vec<u8> = vec![10, 20, 30, 40, 50];
 
-        let data_stream = futures::stream::iter(vec![
-            Ok::<_, anyhow::Error>(bytes::Bytes::copy_from_slice(&input_data[0..5])),
-        ])
+        let data_stream = futures::stream::iter(vec![Ok::<_, anyhow::Error>(
+            bytes::Bytes::copy_from_slice(&input_data[0..5]),
+        )])
         .boxed_local();
 
         let mut stride_stream = StridedStream::new(

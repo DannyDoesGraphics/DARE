@@ -60,7 +60,7 @@ impl super::traits::ShaderCompiler for ShaderCCompiler {
                         let requested_path = requested_path.trim_start_matches("./");
                         let path = path.join(requested_path);
                         path.canonicalize()
-                            .unwrap_or_else(|_| panic!("Cannot find path for {:?}", path))
+                            .unwrap_or_else(|_| panic!("Cannot find path for {path:?}"))
                     }
                     IncludeType::Standard => {
                         if requested_path.starts_with("dagal/") {

@@ -1,7 +1,11 @@
-use std::{future::Future, sync::{Arc, Mutex}, task::Waker};
 use std::pin::Pin;
 use std::ptr;
 use std::task::{Context, Poll};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+    task::Waker,
+};
 
 use anyhow::Result;
 use ash::vk;
@@ -37,7 +41,12 @@ impl Fence {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkFence {:p}", handle);
 
-        Ok(Self { handle, device, waiters: Arc::new(Mutex::new(Vec::new())), thread: Arc::new(Mutex::new(None)) })
+        Ok(Self {
+            handle,
+            device,
+            waiters: Arc::new(Mutex::new(Vec::new())),
+            thread: Arc::new(Mutex::new(None)),
+        })
     }
 
     /// Waits on the current fence
@@ -153,7 +162,7 @@ impl Future for FenceWait<'_> {
                 Ok(g) => g,
                 Err(p) => {
                     let m = p.into_inner();
-                    self.fence.waiters.clear_poison(); 
+                    self.fence.waiters.clear_poison();
                     m
                 }
             };
@@ -177,7 +186,9 @@ impl Future for FenceWait<'_> {
 
             if let Some(h) = th.as_ref() {
                 if h.is_finished() {
-                    if let Some(h) = th.take() { let _ = h.join(); }
+                    if let Some(h) = th.take() {
+                        let _ = h.join();
+                    }
                 }
             }
 
@@ -189,15 +200,27 @@ impl Future for FenceWait<'_> {
                 let thread_slot = self.fence.thread.clone();
 
                 let j = std::thread::spawn(move || {
-                    let _ = unsafe { device.get_handle().wait_for_fences(&[raw_fence], true, u64::MAX) };
+                    let _ = unsafe {
+                        device
+                            .get_handle()
+                            .wait_for_fences(&[raw_fence], true, u64::MAX)
+                    };
                     if let Ok(mut v) = waiters.lock() {
-                        for w in v.drain(..) { w.wake_by_ref(); }
+                        for w in v.drain(..) {
+                            w.wake_by_ref();
+                        }
                     } else {
                         waiters.clear_poison();
-                        for w in waiters.lock().unwrap().drain(..) { w.wake_by_ref(); }
+                        for w in waiters.lock().unwrap().drain(..) {
+                            w.wake_by_ref();
+                        }
                     }
-                    if let Ok(mut s) = thread_slot.lock() { *s = None; } 
-                    else { thread_slot.clear_poison(); *thread_slot.lock().unwrap() = None; }
+                    if let Ok(mut s) = thread_slot.lock() {
+                        *s = None;
+                    } else {
+                        thread_slot.clear_poison();
+                        *thread_slot.lock().unwrap() = None;
+                    }
                 });
                 *th = Some(j);
             }

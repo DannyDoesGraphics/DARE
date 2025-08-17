@@ -7,12 +7,12 @@ mod app;
 mod asset2;
 mod concurrent;
 mod engine;
+mod physical_resource;
 mod physics;
 mod prelude;
 mod render2;
 mod util;
 mod window;
-mod physical_resource;
 
 fn main() {
     tracy_client::Client::start();
@@ -51,16 +51,16 @@ fn main() {
     let engine_client = engine::server::EngineClient::new(es_sent);
 
     let _engine_server = engine::server::EngineServer::new(
-            runtime.handle().clone(),
-            es_recv,
-            asset_server.clone(),
-            &surface_link_send,
-            &texture_link_send,
-            &transform_link_send,
-            &bb_link_send,
-            &name_link_send,
-        )
-        .unwrap();
+        runtime.handle().clone(),
+        es_recv,
+        asset_server.clone(),
+        &surface_link_send,
+        &texture_link_send,
+        &transform_link_send,
+        &bb_link_send,
+        &name_link_send,
+    )
+    .unwrap();
     runtime.spawn(async move {
         // await, then spawn the render server
         let raw_handles = window_recv.await.unwrap();

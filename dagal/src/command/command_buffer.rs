@@ -20,10 +20,13 @@ pub struct CommandBufferInvalid {
 }
 impl CommandBufferInvalid {
     pub fn error(&self) -> crate::DagalError {
-        self.reason.clone()
+        self.reason
     }
 
-    pub fn reset(self, flags: Option<vk::CommandBufferResetFlags>) -> Result<CommandBuffer, vk::Result> {
+    pub fn reset(
+        self,
+        flags: Option<vk::CommandBufferResetFlags>,
+    ) -> Result<CommandBuffer, vk::Result> {
         unsafe {
             self.device.get_handle().reset_command_buffer(
                 self.handle,
@@ -97,7 +100,7 @@ impl CommandBuffer {
             self.device.get_handle().wait_for_fences(
                 fences
                     .iter()
-                    .map(|fence| unsafe { *fence.as_raw() } )
+                    .map(|fence| unsafe { *fence.as_raw() })
                     .collect::<Vec<vk::Fence>>()
                     .as_slice(),
                 true,
@@ -226,33 +229,28 @@ impl CommandBufferExecutable {
     ) -> Result<CommandBuffer, CommandBufferInvalid> {
         let device = self.device.clone();
         let handle = self.handle;
-        
+
         unsafe {
-            self.device.get_handle().queue_submit2(
-                **queue_guard,
-                submit_infos,
-                *fence.as_raw()
-            )
-        }.map_err(|e| {
-            CommandBufferInvalid {
-                reason: crate::DagalError::VkError(e),
-                handle,
-                device: device.clone(),
-            }
+            self.device
+                .get_handle()
+                .queue_submit2(**queue_guard, submit_infos, *fence.as_raw())
+        }
+        .map_err(|e| CommandBufferInvalid {
+            reason: crate::DagalError::VkError(e),
+            handle,
+            device: device.clone(),
         })?;
-        
-        fence.fence_await().await.map_err(|e| {
-            CommandBufferInvalid {
+
+        fence
+            .fence_await()
+            .await
+            .map_err(|e| CommandBufferInvalid {
                 reason: e,
                 handle,
                 device: device.clone(),
-            }
-        })?;
+            })?;
 
-        Ok(CommandBuffer {
-            handle,
-            device,
-        })
+        Ok(CommandBuffer { handle, device })
     }
 }
 
@@ -433,16 +431,14 @@ impl CommandBufferState {
                     invalid.error()
                 ))
             }
-            CommandBufferState::Ready(cmd) => {
-                match cmd.clone().begin(flags) {
-                    Ok(recording) => Ok::<CommandBufferRecording, anyhow::Error>(recording),
-                    Err(invalid) => {
-                        *self = Self::Invalid(invalid);
-                        return Err(anyhow::anyhow!(
-                            "Failed to begin command buffer: {}",
-                            self.get_error().unwrap()
-                        ));
-                    }
+            CommandBufferState::Ready(cmd) => match cmd.clone().begin(flags) {
+                Ok(recording) => Ok::<CommandBufferRecording, anyhow::Error>(recording),
+                Err(invalid) => {
+                    *self = Self::Invalid(invalid);
+                    return Err(anyhow::anyhow!(
+                        "Failed to begin command buffer: {}",
+                        self.get_error().unwrap()
+                    ));
                 }
             },
         }?);
@@ -452,11 +448,9 @@ impl CommandBufferState {
     // Recording
     pub fn end(&mut self) -> Result<()> {
         *self = Self::from(match self {
-            CommandBufferState::Recording(r) => {
-                match unsafe { r.clone().end() } {
-                    Ok(executable) => Ok::<CommandBufferExecutable, anyhow::Error>(executable),
-                    Err(e) => return Err(e),
-                }
+            CommandBufferState::Recording(r) => match unsafe { r.clone().end() } {
+                Ok(executable) => Ok::<CommandBufferExecutable, anyhow::Error>(executable),
+                Err(e) => return Err(e),
             },
             CommandBufferState::Executable(_) => {
                 return Err(anyhow::anyhow!(
@@ -497,7 +491,7 @@ impl CommandBufferState {
                         ));
                     }
                 }
-            },
+            }
             CommandBufferState::Recording(_) => {
                 return Err(anyhow::anyhow!(
                     "Command buffer state expected to be in Executable, got Recording"

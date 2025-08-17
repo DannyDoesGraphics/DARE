@@ -1,6 +1,6 @@
 use crate::prelude as dare;
-use dagal::allocators::GPUAllocatorImpl;
 use bevy_ecs::prelude as becs;
+use dagal::allocators::GPUAllocatorImpl;
 
 /// Context that manages transfer operations and resources
 #[derive(Debug, becs::Resource)]

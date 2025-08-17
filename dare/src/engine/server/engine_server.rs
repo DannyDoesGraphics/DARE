@@ -79,7 +79,10 @@ impl EngineServer {
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 
-        Ok(Self { thread: Some(thread), drop_signal: cancellation })
+        Ok(Self {
+            thread: Some(thread),
+            drop_signal: cancellation,
+        })
     }
 }
 

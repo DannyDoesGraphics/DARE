@@ -13,7 +13,7 @@ impl FrameCount {
     pub fn get(&self) -> usize {
         self.0
     }
-    
+
     pub fn increment(&mut self) {
         self.0 += 1;
     }

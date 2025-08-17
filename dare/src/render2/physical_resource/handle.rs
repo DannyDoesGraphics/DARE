@@ -46,8 +46,7 @@ impl Hash for VirtualResource {
 }
 impl PartialEq for VirtualResource {
     fn eq(&self, other: &Self) -> bool {
-        self.uid == other.uid
-            && self.generation == other.generation
+        self.uid == other.uid && self.generation == other.generation
     }
 }
 impl Eq for VirtualResource {}

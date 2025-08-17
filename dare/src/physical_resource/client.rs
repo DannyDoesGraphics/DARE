@@ -12,7 +12,7 @@ pub enum Commit {
     /// Request to be loaded
     Load(Either<Box<dyn std::any::Any>, VirtualResource>),
     /// If metadata does not exist, load. After loaded, try to load it
-    InsertAndLoad(Either<Box<dyn std::any::Any>, VirtualResource>)
+    InsertAndLoad(Either<Box<dyn std::any::Any>, VirtualResource>),
 }
 
 /// Physical resource client which can be distributed across threads

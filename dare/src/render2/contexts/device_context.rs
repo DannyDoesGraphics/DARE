@@ -1,5 +1,5 @@
-use dagal::allocators::{ArcAllocator, GPUAllocatorImpl};
 use bevy_ecs::prelude as becs;
+use dagal::allocators::{ArcAllocator, GPUAllocatorImpl};
 
 /// Context that manages core Vulkan device resources
 #[derive(Debug, becs::Resource)]

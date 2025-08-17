@@ -4,7 +4,7 @@ use dare_containers as containers;
 pub struct VirtualResource {
     /// Upper 48 bits represent the resource ID, bottom 16 represent resource generation
     data: u64,
-    kind: std::any::TypeId
+    kind: std::any::TypeId,
 }
 
 impl containers::slot::Slot for VirtualResource {

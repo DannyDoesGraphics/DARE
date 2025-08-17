@@ -241,7 +241,10 @@ impl<A: Allocator + 'static> TransferPool<A> {
             queues
                 .iter()
                 .map(|_| {
-                    tokio::sync::RwLock::new(dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap())
+                    tokio::sync::RwLock::new(
+                        dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED)
+                            .unwrap(),
+                    )
                 })
                 .collect::<Vec<tokio::sync::RwLock<dagal::sync::Fence>>>(),
         );
@@ -490,7 +493,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 }
                 let command_buffer = command_buffer.end()?;
                 let cmd_buffer_info = command_buffer.submit_info();
-                
+
                 // Use the new try_submit_async method with the queue guard
                 command_buffer
                     .try_submit_async(

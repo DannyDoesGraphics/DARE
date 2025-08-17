@@ -4,8 +4,8 @@ use crate::prelude as dare;
 use crate::render2::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
 use derivative::Derivative;
-use futures::{FutureExt, StreamExt, TryStreamExt};
 use futures::stream::BoxStream;
+use futures::{FutureExt, StreamExt, TryStreamExt};
 use std::sync::Arc;
 
 pub struct Buffer {}

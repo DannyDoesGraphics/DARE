@@ -1,4 +1,3 @@
-pub use petgraph::prelude::*;
 use std::fmt::Debug;
 
 /// Base node trait

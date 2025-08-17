@@ -1,6 +1,5 @@
 use dare_containers as containers;
 
-
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum ResourceState {
     /// Metadata is non-existent
@@ -19,7 +18,7 @@ pub enum ResourceState {
 
 /// Per resource state
 #[derive(Debug)]
-pub struct ResourceEntry<T: crate::asset2::traits::Asset + > {
+pub struct ResourceEntry<T: crate::asset2::traits::Asset> {
     /// Metadata associated with the virtual resource
     pub(super) metadata: T::Metadata,
     pub(super) state: Option<T::Loaded>,

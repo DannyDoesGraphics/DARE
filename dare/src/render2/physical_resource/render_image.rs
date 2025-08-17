@@ -6,8 +6,8 @@ use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use futures::{FutureExt, StreamExt};
 use futures::future::BoxFuture;
+use futures::{FutureExt, StreamExt};
 use std::io::Read;
 use std::ptr;
 

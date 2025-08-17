@@ -53,7 +53,7 @@ pub fn present_system_begin(
         samplers.update();
         buffers.update();
         update_span.emit_text("Physical resources updated");
-        
+
         let present_queue = window_context.present_queue.clone();
         let surface_context = match window_context.surface_context.as_mut() {
             Some(surface) => surface,
