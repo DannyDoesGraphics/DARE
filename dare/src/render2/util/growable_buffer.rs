@@ -313,7 +313,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         .get_device()
                         .get_handle()
                         .cmd_pipeline_barrier2(
-                            *cmd_buffer_recording.get_handle(),
+                            *cmd_buffer_recording.as_raw(),
                             &vk::DependencyInfo {
                                 s_type: vk::StructureType::DEPENDENCY_INFO,
                                 p_next: ptr::null(),
@@ -342,7 +342,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         .get_device()
                         .get_handle()
                         .cmd_copy_buffer2(
-                            *cmd_buffer_recording.get_handle(),
+                            *cmd_buffer_recording.as_raw(),
                             &vk::CopyBufferInfo2 {
                                 s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                 p_next: ptr::null(),
@@ -375,7 +375,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         .get_device()
                         .get_handle()
                         .cmd_pipeline_barrier2(
-                            cmd_buffer_recording.handle(),
+                            *cmd_buffer_recording.as_raw(),
                             &vk::DependencyInfo {
                                 s_type: vk::StructureType::DEPENDENCY_INFO,
                                 p_next: ptr::null(),
@@ -429,7 +429,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         .get_device()
                         .get_handle()
                         .cmd_copy_buffer2(
-                            *cmd_buffer_recording.get_handle(),
+                            *cmd_buffer_recording.as_raw(),
                             &vk::CopyBufferInfo2 {
                                 s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                 p_next: ptr::null(),
@@ -494,7 +494,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
                         .get_device()
                         .get_handle()
                         .cmd_copy_buffer2(
-                            *cmd_buffer_recording.get_handle(),
+                            *cmd_buffer_recording.as_raw(),
                             &vk::CopyBufferInfo2 {
                                 s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                 p_next: ptr::null(),

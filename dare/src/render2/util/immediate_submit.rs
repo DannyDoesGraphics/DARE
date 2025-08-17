@@ -70,7 +70,7 @@ impl ImmediateSubmit {
                     p_command_buffer_infos: &vk::CommandBufferSubmitInfo {
                         s_type: vk::StructureType::COMMAND_BUFFER_SUBMIT_INFO,
                         p_next: ptr::null(),
-                        command_buffer: *command_buffer.get_handle(),
+                        command_buffer: *command_buffer.as_raw(),
                         device_mask: 0,
                         _marker: Default::default(),
                     },

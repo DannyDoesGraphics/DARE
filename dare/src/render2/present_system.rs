@@ -65,7 +65,7 @@ pub fn present_system_begin(
         let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
         // wait until semaphore is ready
         // wait for frame to finish rendering before rendering again
-        frame.render_fence.wait(u64::MAX).unwrap();
+        frame.render_fence.fence_await().await.unwrap();
         frame.render_fence.reset().unwrap();
         // drop all resource handles
         frame.resources.clear();

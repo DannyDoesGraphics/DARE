@@ -151,7 +151,7 @@ impl<A: Allocator> Image<A> {
         unsafe {
             cmd.get_device()
                 .get_handle()
-                .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
+                .cmd_pipeline_barrier2(*cmd.as_raw(), &dependency_info);
         }
     }
 
@@ -206,7 +206,7 @@ impl<A: Allocator> Image<A> {
         unsafe {
             self.device
                 .get_handle()
-                .cmd_blit_image2(cmd.handle(), &blint_info);
+                .cmd_blit_image2(*cmd.as_raw(), &blint_info);
         }
     }
 

@@ -351,7 +351,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     match &request.request {
                         TransferRequest::BufferToBuffer(req) => unsafe {
                             processor.device.get_handle().cmd_copy_buffer2(
-                                command_buffer.handle(),
+                                *command_buffer.as_raw(),
                                 &vk::CopyBufferInfo2 {
                                     s_type: vk::StructureType::COPY_BUFFER_INFO_2,
                                     p_next: ptr::null(),
@@ -372,7 +372,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         },
                         TransferRequest::BufferToImage(req) => {
                             processor.device.get_handle().cmd_pipeline_barrier2(
-                                command_buffer.handle(),
+                                *command_buffer.as_raw(),
                                 &vk::DependencyInfo {
                                     s_type: vk::StructureType::DEPENDENCY_INFO,
                                     p_next: ptr::null(),
@@ -401,7 +401,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                 }
                             );
                             processor.device.get_handle().cmd_copy_buffer_to_image2(
-                                command_buffer.handle(),
+                                *command_buffer.as_raw(),
                                 &vk::CopyBufferToImageInfo2 {
                                     s_type: vk::StructureType::COPY_BUFFER_TO_IMAGE_INFO_2,
                                     p_next: ptr::null(),
@@ -429,7 +429,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                                 },
                             );
                             processor.device.get_handle().cmd_pipeline_barrier2(
-                                command_buffer.handle(),
+                                *command_buffer.as_raw(),
                                 &vk::DependencyInfo {
                                     s_type: vk::StructureType::DEPENDENCY_INFO,
                                     p_next: ptr::null(),
@@ -460,7 +460,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                         }
                         TransferRequest::ImageToImage(req) => unsafe {
                             processor.device.get_handle().cmd_copy_image2(
-                                command_buffer.handle(),
+                                *command_buffer.as_raw(),
                                 &vk::CopyImageInfo2 {
                                     s_type: vk::StructureType::COPY_IMAGE_INFO_2,
                                     p_next: ptr::null(),

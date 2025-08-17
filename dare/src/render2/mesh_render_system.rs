@@ -505,7 +505,7 @@ pub async fn mesh_render(
                 };
                 unsafe {
                     device_context.device.get_handle().cmd_set_viewport(
-                        recording.handle(),
+                        *recording.as_raw(),
                         0,
                         &[viewport],
                     );
@@ -520,7 +520,7 @@ pub async fn mesh_render(
 
                 unsafe {
                     device_context.device.get_handle().cmd_set_scissor(
-                        recording.handle(),
+                        *recording.as_raw(),
                         0,
                         &[scissor],
                     );
@@ -529,7 +529,7 @@ pub async fn mesh_render(
                 // bind pipeline
                 unsafe {
                     device_context.device.get_handle().cmd_bind_pipeline(
-                        recording.handle(),
+                        *recording.as_raw(),
                         vk::PipelineBindPoint::GRAPHICS,
                         graphics_context.graphics_pipeline.handle(),
                     );
@@ -569,7 +569,7 @@ pub async fn mesh_render(
                             size_of::<CPushConstant>(),
                         );
                         device_context.device.get_handle().cmd_push_constants(
-                            recording.handle(),
+                            *recording.as_raw(),
                             *graphics_context.graphics_layout.as_raw(),
                             vk::ShaderStageFlags::VERTEX,
                             0,
@@ -580,7 +580,7 @@ pub async fn mesh_render(
                     // indirect draw
                     unsafe {
                         device_context.device.get_handle().cmd_bind_index_buffer(
-                            recording.handle(),
+                            *recording.as_raw(),
                             *index_buffer.as_raw(),
                             0,
                             vk::IndexType::UINT32,
@@ -589,7 +589,7 @@ pub async fn mesh_render(
                             .device
                             .get_handle()
                             .cmd_draw_indexed_indirect(
-                                recording.handle(),
+                                *recording.as_raw(),
                                 *frame.indirect_buffer.get_buffer().as_raw(),
                                 (index * size_of::<vk::DrawIndexedIndirectCommand>())
                                     as vk::DeviceSize,

@@ -72,7 +72,7 @@ impl<'a> DynamicRenderContext<'a> {
             self.handle
                 .get_device()
                 .get_handle()
-                .cmd_begin_rendering(self.handle.handle(), &render_info);
+                .cmd_begin_rendering(*self.handle.as_raw(), &render_info);
         }
         self
     }
@@ -110,7 +110,7 @@ impl<'a> DynamicRenderContext<'a> {
             self.handle
                 .get_device()
                 .get_handle()
-                .cmd_end_rendering(self.handle.handle());
+                .cmd_end_rendering(*self.handle.as_raw());
         }
     }
 }
