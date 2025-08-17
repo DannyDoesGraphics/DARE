@@ -1,5 +1,6 @@
 use std::sync::PoisonError;
 
+use ash::vk;
 /// Possible errors
 use thiserror::Error;
 
@@ -50,6 +51,12 @@ pub enum DagalError {
 
     #[error("GPU Resource Table does has no strong references to the slot")]
     NoStrongReferences,
+
+    #[error(transparent)]
+    VkError(#[from] vk::Result),
+
+    #[error(transparent)]
+    Concurrency(#[from] crate::concurrency::lockable::TryLockError),
 }
 
 impl<T> From<PoisonError<T>> for DagalError {
