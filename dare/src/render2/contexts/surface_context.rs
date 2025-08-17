@@ -72,10 +72,12 @@ impl SurfaceContext {
             width: window_context_ci.extent.0,
             height: window_context_ci.extent.1,
         });
+        // Get surface capabilities once and reuse
+        let surface_capabilities = surface.get_capabilities();
         let frames_in_flight = window_context_ci.frames_in_flight.map(|fif| {
             fif.clamp(
-                surface.get_capabilities().min_image_count as usize,
-                surface.get_capabilities().max_image_count as usize,
+                surface_capabilities.min_image_count as usize,
+                surface_capabilities.max_image_count as usize,
             ) as u32
         });
         // rebuild swapchain
@@ -105,7 +107,7 @@ impl SurfaceContext {
         let swapchain_images: Box<[dagal::resource::Image<GPUAllocatorImpl>]> =
             swapchain_images.into_boxed_slice();
         let frames_in_flight =
-            frames_in_flight.unwrap_or(surface.get_capabilities().min_image_count) as usize;
+            frames_in_flight.unwrap_or(surface_capabilities.min_image_count) as usize;
         Ok(SurfaceContext {
             surface,
             swapchain,
@@ -132,6 +134,31 @@ impl SurfaceContext {
         }
         self.frames = frames.into_boxed_slice();
         Ok(())
+    }
+
+    /// Get surface capabilities
+    pub fn get_surface_capabilities(&self) -> vk::SurfaceCapabilitiesKHR {
+        self.surface.get_capabilities()
+    }
+
+    /// Get surface formats
+    pub fn get_surface_formats(&self) -> &[vk::SurfaceFormatKHR] {
+        self.surface.get_formats()
+    }
+
+    /// Get surface present modes
+    pub fn get_surface_present_modes(&self) -> &[vk::PresentModeKHR] {
+        self.surface.get_present_modes()
+    }
+
+    /// Get the surface handle
+    pub fn get_surface_handle(&self) -> vk::SurfaceKHR {
+        self.surface.handle()
+    }
+
+    /// Get direct access to the surface queried (for cases where the convenience methods aren't enough)
+    pub fn get_surface(&self) -> &dagal::wsi::SurfaceQueried {
+        &self.surface
     }
 }
 
