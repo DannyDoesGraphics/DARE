@@ -100,7 +100,7 @@ impl CommandBuffer {
             self.device.get_handle().wait_for_fences(
                 fences
                     .iter()
-                    .map(|fence| unsafe { *fence.as_raw() })
+                    .map(|fence| *fence.as_raw() )
                     .collect::<Vec<vk::Fence>>()
                     .as_slice(),
                 true,
