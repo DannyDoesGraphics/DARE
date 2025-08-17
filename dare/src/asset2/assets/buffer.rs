@@ -5,7 +5,7 @@ use crate::render2::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
 use derivative::Derivative;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use futures_core::stream::BoxStream;
+use futures::stream::BoxStream;
 use std::sync::Arc;
 
 pub struct Buffer {}

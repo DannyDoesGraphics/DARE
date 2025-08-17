@@ -23,7 +23,6 @@ reqwest = { version = "0.12.22", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 bevy_tasks = "0.16.1"
 futures = "0.3.31"
-futures-core = "0.3.31"
 crossbeam-channel = "0.5.15"
 num-traits = "0.2.19"
 tracy-client = { version = "0.18.2", features = ["enable"] }

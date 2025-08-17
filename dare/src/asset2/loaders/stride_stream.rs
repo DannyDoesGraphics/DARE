@@ -20,7 +20,7 @@ pub struct StrideStreamBuilder {
 impl StrideStreamBuilder {
     pub fn build<T: AsRef<[u8]>>(
         self,
-        stream: futures_core::stream::LocalBoxStream<anyhow::Result<T>>,
+        stream: futures::stream::LocalBoxStream<anyhow::Result<T>>,
     ) -> StrideStream<T> {
         StrideStream {
             offset: self.offset,
@@ -37,7 +37,7 @@ impl StrideStreamBuilder {
     }
 }
 
-/// StrideStream is a post process stream that collects all data from an incoming [`futures_core::stream::LocalBoxStream`]
+/// StrideStream is a post process stream that collects all data from an incoming [`futures::stream::LocalBoxStream`]
 ///
 /// # Cancellation safety
 /// As long as StrideStream is kept alive outside the cancellation scope,
@@ -53,7 +53,7 @@ pub struct StrideStream<'a, T: AsRef<[u8]>> {
 
     #[derivative(Debug = "ignore")]
     /// We do not expect data_stream to be processed on another thread
-    data_stream: futures_core::stream::LocalBoxStream<'a, anyhow::Result<T>>,
+    data_stream: futures::stream::LocalBoxStream<'a, anyhow::Result<T>>,
 
     /// \# of elements processed
     element_processed: usize,
@@ -102,7 +102,7 @@ impl<'a, T: AsRef<[u8]>> StrideStream<'a, T> {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> futures_core::Stream for StrideStream<'a, T> {
+impl<'a, T: AsRef<[u8]>> futures::Stream for StrideStream<'a, T> {
     type Item = anyhow::Result<Vec<u8>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

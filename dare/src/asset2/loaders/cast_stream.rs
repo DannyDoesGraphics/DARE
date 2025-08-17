@@ -1,6 +1,6 @@
 use bytemuck::{NoUninit, Pod};
 use futures::stream::StreamExt;
-use futures_core::stream::BoxStream;
+use futures::stream::BoxStream;
 use num_traits::{Bounded, FromPrimitive, ToPrimitive};
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -58,7 +58,7 @@ impl<
     T: AsRef<[u8]>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
     Destination: ToPrimitive + FromPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
-> futures_core::Stream for CastStream<'a, T, Source, Destination>
+> futures::Stream for CastStream<'a, T, Source, Destination>
 {
     type Item = Vec<u8>;
 

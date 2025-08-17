@@ -5,7 +5,7 @@ use crate::render2::physical_resource::traits::MetaDataRenderAsset;
 use bevy_tasks::futures_lite::FutureExt;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use futures_core::future::BoxFuture;
+use futures::future::BoxFuture;
 use gltf::texture::{MagFilter, MinFilter, WrappingMode};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};

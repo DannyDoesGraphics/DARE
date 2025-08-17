@@ -963,7 +963,6 @@ dependencies = [
  "dare_containers",
  "derivative",
  "futures",
- "futures-core",
  "glam 0.30.5",
  "gltf",
  "image",

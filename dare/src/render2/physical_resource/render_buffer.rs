@@ -8,7 +8,7 @@ use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dare::asset2 as asset;
 use futures::StreamExt;
-use futures_core::future::BoxFuture;
+use futures::future::BoxFuture;
 use std::marker::PhantomData;
 
 pub struct RenderBuffer<A: Allocator + 'static> {

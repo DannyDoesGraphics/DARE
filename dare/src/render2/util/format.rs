@@ -1,6 +1,6 @@
 use crate::render2::util::WrappingMode::MirrorClampToEdge;
 use dagal::ash::vk;
-use futures_core::stream::BoxStream;
+use futures::stream::BoxStream;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Format {
