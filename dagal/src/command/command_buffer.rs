@@ -220,7 +220,7 @@ impl CommandBufferExecutable {
     /// Submit with an already acquired queue guard and wait for fence completion
     pub async fn try_submit_async<'a>(
         self,
-        queue_guard: impl std::ops::Deref<Target = vk::Queue>,
+        queue_guard: &mut impl crate::concurrency::Guard<vk::Queue>,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
         fence: &'a crate::sync::Fence,
     ) -> Result<CommandBuffer, CommandBufferInvalid> {
@@ -229,7 +229,7 @@ impl CommandBufferExecutable {
         
         unsafe {
             self.device.get_handle().queue_submit2(
-                *queue_guard,
+                **queue_guard,
                 submit_infos,
                 *fence.as_raw()
             )

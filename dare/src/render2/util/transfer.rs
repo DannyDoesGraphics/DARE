@@ -329,7 +329,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
         };
         // Acquire necessary semaphore permits and select an available queue
         let permit = processor.semaphore.acquire().await?;
-        let (index, queue_guard) = pick_available_queues(&processor.queues).await;
+        let (index, mut queue_guard) = pick_available_queues(&processor.queues).await;
         let fence: &tokio::sync::RwLock<dagal::sync::Fence> = &processor.fences[index];
         // wait for fence to be cleared
         let mut fence_guard = fence.write().await;
@@ -494,7 +494,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 // Use the new try_submit_async method with the queue guard
                 command_buffer
                     .try_submit_async(
-                        &*queue_guard, // Convert to a reference that implements Deref<Target = vk::Queue>
+                        &mut queue_guard, // Pass a mutable reference to the guard
                         &[vk::SubmitInfo2 {
                             s_type: vk::StructureType::SUBMIT_INFO_2,
                             p_next: ptr::null(),
