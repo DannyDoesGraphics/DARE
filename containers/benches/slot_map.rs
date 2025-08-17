@@ -14,7 +14,7 @@
 //! Each benchmark tests multiple data sizes (100, 1000, 10000) to observe scaling behavior.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use dare_containers::prelude::{InsertionSortSlotMap, SlotMap, UniqueSlotMap};
+use dare_containers::prelude::{SlotMap, UniqueSlotMap};
 use std::hint::black_box;
 
 fn benchmark_slot_map_insert(c: &mut Criterion) {

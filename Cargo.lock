@@ -934,6 +934,7 @@ dependencies = [
  "async-std",
  "derivative",
  "futures",
+ "futures-util",
  "glam 0.30.5",
  "gpu-allocator",
  "log",

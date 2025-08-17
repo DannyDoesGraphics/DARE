@@ -16,6 +16,7 @@ bytemuck = "1.23.1"
 bitflags = "2.9.1"
 image = "0.25.6"
 tokio = { version = "1.47.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
+tokio-util = { version = "0.7.16", features = ["compat", "codec"] }
 derivative = "2.2.0"
 bevy_ecs = { version = "0.16.1", features = ["default", "multi_threaded"] }
 reqwest = { version = "0.12.22", features = ["stream", "blocking"] }
@@ -26,6 +27,7 @@ futures-core = "0.3.31"
 crossbeam-channel = "0.5.15"
 num-traits = "0.2.19"
 tracy-client = { version = "0.18.2", features = ["enable"] }
+bytes = "1.10.1"
 #tracing-tracy = {version = "0.11.4", features = ["enable"]}
 #slang = { git = "https://github.com/ProjectKML/slang-rs.git" }
 

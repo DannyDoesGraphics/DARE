@@ -12,6 +12,7 @@ mod prelude;
 mod render2;
 mod util;
 mod window;
+mod physical_resource;
 
 fn main() {
     tracy_client::Client::start();
