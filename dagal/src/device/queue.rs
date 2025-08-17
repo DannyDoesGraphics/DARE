@@ -4,12 +4,12 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::prelude as dagal;
+use crate::{prelude as dagal, traits::AsRaw};
 #[allow(unused_imports)]
 use crate::DagalError;
 #[allow(unused_imports)]
 use anyhow::Result;
-use ash::vk;
+use ash::vk::{self, Handle};
 
 /// Information about queues
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,12 +49,14 @@ pub struct Queue<
 > {
     /// Handle to [`vk::Queue`]
     handle: Arc<M>,
+    device: crate::device::LogicalDevice,
     queue_info: QueueInfo,
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for Queue<M> {
     fn clone(&self) -> Self {
         Self {
             handle: self.handle.clone(),
+            device: self.device.clone(),
             queue_info: self.queue_info.clone(),
         }
     }
@@ -97,9 +99,10 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
 
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     /// It is undefined behavior to pass in a [`vk:Queue`] from an already existing [`Queue`]
-    pub unsafe fn new(handle: vk::Queue, queue_info: QueueInfo) -> Self {
+    pub unsafe fn new(device: crate::device::LogicalDevice, handle: vk::Queue, queue_info: QueueInfo) -> Self {
         Self {
             handle: Arc::new(M::new(handle)),
+            device,
             queue_info,
         }
     }

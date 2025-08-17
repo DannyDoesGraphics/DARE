@@ -101,7 +101,7 @@ struct TransferProcessor {
     semaphore: Arc<tokio::sync::Semaphore>,
     device: dagal::device::LogicalDevice,
     queues: Arc<[dagal::device::Queue]>,
-    fences: Arc<[dagal::sync::Fence]>,
+    fences: Arc<[tokio::sync::RwLock<dagal::sync::Fence>]>,
     command_pools: Arc<[dagal::command::CommandPool]>,
 }
 
@@ -237,13 +237,13 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 .collect::<Vec<dagal::command::CommandPool>>()
                 .into_boxed_slice(),
         );
-        let fences: Arc<[dagal::sync::Fence]> = Arc::from(
+        let fences: Arc<[tokio::sync::RwLock<dagal::sync::Fence>]> = Arc::from(
             queues
                 .iter()
                 .map(|_| {
-                    dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap()
+                    tokio::sync::RwLock::new(dagal::sync::Fence::new(device.clone(), vk::FenceCreateFlags::SIGNALED).unwrap())
                 })
-                .collect::<Vec<dagal::sync::Fence>>(),
+                .collect::<Vec<tokio::sync::RwLock<dagal::sync::Fence>>>(),
         );
         let tasks: FuturesUnordered<tokio::task::JoinHandle<Result<()>>> = FuturesUnordered::new();
 
@@ -256,10 +256,15 @@ impl<A: Allocator + 'static> TransferPool<A> {
                             while task.is_finished() {}
                         }
                     }
-                    // wait for all fences to complete
-                    for fence in fences.iter() {
-                        fence.wait(u64::MAX).unwrap()
-                    }
+                    // attempt to do a mutex lock and wait on all fences at once via join
+                    let wait_futures = fences.iter().map(|fence| async move {
+                        let fence = fence.read().await;
+                        if fence.get_fence_status().unwrap_or(false) {
+                            fence.wait(u64::MAX).unwrap()
+                        }
+                    });
+                    futures::future::join_all(wait_futures).await;
+
                     drop(command_pools);
                     drop(fences);
                     drop(queues);
@@ -325,11 +330,11 @@ impl<A: Allocator + 'static> TransferPool<A> {
         // Acquire necessary semaphore permits and select an available queue
         let permit = processor.semaphore.acquire().await?;
         let (index, queue_guard) = pick_available_queues(&processor.queues).await;
-        let fence: &dagal::sync::Fence = &processor.fences[index];
+        let fence: &tokio::sync::RwLock<dagal::sync::Fence> = &processor.fences[index];
         // wait for fence to be cleared
-        fence.fence_await().await?;
-
-        fence.reset()?;
+        let mut fence_guard = fence.write().await;
+        fence_guard.fence_await().await?;
+        fence_guard.reset()?;
         let res = {
             let command_buffer = processor.command_pools[index]
                 .allocate(1)?
@@ -485,32 +490,31 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 }
                 let command_buffer = command_buffer.end()?;
                 let cmd_buffer_info = command_buffer.submit_info();
-                {
-                    command_buffer
-                        .submit(
-                            *queue_guard,
-                            &[vk::SubmitInfo2 {
-                                s_type: vk::StructureType::SUBMIT_INFO_2,
-                                p_next: ptr::null(),
-                                flags: vk::SubmitFlags::empty(),
-                                wait_semaphore_info_count: 0,
-                                p_wait_semaphore_infos: ptr::null(),
-                                command_buffer_info_count: 1,
-                                p_command_buffer_infos: &cmd_buffer_info,
-                                signal_semaphore_info_count: 0,
-                                p_signal_semaphore_infos: ptr::null(),
-                                _marker: Default::default(),
-                            }],
-                            fence.handle(),
-                        )
-                        .map_err(|e| {
-                            tracing::error!("Failed to submit transfer command: {:?}", e);
-                            e
-                        })
-                        .unwrap();
-                }
+                
+                // Use the new try_submit_async method with the queue guard
+                command_buffer
+                    .try_submit_async(
+                        &*queue_guard, // Convert to a reference that implements Deref<Target = vk::Queue>
+                        &[vk::SubmitInfo2 {
+                            s_type: vk::StructureType::SUBMIT_INFO_2,
+                            p_next: ptr::null(),
+                            flags: vk::SubmitFlags::empty(),
+                            wait_semaphore_info_count: 0,
+                            p_wait_semaphore_infos: ptr::null(),
+                            command_buffer_info_count: 1,
+                            p_command_buffer_infos: &cmd_buffer_info,
+                            signal_semaphore_info_count: 0,
+                            p_signal_semaphore_infos: ptr::null(),
+                            _marker: Default::default(),
+                        }],
+                        &*fence_guard,
+                    )
+                    .await
+                    .map_err(|invalid| {
+                        tracing::error!("Failed to submit transfer command: {:?}", invalid.error());
+                        anyhow::anyhow!("Transfer submission failed: {}", invalid.error())
+                    })?;
             }
-            fence.fence_await().await?;
             drop(queue_guard);
             drop(permit);
             anyhow::Ok(())
@@ -543,7 +547,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     .callback
                     .send(Err(anyhow::anyhow!("Failed to complete transfer")))
                     .unwrap();
-                fence.reset()?;
+                fence_guard.reset()?;
             }
         }
 

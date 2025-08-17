@@ -603,6 +603,9 @@ pub async fn mesh_render(
             CommandBufferState::Executable(_) => {
                 panic!("Mesh recording invalid cmd buffer state")
             }
+            CommandBufferState::Invalid(invalid) => {
+                tracing::error!("Command buffer is in invalid state: {}", invalid.error());
+            }
         };
     }
     drop(mesh_render_span);

@@ -42,28 +42,6 @@ impl Hash for LogicalDeviceInner {
 }
 
 impl LogicalDeviceInner {
-    /// Acquire a [`device::Queue`](crate::device::Queue)
-    ///
-    /// # Safety
-    /// Queues created here do not guarantee thread safety whatsoever with other queues
-    pub unsafe fn get_queue(
-        &self,
-        queue_info: &vk::DeviceQueueInfo2,
-        strict: bool,
-        queue_flags: vk::QueueFlags,
-    ) -> crate::device::Queue {
-        let queue = unsafe { self.handle.get_device_queue2(queue_info) };
-        crate::device::Queue::new(
-            queue,
-            QueueInfo {
-                family_index: queue_info.queue_family_index,
-                index: queue_info.queue_index,
-                strict,
-                queue_flags,
-                can_present: true,
-            },
-        )
-    }
 }
 
 impl Destructible for LogicalDeviceInner {
@@ -204,6 +182,7 @@ impl LogicalDevice {
     ) -> crate::device::Queue<M> {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
         crate::device::Queue::<M>::new(
+            self.clone(),
             queue,
             QueueInfo {
                 family_index: queue_info.queue_family_index,

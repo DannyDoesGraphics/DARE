@@ -11,7 +11,7 @@ pub trait Lockable {
     fn new(t: Self::Target) -> Self;
 }
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TryLockError {
     #[error("Poison error")]
     PoisonError,
