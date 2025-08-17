@@ -6,7 +6,6 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Flash map implementation of erased storage
-
 /// A flash map backed type erased storage
 ///
 /// # Performance characteristics
