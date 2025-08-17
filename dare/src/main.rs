@@ -33,7 +33,6 @@ fn main() {
     // start the tokio runtime
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .worker_threads(32)
         .build()
         .unwrap();
     let asset_server = asset2::server::AssetServer::default();
@@ -44,13 +43,24 @@ fn main() {
     let (texture_link_send, texture_link_recv) = util::entity_linker::ComponentsLinker::default();
     let (name_link_send, name_link_recv) = util::entity_linker::ComponentsLinker::default();
     let (rs_send, rs_recv) = tokio::sync::mpsc::unbounded_channel();
-    let (es_sent, es_recv) = tokio::sync::mpsc::unbounded_channel();
+    let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
     let (input_send, input_recv) = util::event::event_send::<window::input::Input>();
     let (window_send, window_recv) = tokio::sync::oneshot::channel::<window::WindowHandles>();
     // cross tokio-main thread communication
     let render_client = render2::server::RenderClient::new(rs_send, input_send);
     let engine_client = engine::server::EngineClient::new(es_sent);
 
+    let _engine_server = engine::server::EngineServer::new(
+            runtime.handle().clone(),
+            es_recv,
+            asset_server.clone(),
+            &surface_link_send,
+            &texture_link_send,
+            &transform_link_send,
+            &bb_link_send,
+            &name_link_send,
+        )
+        .unwrap();
     runtime.spawn(async move {
         // await, then spawn the render server
         let raw_handles = window_recv.await.unwrap();
@@ -76,17 +86,6 @@ fn main() {
             name_link_recv,
         )
         .await;
-        let engine_server = engine::server::EngineServer::new(
-            tokio::runtime::Handle::current(),
-            es_recv,
-            asset_server,
-            &surface_link_send,
-            &texture_link_send,
-            &transform_link_send,
-            &bb_link_send,
-            &name_link_send,
-        )
-        .unwrap();
     });
 
     let mut app = app::App::new(render_client, engine_client, window_send).unwrap();

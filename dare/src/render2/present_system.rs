@@ -184,7 +184,7 @@ pub async fn present_system_end(
     present_queue: &dagal::device::Queue,
     surface_context: &mut crate::render2::contexts::SurfaceContext,
     swapchain_image_index: u32,
-    textures: &mut physical_resource::PhysicalResourceStorage<
+    _textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
     buffers: &mut physical_resource::PhysicalResourceStorage<

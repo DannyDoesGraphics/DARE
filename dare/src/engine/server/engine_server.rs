@@ -1,3 +1,5 @@
+use std::sync::mpsc::RecvError;
+
 use crate::prelude as dare;
 use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
@@ -5,11 +7,11 @@ use bevy_ecs::prelude as becs;
 
 #[derive(Debug, Clone)]
 pub struct EngineClient {
-    server_send: tokio::sync::mpsc::UnboundedSender<()>,
+    server_send: std::sync::mpsc::Sender<()>,
 }
 
 impl EngineClient {
-    pub fn new(server_send: tokio::sync::mpsc::UnboundedSender<()>) -> Self {
+    pub fn new(server_send: std::sync::mpsc::Sender<()>) -> Self {
         Self { server_send }
     }
 
@@ -20,13 +22,14 @@ impl EngineClient {
 
 #[derive(Debug)]
 pub struct EngineServer {
-    thread: tokio::task::JoinHandle<()>,
+    drop_signal: tokio_util::sync::CancellationToken,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl EngineServer {
     pub fn new(
         runtime: tokio::runtime::Handle,
-        mut server_recv: tokio::sync::mpsc::UnboundedReceiver<()>,
+        server_recv: std::sync::mpsc::Receiver<()>,
         asset_server: dare::asset2::server::AssetServer,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
         texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
@@ -56,14 +59,18 @@ impl EngineServer {
         texture_link_send.attach_to_world(&mut scheduler);
         name_link_send.attach_to_world(&mut scheduler);
 
-        let thread = rt.runtime.spawn(async move {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let cancel = cancellation.clone();
+        let thread = std::thread::spawn(move || {
             loop {
-                if server_recv.is_closed() {
+                if cancel.is_cancelled() {
                     break;
                 }
-                match server_recv.recv().await {
-                    None => {}
-                    Some(_) => {
+                match server_recv.recv() {
+                    Err(_) => {
+                        break;
+                    }
+                    Ok(_) => {
                         scheduler.run(&mut world);
                     }
                 }
@@ -72,13 +79,16 @@ impl EngineServer {
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 
-        Ok(Self { thread })
+        Ok(Self { thread: Some(thread), drop_signal: cancellation })
     }
 }
 
 impl Drop for EngineServer {
     fn drop(&mut self) {
         tracing::trace!("Dropping engine manager");
-        //self.thread.abort();
+        self.drop_signal.cancel();
+        if let Some(t) = self.thread.take() {
+            t.join().unwrap();
+        }
     }
 }

@@ -8,6 +8,5 @@ pub mod physical_resource;
 pub mod prelude;
 pub mod present_system;
 pub mod server;
-pub mod system;
 pub mod systems;
 pub mod util;
