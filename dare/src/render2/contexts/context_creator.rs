@@ -116,6 +116,45 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
             },
         })?;
 
+    // Retrieve transfer queues
+    let all_queues = physical_device
+            .get_active_queues()
+            .iter()
+            .map(|queue_info| unsafe {
+                device.get_queue(
+                    &vk::DeviceQueueInfo2 {
+                        s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                        p_next: ptr::null(),
+                        flags: vk::DeviceQueueCreateFlags::empty(),
+                        queue_family_index: queue_info.family_index,
+                        queue_index: queue_info.index,
+                        _marker: Default::default(),
+                    },
+                    queue_info.queue_flags,
+                    queue_info.strict,
+                    queue_info.can_present,
+                )
+            })
+            .collect::<Vec<dagal::device::Queue>>();
+    let (graphics_queue, present_queue) = {
+        let mut graphics_queue = None;
+        let mut present_queue = None;
+
+        for queue in all_queues {
+            if graphics_queue.is_none() && queue.get_queue_flags().contains(vk::QueueFlags::GRAPHICS) {
+                graphics_queue = Some(queue);
+                continue;
+            }
+            if present_queue.is_none() && queue.can_present() {
+                present_queue = Some(queue);
+            }
+            if graphics_queue.is_some() && present_queue.is_some() {
+                break;
+            }
+        }
+        (graphics_queue.unwrap(), present_queue.unwrap())
+    };
+
     let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from({
         physical_device
             .get_active_queues()
@@ -137,19 +176,6 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
             })
             .collect::<Vec<dagal::device::Queue>>()
     });
-
-    // Get queues
-    let mut graphics_queue = queue_allocator.retrieve_queues(None, vk::QueueFlags::GRAPHICS, 2)?;
-    let queues = graphics_queue
-        .iter()
-        .map(|queue| (queue.get_index(), queue.get_family_index()))
-        .collect::<Vec<(u32, u32)>>();
-    let transfer_queues = queue_allocator.retrieve_queues(
-        None,
-        vk::QueueFlags::TRANSFER,
-        queue_allocator.matching_queues(&queues, vk::QueueFlags::TRANSFER),
-    )?;
-    let present_queue = graphics_queue.pop().unwrap();
 
     // Create window context first (needs to borrow instance and physical_device)
     let window_context = WindowContext::new(crate::render2::contexts::WindowContextCreateInfo {
@@ -179,7 +205,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
     );
 
     let immediate_submit =
-        dare::render::util::ImmediateSubmit::new(device.clone(), queue_allocator)?;
+        dare::render::util::ImmediateSubmit::new(device.clone(), queue_allocator.clone())?;
 
     // 256kb transfers
     let transfer_pool = {
@@ -187,7 +213,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
             device.clone(),
             vk::DeviceSize::from(256_000_u64),
             vk::DeviceSize::from(2_256_000_u64),
-            transfer_queues,
+            queue_allocator.retrieve_queues(None, vk::QueueFlags::TRANSFER, None)?,
         )?
     };
 

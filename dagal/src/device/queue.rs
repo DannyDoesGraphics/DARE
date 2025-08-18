@@ -4,7 +4,8 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::prelude as dagal;
+use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
+use crate::traits::AsRaw;
 #[allow(unused_imports)]
 use crate::DagalError;
 #[allow(unused_imports)]
@@ -135,5 +136,55 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> Queue<M> {
 
     pub fn acquire_queue_blocking(&self) -> M::Lock<'_> {
         self.handle.blocking_lock().unwrap()
+    }
+}
+
+/// Extension trait for queue guards that provides async command buffer submission
+pub trait QueueGuardExt<T: ?Sized> {
+    /// Submit a command buffer with an already acquired queue guard and wait for fence completion
+    fn try_submit_async<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: &'a mut crate::sync::Fence,
+    ) -> impl std::future::Future<Output = Result<crate::command::CommandBuffer, crate::command::CommandBufferInvalid>>;
+}
+
+impl<G> QueueGuardExt<vk::Queue> for G
+where
+    G: crate::concurrency::Guard<vk::Queue>,
+{
+    fn try_submit_async<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: &'a mut crate::sync::Fence,
+    ) -> impl std::future::Future<Output = Result<crate::command::CommandBuffer, crate::command::CommandBufferInvalid>> {
+        let device = command_buffer.get_device();
+        let device_clone = device.clone();
+        let handle = unsafe { *command_buffer.as_raw() };
+        async move {
+            unsafe {
+                device
+                    .get_handle()
+                    .queue_submit2(**self, submit_infos, *fence.as_raw())
+            }
+            .map_err(|e| crate::command::CommandBufferInvalid::new(
+                handle,
+                device_clone.clone(),
+                crate::DagalError::VkError(e),
+            ))?;
+
+            fence
+                .fence_await()
+                .await
+                .map_err(|e| crate::command::CommandBufferInvalid::new(
+                    handle,
+                    device_clone.clone(),
+                    e,
+                ))?;
+
+            Ok(crate::command::CommandBuffer::new(handle, device_clone))
+        }
     }
 }

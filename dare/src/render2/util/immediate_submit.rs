@@ -38,7 +38,7 @@ impl ImmediateSubmit {
         let queue: dagal::device::Queue<tokio::sync::Mutex<vk::Queue>> = self
             .inner
             .queues
-            .retrieve_queues(None, vk::QueueFlags::TRANSFER, 1)?
+            .retrieve_queues(None, vk::QueueFlags::TRANSFER, Some(1))?
             .pop()
             .unwrap();
         let queue_guard: tokio::sync::MutexGuard<vk::Queue> = queue.acquire_queue_async().await?;

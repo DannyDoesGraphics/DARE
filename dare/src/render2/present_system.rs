@@ -3,9 +3,10 @@ use crate::prelude::render;
 use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use dagal::allocators::GPUAllocatorImpl;
+use dagal::{allocators::GPUAllocatorImpl, command::command_buffer};
 use dagal::ash::vk;
 use dagal::command::CommandBufferState;
+use dagal::device::queue::QueueGuardExt;
 use dagal::traits::AsRaw;
 use std::ptr;
 
@@ -67,6 +68,7 @@ pub fn present_system_begin(
         // wait for frame to finish rendering before rendering again
         frame.render_fence.fence_await().await.unwrap();
         frame.render_fence.reset().unwrap();
+        frame.command_buffer.reset(None);
         // drop all resource handles
         frame.resources.clear();
         // drop all staging buffers
@@ -241,40 +243,48 @@ pub async fn present_system_end(
             )
         };
         {
-            frame
-                .command_buffer
-                .submit(
-                    *present_queue.acquire_queue_async().await.unwrap(),
-                    &[submit_info],
-                    unsafe { *frame.render_fence.as_raw() },
-                )
-                .unwrap();
-            let present_info = vk::PresentInfoKHR {
-                s_type: vk::StructureType::PRESENT_INFO_KHR,
-                p_next: ptr::null(),
-                wait_semaphore_count: 1,
-                p_wait_semaphores: unsafe { frame.render_semaphore.as_raw() },
-                swapchain_count: 1,
-                p_swapchains: unsafe { surface_context.swapchain.as_raw() },
-                p_image_indices: &swapchain_image_index,
-                p_results: ptr::null_mut(),
-                _marker: Default::default(),
-            };
-            unsafe {
-                match surface_context.swapchain.get_ext().queue_present(
-                    *present_queue.acquire_queue_async().await.unwrap(),
-                    &present_info,
-                ) {
-                    Ok(_) => {}
-                    Err(error) => match error {
-                        vk::Result::ERROR_OUT_OF_DATE_KHR => {
-                            println!("Old swapchain found");
-                            return;
+            match &mut frame.command_buffer {
+                CommandBufferState::Executable(command_buffer) => {
+                    let mut present_guard = present_queue.acquire_queue_async().await.unwrap();
+                    present_guard
+                        .try_submit_async(
+                            command_buffer,
+                            &[submit_info],
+                            &mut frame.render_fence,
+                        )
+                        .await
+                        .unwrap();
+
+
+                    let present_info = vk::PresentInfoKHR {
+                        s_type: vk::StructureType::PRESENT_INFO_KHR,
+                        p_next: ptr::null(),
+                        wait_semaphore_count: 1,
+                        p_wait_semaphores: unsafe { frame.render_semaphore.as_raw() },
+                        swapchain_count: 1,
+                        p_swapchains: unsafe { surface_context.swapchain.as_raw() },
+                        p_image_indices: &swapchain_image_index,
+                        p_results: ptr::null_mut(),
+                        _marker: Default::default(),
+                    };
+                    unsafe {
+                        match surface_context.swapchain.get_ext().queue_present(
+                            *present_queue.acquire_queue_async().await.unwrap(),
+                            &present_info,
+                        ) {
+                            Ok(_) => {}
+                            Err(error) => match error {
+                                vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                                    println!("Old swapchain found");
+                                    return;
+                                }
+                                e => panic!("Error in queue present {:?}", e),
+                            },
                         }
-                        e => panic!("Error in queue present {:?}", e),
-                    },
-                }
-            }
+                    }
+                },
+                _ => unimplemented!()
+            };
         }
     }
     // progress to next frame + update physical storage
