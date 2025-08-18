@@ -336,7 +336,7 @@ impl<A: Allocator + 'static> TransferPool<A> {
         let fence: &tokio::sync::RwLock<dagal::sync::Fence> = &processor.fences[index];
         // wait for fence to be cleared
         let mut fence_guard = fence.write().await;
-        fence_guard.fence_await().await?;
+        let _ = fence_guard.wait(u64::MAX);
         fence_guard.reset()?;
         let res = {
             let command_buffer = processor.command_pools[index]
@@ -511,9 +511,8 @@ impl<A: Allocator + 'static> TransferPool<A> {
                     }],
                     &mut fence_guard)
                     .await
-                    .map_err(|invalid| {
-                        tracing::error!("Failed to submit transfer command: {:?}", invalid.error());
-                        anyhow::anyhow!("Transfer submission failed: {}", invalid.error())
+                    .inspect_err(|invalid| {
+                        tracing::error!("Failed to submit transfer command: {invalid}");
                     })?;
             }
             drop(queue_guard);

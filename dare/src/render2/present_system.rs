@@ -247,12 +247,11 @@ pub async fn present_system_end(
                 CommandBufferState::Executable(command_buffer) => {
                     let mut present_guard = present_queue.acquire_queue_async().await.unwrap();
                     present_guard
-                        .try_submit_async(
+                        .try_submit_no_wait(
                             command_buffer,
                             &[submit_info],
-                            &mut frame.render_fence,
+                            Some(&mut frame.render_fence),
                         )
-                        .await
                         .unwrap();
 
 
@@ -269,7 +268,7 @@ pub async fn present_system_end(
                     };
                     unsafe {
                         match surface_context.swapchain.get_ext().queue_present(
-                            *present_queue.acquire_queue_async().await.unwrap(),
+                            *present_guard,
                             &present_info,
                         ) {
                             Ok(_) => {}

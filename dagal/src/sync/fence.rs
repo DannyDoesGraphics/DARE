@@ -10,6 +10,7 @@ use std::{
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
+use futures_util::task::AtomicWaker;
 
 use crate::traits::{AsRaw, Destructible};
 
@@ -18,10 +19,6 @@ use crate::traits::{AsRaw, Destructible};
 pub struct Fence {
     handle: vk::Fence,
     device: crate::device::LogicalDevice,
-    #[derivative(PartialEq = "ignore")]
-    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
-    #[derivative(PartialEq = "ignore")]
-    waiters: Arc<Mutex<Vec<Waker>>>,
 }
 impl Unpin for Fence {}
 impl Fence {
@@ -44,8 +41,6 @@ impl Fence {
         Ok(Self {
             handle,
             device,
-            waiters: Arc::new(Mutex::new(Vec::new())),
-            thread: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -99,7 +94,7 @@ impl Fence {
 
     /// Get a struct which can await on a fence
     pub fn fence_await(&self) -> FenceWait {
-        FenceWait { fence: self }
+        FenceWait { fence: self, waiters: Arc::new(AtomicWaker::new()), thread: Arc::new(Mutex::new(None)) }
     }
 }
 
@@ -137,49 +132,34 @@ impl Drop for Fence {
     }
 }
 
-#[derive(Debug, Default)]
-struct ThreadFence {
-    waker: Mutex<Option<Waker>>,
-}
-
 /// Defines a struct which awaits on a fence
 pub struct FenceWait<'a> {
     pub fence: &'a Fence,
+    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    waiters: Arc<AtomicWaker>,
 }
-impl Future for FenceWait<'_> {
+impl<'a> Future for FenceWait<'a> {
     type Output = Result<(), crate::DagalError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Fast path: already signaled?
         match self.fence.get_fence_status() {
-            Ok(true) => return Poll::Ready(Ok(())),
+            Ok(true) => {
+                return Poll::Ready(Ok(()))
+            }
             Ok(false) => {}
             Err(e) => return Poll::Ready(Err(e)),
         }
 
-        {
-            let mut v = match self.fence.waiters.lock() {
-                Ok(g) => g,
-                Err(p) => {
-                    let m = p.into_inner();
-                    self.fence.waiters.clear_poison();
-                    m
-                }
-            };
-            if let Some(i) = v.iter().position(|old| old.will_wake(cx.waker())) {
-                v[i] = cx.waker().clone();
-            } else {
-                v.push(cx.waker().clone());
-            }
-        }
+        self.waiters.register(cx.waker());
 
         // Opportunistically reclaim finished waiter so we can spawn a new cycle immediately
         {
-            let mut th = match self.fence.thread.lock() {
+            let mut th = match self.thread.lock() {
                 Ok(t) => t,
                 Err(p) => {
                     let t = p.into_inner();
-                    self.fence.thread.clear_poison();
+                    self.thread.clear_poison();
                     t
                 }
             };
@@ -196,8 +176,8 @@ impl Future for FenceWait<'_> {
             if th.is_none() {
                 let device = self.fence.device.clone();
                 let raw_fence = self.fence.handle;
-                let waiters = self.fence.waiters.clone();
-                let thread_slot = self.fence.thread.clone();
+                let waiters = self.waiters.clone();
+                let thread_slot: Arc<Mutex<Option<std::thread::JoinHandle<()>>>> = self.thread.clone();
 
                 let j = std::thread::spawn(move || {
                     let _ = unsafe {
@@ -205,16 +185,7 @@ impl Future for FenceWait<'_> {
                             .get_handle()
                             .wait_for_fences(&[raw_fence], true, u64::MAX)
                     };
-                    if let Ok(mut v) = waiters.lock() {
-                        for w in v.drain(..) {
-                            w.wake_by_ref();
-                        }
-                    } else {
-                        waiters.clear_poison();
-                        for w in waiters.lock().unwrap().drain(..) {
-                            w.wake_by_ref();
-                        }
-                    }
+                    waiters.wake();
                     if let Ok(mut s) = thread_slot.lock() {
                         *s = None;
                     } else {
