@@ -117,11 +117,6 @@ impl RenderServer {
                                 is_rendering = false;
                             }
                             render::RenderServerRequest::Stop => {
-                                let mut shutdown_schedule = Schedule::default();
-                                shutdown_schedule.add_systems(
-                                    render::systems::shutdown_system::render_server_shutdown_system,
-                                );
-                                shutdown_schedule.run(&mut world);
                                 return; // Exit the loop and function
                             }
                             render::RenderServerRequest::SurfaceUpdate {
@@ -162,6 +157,7 @@ impl RenderServer {
                             }
                         };
                         packet.callback.map(|v| v.send(()));
+                        tokio::task::yield_now().await; // Yield to allow other tasks to run
                     }
 
                     // If we're in rendering mode, run a frame
@@ -169,23 +165,22 @@ impl RenderServer {
                         schedule.run(&mut world);
                     }
 
-                    // Small yield to prevent blocking the async runtime completely
-                    tokio::task::yield_now().await;
                 }
                 tracing::trace!("Stopping render manager");
                 // Manually extract contexts in dependency order to ensure proper Vulkan cleanup
                 // Graphics and Transfer contexts depend on Device, so drop them first
-                let graphics_context = world.remove_resource::<super::contexts::GraphicsContext>();
-                let transfer_context = world.remove_resource::<super::contexts::TransferContext>();
-                let window_context = world.remove_resource::<super::contexts::WindowContext>();
+                let graphics_context = world.remove_resource::<super::contexts::GraphicsContext>().unwrap();
+                let transfer_context = world.remove_resource::<super::contexts::TransferContext>().unwrap();
+                let window_context = world.remove_resource::<super::contexts::WindowContext>().unwrap();
                 // Device context contains the core Vulkan objects and should be dropped last
-                let device_context = world.remove_resource::<super::contexts::DeviceContext>();
+                let device_context = world.remove_resource::<super::contexts::DeviceContext>().unwrap();
                 // Now drop the world with remaining resources
                 drop(world);
                 drop(transfer_context);
                 drop(graphics_context);
                 drop(window_context);
                 drop(device_context);
+                panic!("holy shit");
                 // Contexts will drop in reverse order of declaration (device_context last)
                 tracing::trace!("RENDER SERVER STOPPED");
             })
