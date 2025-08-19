@@ -3,7 +3,7 @@ use crate::prelude::render;
 use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use dagal::{allocators::GPUAllocatorImpl, command::command_buffer};
+use dagal::{allocators::GPUAllocatorImpl, ash::khr::surface, command::command_buffer::{self, CmdBuffer}};
 use dagal::ash::vk;
 use dagal::command::CommandBufferState;
 use dagal::device::queue::QueueGuardExt;
@@ -48,27 +48,25 @@ pub fn present_system_begin(
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
     rt.clone().runtime.block_on(async {
-        // Batch update all physical resource storages for better performance
         let frame_number = frame_counter.get();
-        let submission_span = tracy_client::span!("frame_submission");
-        submission_span.emit_value(frame_number as u64);
-        let update_span = tracy_client::span!("physical_resources_update");
-        textures.update();
-        samplers.update();
-        buffers.update();
-        update_span.emit_text("Physical resources updated");
-        drop(update_span);
-
         let present_queue = window_context.present_queue.clone();
         let surface_context = match window_context.surface_context.as_mut() {
             Some(surface) => surface,
-            None => return,
+            None => {
+                return;
+            }
         };
         #[cfg(feature = "tracing")]
         tracing::trace!("Starting frame {frame_number}");
         let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
-        // wait until semaphore is ready
-        // wait for frame to finish rendering before rendering again
+        let frame_submission_span = tracy_client::span!("frame_submission_cpu");
+        frame_submission_span.emit_value(frame_number as u64 % surface_context.frames_in_flight as u64);
+        // update physical resources
+        textures.update();
+        samplers.update();
+        buffers.update();
+
+        // handle sync
         frame.render_fence.fence_await().await.unwrap();
         frame.render_fence.reset().unwrap();
         frame.command_buffer.reset(None).unwrap();
@@ -168,18 +166,11 @@ pub fn present_system_begin(
             }
             Err(e) => {
                 tracing::error!("Failed to acquire next swapchain image due to: {e}");
-                // early return
-                // TODO: Implement new_swapchain_requested with separate contexts
-                // render_context
-                //     .inner
-                //     .new_swapchain_requested
-                //     .store(true, Ordering::Release);
-                tracing::warn!("Swapchain recreation not yet implemented with separate contexts");
+                drop(frame_submission_span);
                 return;
             }
         };
-        drop(submission_span);
-        // progress to next frame
+        drop(frame_submission_span);
         frame_counter.increment();
     });
 }
@@ -280,7 +271,7 @@ pub async fn present_system_end(
                                     println!("Old swapchain found");
                                     return;
                                 }
-                                e => panic!("Error in queue present {:?}", e),
+                                e => panic!("Error in queue present {e}"),
                             },
                         }
                     }

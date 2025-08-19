@@ -101,7 +101,7 @@ pub fn update_frame_buffer(
                 .frames
                 .iter_mut()
                 .filter_map(|frame| {
-                    // dont use this frame if it is currently rendering
+                    // don't use this frame if it is currently rendering
                     if let Ok(fence_status) = frame.render_fence.get_fence_status() {
                         if !fence_status {
                             return None;
