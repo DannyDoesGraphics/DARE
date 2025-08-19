@@ -1,15 +1,15 @@
 pub use bevy_ecs::prelude as becs;
 
 #[derive(Clone, becs::Resource)]
-pub struct FrameCount(pub(crate) usize);
+pub struct FrameCounter(pub(crate) usize);
 
-impl Default for FrameCount {
+impl Default for FrameCounter {
     fn default() -> Self {
         Self(0)
     }
 }
 
-impl FrameCount {
+impl FrameCounter {
     pub fn get(&self) -> usize {
         self.0
     }

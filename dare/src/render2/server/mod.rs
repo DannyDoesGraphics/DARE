@@ -67,7 +67,7 @@ impl RenderServer {
                 world.insert_resource(graphics_context);
                 world.insert_resource(transfer_context);
                 world.insert_resource(window_context);
-                world.insert_resource(super::frame_number::FrameCount::default());
+                world.insert_resource(super::frame_number::FrameCounter::default());
                 world.insert_resource(rt);
                 world.insert_resource(asset_server.clone());
                 world.insert_resource(render::components::camera::Camera::default());

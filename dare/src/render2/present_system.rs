@@ -12,7 +12,7 @@ use std::ptr;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
-    mut frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
+    mut frame_counter: becs::ResMut<'_, super::frame_number::FrameCounter>,
     device_context: becs::Res<'_, crate::render2::contexts::DeviceContext>,
     graphics_context: becs::Res<'_, crate::render2::contexts::GraphicsContext>,
     transfer_context: becs::Res<'_, crate::render2::contexts::TransferContext>,
@@ -49,18 +49,21 @@ pub fn present_system_begin(
 ) {
     rt.clone().runtime.block_on(async {
         // Batch update all physical resource storages for better performance
+        let frame_number = frame_counter.get();
+        let submission_span = tracy_client::span!("frame_submission");
+        submission_span.emit_value(frame_number as u64);
         let update_span = tracy_client::span!("physical_resources_update");
         textures.update();
         samplers.update();
         buffers.update();
         update_span.emit_text("Physical resources updated");
+        drop(update_span);
 
         let present_queue = window_context.present_queue.clone();
         let surface_context = match window_context.surface_context.as_mut() {
             Some(surface) => surface,
             None => return,
         };
-        let frame_number = frame_count.get();
         #[cfg(feature = "tracing")]
         tracing::trace!("Starting frame {frame_number}");
         let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
@@ -68,7 +71,7 @@ pub fn present_system_begin(
         // wait for frame to finish rendering before rendering again
         frame.render_fence.fence_await().await.unwrap();
         frame.render_fence.reset().unwrap();
-        frame.command_buffer.reset(None);
+        frame.command_buffer.reset(None).unwrap();
         // drop all resource handles
         frame.resources.clear();
         // drop all staging buffers
@@ -175,14 +178,14 @@ pub fn present_system_begin(
                 return;
             }
         };
-
+        drop(submission_span);
         // progress to next frame
-        frame_count.increment();
+        frame_counter.increment();
     });
 }
 
 pub async fn present_system_end(
-    frame_count: usize,
+    frame_number: usize,
     present_queue: &dagal::device::Queue,
     surface_context: &mut crate::render2::contexts::SurfaceContext,
     swapchain_image_index: u32,
@@ -195,7 +198,7 @@ pub async fn present_system_end(
 ) {
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
-    let frame = &mut surface_context.frames[frame_count % surface_context.frames_in_flight];
+    let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
     let swapchain_image = &mut surface_context.swapchain_images[swapchain_image_index as usize];
     {
         let cmd_recording = match &frame.command_buffer {
