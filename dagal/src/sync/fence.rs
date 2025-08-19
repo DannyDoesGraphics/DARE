@@ -44,6 +44,10 @@ impl Fence {
         })
     }
 
+    pub fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+
     /// Waits on the current fence
     /// # Example
     /// ```

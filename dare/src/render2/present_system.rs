@@ -265,7 +265,20 @@ pub async fn present_system_end(
                             *present_guard,
                             &present_info,
                         ) {
-                            Ok(_) => {}
+                            Ok(_) => {
+                                unsafe {
+                                    let raw_fence = *frame.render_fence.as_raw();
+                                    let device = frame.render_fence.get_device().clone();
+                                    std::thread::spawn(move || {
+                                        let _ = unsafe {
+                                            device
+                                                .get_handle()
+                                                .wait_for_fences(&[raw_fence], true, u64::MAX)
+                                        };
+                                        tracy_client::frame_mark();
+                                    });
+                                }
+                            }
                             Err(error) => match error {
                                 vk::Result::ERROR_OUT_OF_DATE_KHR => {
                                     println!("Old swapchain found");
