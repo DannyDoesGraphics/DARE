@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, sync::atomic::{AtomicBool, Ordering}};
 use std::ptr;
 use std::task::{Context, Poll};
 use std::{
@@ -22,7 +22,7 @@ pub struct Fence {
 }
 impl Unpin for Fence {}
 impl Fence {
-    pub fn new(device: crate::device::LogicalDevice, flags: vk::FenceCreateFlags) -> Result<Self> {
+    pub fn new(device: crate::device::LogicalDevice, flags: vk::FenceCreateFlags) -> Result<Self, crate::DagalError> {
         let handle = unsafe {
             device.get_handle().create_fence(
                 &vk::FenceCreateInfo {
@@ -58,7 +58,7 @@ impl Fence {
     /// }
     /// drop(fence);
     /// ```
-    pub fn wait(&self, timeout: u64) -> Result<()> {
+    pub fn wait(&self, timeout: u64) -> Result<(), crate::DagalError> {
         unsafe {
             self.device
                 .get_handle()
@@ -82,7 +82,7 @@ impl Fence {
     /// fence.reset().unwrap();
     /// drop(fence);
     /// ```
-    pub fn reset(&mut self) -> Result<()> {
+    pub fn reset(&mut self) -> Result<(), crate::DagalError> {
         unsafe { self.device.get_handle().reset_fences(&[self.handle]) }?;
         Ok(())
     }
@@ -93,8 +93,15 @@ impl Fence {
     }
 
     /// Get a struct which can await on a fence
-    pub fn fence_await(&self) -> FenceWait {
-        FenceWait { fence: self, waiters: Arc::new(AtomicWaker::new()), thread: Arc::new(Mutex::new(None)) }
+    pub fn fence_await<'a>(&'a self) -> FenceWait<'a> {
+        FenceWait {
+            fence: self,
+            spawned: AtomicBool::new(false),
+            state: Arc::new(WaitState {
+                done: AtomicBool::new(false),
+                waker: AtomicWaker::new()
+            })
+        }
     }
 }
 
@@ -132,71 +139,50 @@ impl Drop for Fence {
     }
 }
 
+struct WaitState {
+    done: AtomicBool,
+    waker: AtomicWaker,
+}
+
 /// Defines a struct which awaits on a fence
 pub struct FenceWait<'a> {
     pub fence: &'a Fence,
-    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
-    waiters: Arc<AtomicWaker>,
+    state: Arc<WaitState>,
+    spawned: AtomicBool,
 }
+impl<'a> FenceWait<'a> {
+    fn spawn_once(&self) {
+        if self
+            .spawned
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok() {
+                let device = self.fence.device.clone();
+                let handle = self.fence.handle;
+                let state = self.state.clone();
+                std::thread::spawn(move || {
+                    let _ = unsafe {
+                        device.get_handle().wait_for_fences(&[handle], true, u64::MAX)
+                    };
+                    state.done.store(true, Ordering::SeqCst);
+                    state.waker.wake();
+                });
+            }
+    }
+}
+
 impl<'a> Future for FenceWait<'a> {
     type Output = Result<(), crate::DagalError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Fast path: already signaled?
-        match self.fence.get_fence_status() {
-            Ok(true) => {
-                return Poll::Ready(Ok(()))
-            }
-            Ok(false) => {}
-            Err(e) => return Poll::Ready(Err(e)),
-        }
-
-        self.waiters.register(cx.waker());
-
-        // Opportunistically reclaim finished waiter so we can spawn a new cycle immediately
-        {
-            let mut th = match self.thread.lock() {
-                Ok(t) => t,
-                Err(p) => {
-                    let t = p.into_inner();
-                    self.thread.clear_poison();
-                    t
-                }
-            };
-
-            if let Some(h) = th.as_ref() {
-                if h.is_finished() {
-                    if let Some(h) = th.take() {
-                        let _ = h.join();
-                    }
-                }
-            }
-
-            // Spawn exactly one blocking waiter for this fence
-            if th.is_none() {
-                let device = self.fence.device.clone();
-                let raw_fence = self.fence.handle;
-                let waiters = self.waiters.clone();
-                let thread_slot: Arc<Mutex<Option<std::thread::JoinHandle<()>>>> = self.thread.clone();
-
-                let j = std::thread::spawn(move || {
-                    let _ = unsafe {
-                        device
-                            .get_handle()
-                            .wait_for_fences(&[raw_fence], true, u64::MAX)
-                    };
-                    waiters.wake();
-                    if let Ok(mut s) = thread_slot.lock() {
-                        *s = None;
-                    } else {
-                        thread_slot.clear_poison();
-                        *thread_slot.lock().unwrap() = None;
-                    }
-                });
-                *th = Some(j);
+        if self.state.done.load(Ordering::SeqCst) {
+            match unsafe { self.fence.device.get_handle().get_fence_status(self.fence.handle) } {
+                Ok(true) => return Poll::Ready(Ok(())),
+                Err(e) => return Poll::Ready(Err(crate::DagalError::VkError(e))),
+                _ => {}
             }
         }
-
+        self.state.waker.register(cx.waker());
+        self.spawn_once();
         Poll::Pending
     }
 }
