@@ -51,6 +51,12 @@ pub enum DagalError {
     #[error("GPU Resource Table does has no strong references to the slot")]
     NoStrongReferences,
 
+    #[error("String contains null byte")]
+    StringContainsNull,
+
+    #[error("Allocation error")]
+    AllocationError,
+
     #[error(transparent)]
     VkError(#[from] vk::Result),
 

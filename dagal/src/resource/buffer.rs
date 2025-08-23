@@ -37,6 +37,18 @@ impl<A: Allocator> std::hash::Hash for Buffer<A> {
     }
 }
 
+/// Similar to [`vk::BufferCreateInfo`], but supports hashing + cloning, but restrictive in regards to extensions
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct OwnedBufferCreateInfo {
+    name: Option<String>,
+    location: crate::allocators::MemoryLocation,
+    flags: vk::BufferCreateFlags,
+    size: vk::DeviceSize,
+    usage: vk::BufferUsageFlags,
+    sharing_mode: vk::SharingMode,
+    queue_family_indices: Vec<u32>,
+}
+
 pub enum BufferCreateInfo<'a, A: Allocator> {
     /// Create a buffer with a new empty buffer with the requested size
     NewEmptyBuffer {
@@ -56,6 +68,11 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         allocation: ArcAllocation<A>,
         usage_flags: vk::BufferUsageFlags,
     },
+    FromOwnedCreateInfo{
+        create_info: OwnedBufferCreateInfo,
+        device: crate::device::LogicalDevice,
+        allocator: &'a mut ArcAllocator<A>,
+    }
 }
 
 impl<A: Allocator> Destructible for Buffer<A> {
@@ -145,7 +162,7 @@ impl<A: Allocator> Buffer<A> {
 
 impl<A: Allocator> Resource for Buffer<A> {
     type CreateInfo<'a> = BufferCreateInfo<'a, A>;
-    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self> {
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError> {
         match create_info {
             BufferCreateInfo::NewEmptyBuffer {
                 device,
@@ -223,7 +240,63 @@ impl<A: Allocator> Resource for Buffer<A> {
                 }
 
                 Ok(buffer)
-            }
+            },
+            BufferCreateInfo::FromOwnedCreateInfo { create_info, device, allocator } => {
+                let handle = unsafe {
+                    device.get_handle().create_buffer(
+                        &vk::BufferCreateInfo {
+                            s_type: vk::StructureType::BUFFER_CREATE_INFO,
+                            p_next: ptr::null(),
+                            flags: create_info.flags,
+                            size: create_info.size,
+                            usage: create_info.usage,
+                            sharing_mode: create_info.sharing_mode,
+                            queue_family_index_count: create_info.queue_family_indices.len() as u32,
+                            p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
+                            _marker: Default::default(),
+                        },
+                        None,
+                    )?
+                };
+                let mem_requirements =
+                    unsafe { device.get_handle().get_buffer_memory_requirements(handle) };
+                let allocation = allocator.allocate("buffer", &mem_requirements, create_info.location)?;
+                unsafe {
+                    device.get_handle().bind_buffer_memory(
+                        handle,
+                        allocation.memory()?,
+                        allocation.offset()?,
+                    )?
+                }
+                let mut address = vk::DeviceAddress::default();
+                if create_info.usage & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                    == vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                {
+                    address = unsafe {
+                        device.get_handle().get_buffer_device_address(
+                            &vk::BufferDeviceAddressInfo {
+                                s_type: vk::StructureType::BUFFER_DEVICE_ADDRESS_INFO,
+                                p_next: ptr::null(),
+                                buffer: handle,
+                                _marker: Default::default(),
+                            },
+                        )
+                    };
+                }
+                let mut buffer = Self {
+                    handle,
+                    device: device.clone(),
+                    allocation: Some(allocation),
+                    address,
+                    size: create_info.size,
+                    name: None,
+                };
+                if let (Some(debug_utils), Some(name)) = (device.get_debug_utils(), &create_info.name) {
+                    buffer.set_name(debug_utils, name)?;
+                }
+
+                Ok(buffer)
+            },
             _ => unimplemented!(),
         }
     }
