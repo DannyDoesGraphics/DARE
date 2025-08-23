@@ -1,10 +1,12 @@
-use std::{pin::Pin, sync::atomic::{AtomicBool, Ordering}};
 use std::ptr;
 use std::task::{Context, Poll};
 use std::{
     future::Future,
-    sync::{Arc, Mutex},
-    task::Waker,
+    sync::Arc,
+};
+use std::{
+    pin::Pin,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use anyhow::Result;
@@ -22,7 +24,10 @@ pub struct Fence {
 }
 impl Unpin for Fence {}
 impl Fence {
-    pub fn new(device: crate::device::LogicalDevice, flags: vk::FenceCreateFlags) -> Result<Self, crate::DagalError> {
+    pub fn new(
+        device: crate::device::LogicalDevice,
+        flags: vk::FenceCreateFlags,
+    ) -> Result<Self, crate::DagalError> {
         let handle = unsafe {
             device.get_handle().create_fence(
                 &vk::FenceCreateInfo {
@@ -38,10 +43,7 @@ impl Fence {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkFence {:p}", handle);
 
-        Ok(Self {
-            handle,
-            device,
-        })
+        Ok(Self { handle, device })
     }
 
     pub fn get_device(&self) -> &crate::device::LogicalDevice {
@@ -103,8 +105,8 @@ impl Fence {
             spawned: AtomicBool::new(false),
             state: Arc::new(WaitState {
                 done: AtomicBool::new(false),
-                waker: AtomicWaker::new()
-            })
+                waker: AtomicWaker::new(),
+            }),
         }
     }
 }
@@ -159,18 +161,21 @@ impl<'a> FenceWait<'a> {
         if self
             .spawned
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok() {
-                let device = self.fence.device.clone();
-                let handle = self.fence.handle;
-                let state = self.state.clone();
-                std::thread::spawn(move || {
-                    let _ = unsafe {
-                        device.get_handle().wait_for_fences(&[handle], true, u64::MAX)
-                    };
-                    state.done.store(true, Ordering::SeqCst);
-                    state.waker.wake();
-                });
-            }
+            .is_ok()
+        {
+            let device = self.fence.device.clone();
+            let handle = self.fence.handle;
+            let state = self.state.clone();
+            std::thread::spawn(move || {
+                let _ = unsafe {
+                    device
+                        .get_handle()
+                        .wait_for_fences(&[handle], true, u64::MAX)
+                };
+                state.done.store(true, Ordering::SeqCst);
+                state.waker.wake();
+            });
+        }
     }
 }
 
@@ -179,7 +184,12 @@ impl<'a> Future for FenceWait<'a> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.state.done.load(Ordering::SeqCst) {
-            match unsafe { self.fence.device.get_handle().get_fence_status(self.fence.handle) } {
+            match unsafe {
+                self.fence
+                    .device
+                    .get_handle()
+                    .get_fence_status(self.fence.handle)
+            } {
                 Ok(true) => return Poll::Ready(Ok(())),
                 Err(e) => return Poll::Ready(Err(crate::DagalError::VkError(e))),
                 _ => {}

@@ -118,30 +118,32 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
 
     // Retrieve transfer queues
     let all_queues = physical_device
-            .get_active_queues()
-            .iter()
-            .map(|queue_info| unsafe {
-                device.get_queue(
-                    &vk::DeviceQueueInfo2 {
-                        s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-                        p_next: ptr::null(),
-                        flags: vk::DeviceQueueCreateFlags::empty(),
-                        queue_family_index: queue_info.family_index,
-                        queue_index: queue_info.index,
-                        _marker: Default::default(),
-                    },
-                    queue_info.queue_flags,
-                    queue_info.strict,
-                    queue_info.can_present,
-                )
-            })
-            .collect::<Vec<dagal::device::Queue>>();
+        .get_active_queues()
+        .iter()
+        .map(|queue_info| unsafe {
+            device.get_queue(
+                &vk::DeviceQueueInfo2 {
+                    s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                    p_next: ptr::null(),
+                    flags: vk::DeviceQueueCreateFlags::empty(),
+                    queue_family_index: queue_info.family_index,
+                    queue_index: queue_info.index,
+                    _marker: Default::default(),
+                },
+                queue_info.queue_flags,
+                queue_info.strict,
+                queue_info.can_present,
+            )
+        })
+        .collect::<Vec<dagal::device::Queue>>();
     let (graphics_queue, present_queue) = {
         let mut graphics_queue = None;
         let mut present_queue = None;
 
         for queue in all_queues {
-            if graphics_queue.is_none() && queue.get_queue_flags().contains(vk::QueueFlags::GRAPHICS) {
+            if graphics_queue.is_none()
+                && queue.get_queue_flags().contains(vk::QueueFlags::GRAPHICS)
+            {
                 graphics_queue = Some(queue);
                 continue;
             }

@@ -10,7 +10,6 @@ use anyhow::Result;
 use ash::vk;
 
 use crate::traits::AsRaw;
-use crate::device::queue::QueueGuardExt;
 
 /// Defines a command buffer in the failed state
 #[derive(Debug, Clone)]
@@ -135,7 +134,7 @@ impl CommandBuffer {
             self.device.get_handle().wait_for_fences(
                 fences
                     .iter()
-                    .map(|fence| *fence.as_raw() )
+                    .map(|fence| *fence.as_raw())
                     .collect::<Vec<vk::Fence>>()
                     .as_slice(),
                 true,
@@ -449,9 +448,14 @@ impl CommandBufferState {
     }
 
     /// Resets a command buffer
-    pub fn reset(&mut self, flags: Option<vk::CommandBufferResetFlags>) -> Result<(), crate::DagalError> {
+    pub fn reset(
+        &mut self,
+        flags: Option<vk::CommandBufferResetFlags>,
+    ) -> Result<(), crate::DagalError> {
         match self {
-            CommandBufferState::Recording(_) => Err(crate::DagalError::VkError(vk::Result::ERROR_DEVICE_LOST)),
+            CommandBufferState::Recording(_) => {
+                Err(crate::DagalError::VkError(vk::Result::ERROR_DEVICE_LOST))
+            }
             CommandBufferState::Ready(cmd) => {
                 cmd.reset(flags.unwrap_or(vk::CommandBufferResetFlags::empty()))
                     .map_err(|_| crate::DagalError::VkError(vk::Result::ERROR_DEVICE_LOST))?;
@@ -463,8 +467,9 @@ impl CommandBufferState {
                     handle: unsafe { *cmd.as_raw() },
                     device: cmd.get_device().clone(),
                 };
-                cmd_buf.reset(flags.unwrap_or(vk::CommandBufferResetFlags::empty()))
-                    .map_err(|e| crate::DagalError::VkError(e))?;
+                cmd_buf
+                    .reset(flags.unwrap_or(vk::CommandBufferResetFlags::empty()))
+                    .map_err(crate::DagalError::VkError)?;
                 *self = CommandBufferState::Ready(cmd_buf);
                 Ok(())
             }
@@ -475,7 +480,7 @@ impl CommandBufferState {
                         *self = CommandBufferState::Ready(cmd_buf);
                         Ok(())
                     }
-                    Err(vk_error) => Err(crate::DagalError::VkError(vk_error))
+                    Err(vk_error) => Err(crate::DagalError::VkError(vk_error)),
                 }
             }
         }

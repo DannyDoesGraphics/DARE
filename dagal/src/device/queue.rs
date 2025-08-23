@@ -4,10 +4,10 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
 use crate::traits::AsRaw;
 #[allow(unused_imports)]
 use crate::DagalError;
+use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
 #[allow(unused_imports)]
 use anyhow::Result;
 use ash::vk::{self};
@@ -170,15 +170,14 @@ where
     ) -> impl std::future::Future<Output = Result<(), crate::DagalError>> {
         async move {
             unsafe {
-                command_buffer
-                    .get_device()
-                    .get_handle()
-                    .queue_submit2(**self, submit_infos, *fence.as_raw())
+                command_buffer.get_device().get_handle().queue_submit2(
+                    **self,
+                    submit_infos,
+                    *fence.as_raw(),
+                )
             }?;
 
-            fence
-                .fence_await()
-                .await?;
+            fence.fence_await().await?;
 
             Ok(())
         }
@@ -189,16 +188,17 @@ where
         &mut self,
         command_buffer: &mut crate::command::CommandBufferExecutable,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
-        fence: Option<&'a mut crate::sync::Fence>
+        fence: Option<&'a mut crate::sync::Fence>,
     ) -> Result<(), crate::DagalError> {
         unsafe {
-            command_buffer
-                .get_device()
-                .get_handle()
-                .queue_submit2(**self, submit_infos, match fence {
+            command_buffer.get_device().get_handle().queue_submit2(
+                **self,
+                submit_infos,
+                match fence {
                     Some(fence) => *fence.as_raw(),
                     None => vk::Fence::null(),
-            })
+                },
+            )
         }?;
         // Do not wait for the fence here
         Ok(())

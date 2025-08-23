@@ -3,11 +3,15 @@ use crate::prelude::render;
 use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use dagal::{allocators::GPUAllocatorImpl, ash::khr::surface, command::command_buffer::{self, CmdBuffer}};
 use dagal::ash::vk;
 use dagal::command::CommandBufferState;
 use dagal::device::queue::QueueGuardExt;
 use dagal::traits::AsRaw;
+use dagal::{
+    allocators::GPUAllocatorImpl,
+    ash::khr::surface,
+    command::command_buffer::{self, CmdBuffer},
+};
 use std::ptr;
 
 /// Grabs the final present image and draws it
@@ -60,7 +64,8 @@ pub fn present_system_begin(
         tracing::trace!("Starting frame {frame_number}");
         let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
         let frame_submission_span = tracy_client::span!("frame_submission_cpu");
-        frame_submission_span.emit_value(frame_number as u64 % surface_context.frames_in_flight as u64);
+        frame_submission_span
+            .emit_value(frame_number as u64 % surface_context.frames_in_flight as u64);
         // update physical resources
         textures.update();
         samplers.update();
@@ -248,7 +253,6 @@ pub async fn present_system_end(
                         )
                         .unwrap();
 
-
                     let present_info = vk::PresentInfoKHR {
                         s_type: vk::StructureType::PRESENT_INFO_KHR,
                         p_next: ptr::null(),
@@ -261,24 +265,25 @@ pub async fn present_system_end(
                         _marker: Default::default(),
                     };
                     unsafe {
-                        match surface_context.swapchain.get_ext().queue_present(
-                            *present_guard,
-                            &present_info,
-                        ) {
-                            Ok(_) => {
-                                unsafe {
-                                    let raw_fence = *frame.render_fence.as_raw();
-                                    let device = frame.render_fence.get_device().clone();
-                                    std::thread::spawn(move || {
-                                        let _ = unsafe {
-                                            device
-                                                .get_handle()
-                                                .wait_for_fences(&[raw_fence], true, u64::MAX)
-                                        };
-                                        tracy_client::frame_mark();
-                                    });
-                                }
-                            }
+                        match surface_context
+                            .swapchain
+                            .get_ext()
+                            .queue_present(*present_guard, &present_info)
+                        {
+                            Ok(_) => unsafe {
+                                let raw_fence = *frame.render_fence.as_raw();
+                                let device = frame.render_fence.get_device().clone();
+                                std::thread::spawn(move || {
+                                    let _ = unsafe {
+                                        device.get_handle().wait_for_fences(
+                                            &[raw_fence],
+                                            true,
+                                            u64::MAX,
+                                        )
+                                    };
+                                    tracy_client::frame_mark();
+                                });
+                            },
                             Err(error) => match error {
                                 vk::Result::ERROR_OUT_OF_DATE_KHR => {
                                     println!("Old swapchain found");
@@ -288,8 +293,8 @@ pub async fn present_system_end(
                             },
                         }
                     }
-                },
-                _ => unimplemented!()
+                }
+                _ => unimplemented!(),
             };
         }
     }

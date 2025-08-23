@@ -8,7 +8,6 @@ use std::ptr::NonNull;
 use std::{mem, ptr};
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
-use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 

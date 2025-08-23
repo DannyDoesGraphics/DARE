@@ -164,16 +164,23 @@ impl RenderServer {
                     if is_rendering {
                         schedule.run(&mut world);
                     }
-
                 }
                 tracing::trace!("Stopping render manager");
                 // Manually extract contexts in dependency order to ensure proper Vulkan cleanup
                 // Graphics and Transfer contexts depend on Device, so drop them first
-                let graphics_context = world.remove_resource::<super::contexts::GraphicsContext>().unwrap();
-                let transfer_context = world.remove_resource::<super::contexts::TransferContext>().unwrap();
-                let window_context = world.remove_resource::<super::contexts::WindowContext>().unwrap();
+                let graphics_context = world
+                    .remove_resource::<super::contexts::GraphicsContext>()
+                    .unwrap();
+                let transfer_context = world
+                    .remove_resource::<super::contexts::TransferContext>()
+                    .unwrap();
+                let window_context = world
+                    .remove_resource::<super::contexts::WindowContext>()
+                    .unwrap();
                 // Device context contains the core Vulkan objects and should be dropped last
-                let device_context = world.remove_resource::<super::contexts::DeviceContext>().unwrap();
+                let device_context = world
+                    .remove_resource::<super::contexts::DeviceContext>()
+                    .unwrap();
                 // Now drop the world with remaining resources
                 drop(world);
                 drop(transfer_context);

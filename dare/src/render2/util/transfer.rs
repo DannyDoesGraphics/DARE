@@ -1,10 +1,13 @@
 use anyhow::Result;
-use dagal::{allocators::{Allocator, GPUAllocatorImpl}, device::queue::QueueGuardExt};
 use dagal::ash::vk;
 use dagal::ash::vk::Queue;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource;
 use dagal::traits::AsRaw;
+use dagal::{
+    allocators::{Allocator, GPUAllocatorImpl},
+    device::queue::QueueGuardExt,
+};
 use futures::stream::FuturesUnordered;
 use std::ptr;
 use std::sync::Arc;
@@ -495,21 +498,23 @@ impl<A: Allocator + 'static> TransferPool<A> {
                 let cmd_buffer_info = command_buffer.submit_info();
 
                 // Use the new try_submit_async method with the queue guard
-                queue_guard.try_submit_async(
-                    &mut command_buffer,
-                    &[vk::SubmitInfo2 {
-                        s_type: vk::StructureType::SUBMIT_INFO_2,
-                        p_next: ptr::null(),
-                        flags: vk::SubmitFlags::empty(),
-                        wait_semaphore_info_count: 0,
-                        p_wait_semaphore_infos: ptr::null(),
-                        command_buffer_info_count: 1,
-                        p_command_buffer_infos: &cmd_buffer_info,
-                        signal_semaphore_info_count: 0,
-                        p_signal_semaphore_infos: ptr::null(),
-                        _marker: Default::default(),
-                    }],
-                    &mut fence_guard)
+                queue_guard
+                    .try_submit_async(
+                        &mut command_buffer,
+                        &[vk::SubmitInfo2 {
+                            s_type: vk::StructureType::SUBMIT_INFO_2,
+                            p_next: ptr::null(),
+                            flags: vk::SubmitFlags::empty(),
+                            wait_semaphore_info_count: 0,
+                            p_wait_semaphore_infos: ptr::null(),
+                            command_buffer_info_count: 1,
+                            p_command_buffer_infos: &cmd_buffer_info,
+                            signal_semaphore_info_count: 0,
+                            p_signal_semaphore_infos: ptr::null(),
+                            _marker: Default::default(),
+                        }],
+                        &mut fence_guard,
+                    )
                     .await
                     .inspect_err(|invalid| {
                         tracing::error!("Failed to submit transfer command: {invalid}");

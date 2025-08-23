@@ -229,17 +229,18 @@ impl PhysicalDevice {
                                 if family_capacity[fam_idx] >= needed {
                                     // Check if this queue family supports presentation to the surface
                                     let can_present = if let Some(surface) = surface {
-                                        surface.get_extension()
+                                        surface
+                                            .get_extension()
                                             .get_physical_device_surface_support(
                                                 pd.physical_device,
                                                 fam_idx as u32,
-                                                surface.handle()
+                                                surface.handle(),
                                             )
                                             .unwrap_or(false)
                                     } else {
                                         false
                                     };
-                                    
+
                                     // Allocate [0..needed) from this family's next offset
                                     let start_offset = family_offsets[fam_idx];
                                     for i in 0..needed {
@@ -293,20 +294,21 @@ impl PhysicalDevice {
                                     continue;
                                 }
                                 let to_take = available.min(remaining);
-                                
+
                                 // Check if this queue family supports presentation to the surface
                                 let can_present = if let Some(surface) = surface {
-                                    surface.get_extension()
+                                    surface
+                                        .get_extension()
                                         .get_physical_device_surface_support(
                                             pd.physical_device,
                                             fam_idx as u32,
-                                            surface.handle()
+                                            surface.handle(),
                                         )
                                         .unwrap_or(false)
                                 } else {
                                     false
                                 };
-                                
+
                                 // Allocate these `to_take` queues
                                 let start_offset = family_offsets[fam_idx];
                                 for i in 0..to_take {
