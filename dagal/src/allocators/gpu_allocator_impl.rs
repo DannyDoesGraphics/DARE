@@ -94,7 +94,7 @@ impl Allocator for GPUAllocatorImpl {
     }
 
     fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
-        self.free_impl(allocation).map_err(|e| {
+        self.free_impl(allocation).map_err(|_| {
             crate::DagalError::AllocationError
         })
     }

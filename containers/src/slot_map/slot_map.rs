@@ -225,6 +225,7 @@ mod tests {
             slots.push(slot);
         }
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..num_elements {
             assert_eq!(slot_map.get(slots[i].clone()), Some(&i));
         }
