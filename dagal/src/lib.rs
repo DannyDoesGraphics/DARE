@@ -17,7 +17,6 @@ pub mod pipelines;
 pub mod render_graph;
 pub mod shader;
 pub mod traits;
-pub mod virtual_resource;
 
 pub use error::DagalError;
 
