@@ -323,7 +323,7 @@ impl<A: Allocator> AsRaw for Buffer<A> {
 
 impl<A: Allocator> Nameable for Buffer<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::BUFFER;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         self.name = Some(name.to_string());
         Ok(())

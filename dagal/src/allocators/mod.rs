@@ -30,10 +30,10 @@ pub trait Allocator: Debug + Clone + Send + Sync + Unpin + 'static {
         name: &str,
         requirements: &vk::MemoryRequirements,
         ty: MemoryLocation,
-    ) -> Result<Self::Allocation>;
+    ) -> Result<Self::Allocation, crate::DagalError>;
 
     /// Free an allocation
-    fn free(&mut self, allocation: Self::Allocation) -> Result<()>;
+    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError>;
 
     /// Get device reference
     fn get_device(&self) -> &crate::device::LogicalDevice;

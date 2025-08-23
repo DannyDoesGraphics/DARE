@@ -211,7 +211,7 @@ impl<A: Allocator> Image<A> {
     }
 
     /// Create a new [`crate::resource::ImageView`] that covers the entire current [`Self`]
-    pub fn acquire_full_image_view(&self) -> Result<crate::resource::ImageView> {
+    pub fn acquire_full_image_view(&self) -> Result<crate::resource::ImageView, crate::DagalError> {
         let aspect_flag = if self
             .usage_flags
             .contains(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
@@ -349,7 +349,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// }).unwrap();
     /// drop(image);
     /// ```
-    fn new(create_info: ImageCreateInfo<A>) -> Result<Self>
+    fn new(create_info: ImageCreateInfo<A>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -479,7 +479,7 @@ impl<A: Allocator> AsRaw for Image<A> {
 
 impl<A: Allocator> Nameable for Image<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::IMAGE;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

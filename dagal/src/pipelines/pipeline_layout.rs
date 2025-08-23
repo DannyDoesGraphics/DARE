@@ -42,7 +42,7 @@ impl Hash for PipelineLayout {
 impl Resource for PipelineLayout {
     type CreateInfo<'a> = PipelineLayoutCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo<'_>) -> anyhow::Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -106,7 +106,7 @@ impl Nameable for PipelineLayout {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)
     }
 }

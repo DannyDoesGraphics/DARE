@@ -29,7 +29,7 @@ impl Hash for DescriptorSetLayout {
 impl Resource for DescriptorSetLayout {
     type CreateInfo<'a> = DescriptorSetLayoutCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo<'_>) -> anyhow::Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -73,7 +73,7 @@ impl Nameable for DescriptorSetLayout {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

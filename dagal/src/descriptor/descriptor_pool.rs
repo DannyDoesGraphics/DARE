@@ -123,7 +123,7 @@ impl Hash for DescriptorPool {
 
 impl Resource for DescriptorPool {
     type CreateInfo<'a> = DescriptorPoolCreateInfo<'a>;
-    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -214,7 +214,7 @@ impl Nameable for DescriptorPool {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

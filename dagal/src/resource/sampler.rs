@@ -175,7 +175,7 @@ impl Hash for Sampler {
 impl Resource for Sampler {
     type CreateInfo<'a> = SamplerCreateInfo<'a>;
 
-    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -274,7 +274,7 @@ impl AsRaw for Sampler {
 
 impl Nameable for Sampler {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::SAMPLER;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

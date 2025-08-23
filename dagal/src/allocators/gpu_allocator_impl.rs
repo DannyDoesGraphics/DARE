@@ -66,11 +66,11 @@ impl Allocator for GPUAllocatorImpl {
         name: &str,
         requirements: &MemoryRequirements,
         ty: super::MemoryLocation,
-    ) -> Result<Self::Allocation> {
+    ) -> Result<Self::Allocation, crate::DagalError> {
         let mut guard = self
             .handle
             .write()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
+            .map_err(|_| crate::DagalError::PoisonError)?;
         let allocate_ci = gpu_allocator::vulkan::AllocationCreateDesc {
             name,
             requirements: *requirements,
@@ -83,18 +83,20 @@ impl Allocator for GPUAllocatorImpl {
             linear: false,
             allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
         };
-        let handle = guard.as_mut().unwrap().allocate(&allocate_ci)?;
+        let handle = guard.as_mut().unwrap().allocate(&allocate_ci).map_err(|_| crate::DagalError::AllocationError)?;
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
 
         Ok(GPUAllocatorAllocation {
             handle: Some(handle),
-            name: name.to_string(),
+            name: name.to_string(), 
         })
     }
 
-    fn free(&mut self, allocation: Self::Allocation) -> Result<()> {
-        self.free_impl(allocation)
+    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
+        self.free_impl(allocation).map_err(|e| {
+            crate::DagalError::AllocationError
+        })
     }
 
     fn get_device(&self) -> &LogicalDevice {

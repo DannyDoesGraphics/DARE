@@ -86,7 +86,7 @@ impl Swapchain {
             .collect::<Vec<crate::resource::Image<A>>>())
     }
 
-    pub fn get_image_views(&self, images: &[vk::Image]) -> Result<Vec<crate::resource::ImageView>> {
+    pub fn get_image_views(&self, images: &[vk::Image]) -> Result<Vec<crate::resource::ImageView>, crate::DagalError> {
         images
             .iter()
             .map(|image| {

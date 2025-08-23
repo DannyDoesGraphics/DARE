@@ -20,11 +20,11 @@ impl Allocator for TestAllocator {
         name: &str,
         requirements: &MemoryRequirements,
         ty: MemoryLocation,
-    ) -> anyhow::Result<Self::Allocation> {
+    ) -> Result<Self::Allocation, crate::DagalError> {
         unimplemented!()
     }
 
-    fn free(&mut self, allocation: Self::Allocation) -> anyhow::Result<()> {
+    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
         unimplemented!()
     }
 

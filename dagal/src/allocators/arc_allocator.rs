@@ -34,7 +34,7 @@ impl<A: Allocator> ArcAllocator<A> {
         name: &str,
         requirements: &vk::MemoryRequirements,
         ty: super::MemoryLocation,
-    ) -> Result<ArcAllocation<A>> {
+    ) -> Result<ArcAllocation<A>, crate::DagalError> {
         let allocation = self.allocator.allocate(name, requirements, ty)?;
         Ok(ArcAllocation {
             allocator: self.allocator.clone(),
@@ -52,42 +52,36 @@ impl<A: Allocator> ArcAllocator<A> {
 }
 
 impl<A: Allocator> ArcAllocation<A> {
-    pub fn offset(&self) -> Result<vk::DeviceSize> {
+    pub fn offset(&self) -> Result<vk::DeviceSize, crate::DagalError> {
         self.allocation
             .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+            .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.offset()))
             .unwrap_or_else(|| {
-                Err(anyhow::Error::from(
-                    crate::DagalError::EmptyMemoryAllocation,
-                ))
+                Err(crate::DagalError::EmptyMemoryAllocation)
             })
     }
 
-    pub fn memory(&self) -> Result<vk::DeviceMemory> {
+    pub fn memory(&self) -> Result<vk::DeviceMemory, crate::DagalError> {
         self.allocation
             .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+            .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.memory()))
             .unwrap_or_else(|| {
-                Err(anyhow::Error::from(
-                    crate::DagalError::EmptyMemoryAllocation,
-                ))
+                Err(crate::DagalError::EmptyMemoryAllocation)
             })
     }
 
-    pub fn mapped_ptr(&self) -> Result<Option<NonNull<c_void>>> {
+    pub fn mapped_ptr(&self) -> Result<Option<NonNull<c_void>>, crate::DagalError> {
         self.allocation
             .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+            .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.mapped_ptr()))
             .unwrap_or_else(|| {
-                Err(anyhow::Error::from(
-                    crate::DagalError::EmptyMemoryAllocation,
-                ))
+                Err(crate::DagalError::EmptyMemoryAllocation)
             })
     }
 }

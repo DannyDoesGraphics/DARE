@@ -87,7 +87,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         p_next: *const c_void,
         create_flags: vk::DescriptorSetLayoutCreateFlags,
         name: Option<String>,
-    ) -> Result<crate::descriptor::DescriptorSetLayout> {
+    ) -> Result<crate::descriptor::DescriptorSetLayout, crate::DagalError> {
         let raw_bindings: Vec<vk::DescriptorSetLayoutBinding> =
             self.bindings.iter().map(|binding| binding.handle).collect();
         let flags: Vec<vk::DescriptorBindingFlags> =

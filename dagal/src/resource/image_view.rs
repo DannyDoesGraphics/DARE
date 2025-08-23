@@ -118,7 +118,7 @@ impl Hash for ImageView {
 
 impl Resource for ImageView {
     type CreateInfo<'a> = ImageViewCreateInfo<'a>;
-    fn new(create_info: ImageViewCreateInfo) -> Result<Self>
+    fn new(create_info: ImageViewCreateInfo) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -129,22 +129,22 @@ impl Resource for ImageView {
                 name,
             } => {
                 let handle = unsafe { device.get_handle().create_image_view(&create_info, None)? };
-                anyhow::Ok(Self {
+                Self {
                     handle,
                     device,
                     name,
-                })
+                }
             }
             ImageViewCreateInfo::FromVk {
                 device,
                 image_view,
                 name,
-            } => Ok(Self {
+            } => Self {
                 handle: image_view,
                 device,
                 name,
-            }),
-        }?;
+            },
+        };
         if let Some(debug_utils) = view.device.clone().get_debug_utils() {
             if let Some(name) = view.name.clone().as_ref() {
                 view.set_name(debug_utils, name)?;
@@ -181,7 +181,7 @@ impl Nameable for ImageView {
         &mut self,
         debug_utils: &ash::ext::debug_utils::Device,
         name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         self.name = Some(name.to_string());
         Ok(())

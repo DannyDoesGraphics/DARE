@@ -45,7 +45,7 @@ impl PipelineLayoutBuilder {
         self,
         device: crate::device::LogicalDevice,
         flags: vk::PipelineLayoutCreateFlags,
-    ) -> Result<crate::pipelines::PipelineLayout> {
+    ) -> Result<crate::pipelines::PipelineLayout, crate::DagalError> {
         let pipeline_ci = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             p_next: ptr::null(),

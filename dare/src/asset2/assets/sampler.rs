@@ -124,7 +124,7 @@ impl MetaDataRenderAsset for SamplerAsset {
                 max_lod: 0.0,
                 border_color: Default::default(),
                 unnormalized_coordinates: 0,
-            })
+            }).map_err(|e| e.into())
         }
         .boxed()
     }

@@ -12,7 +12,7 @@ pub trait Resource: Hash + Sized + AsRaw {
     /// Necessary create info
     type CreateInfo<'a>: 'a;
     /// Attempt to create a new resource given the [`Self::CreateInfo`] struct
-    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized;
     /// Get underlying reference to the device the object belongs to
@@ -24,21 +24,21 @@ pub trait Nameable {
     const OBJECT_TYPE: vk::ObjectType;
 
     /// Set the name of the resource
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()>;
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError>;
 }
 
 pub(crate) fn name_nameable<T: Nameable>(
     debug_utils: &ash::ext::debug_utils::Device,
     raw_handle: u64,
     name: &str,
-) -> Result<()> {
+) -> Result<(), crate::DagalError> {
     name_resource(debug_utils, raw_handle, T::OBJECT_TYPE, name)
 }
 
 pub(crate) fn update_name<T: Resource + Nameable>(
     resource: &mut T,
     name: Option<&str>,
-) -> Option<Result<()>> {
+) -> Option<Result<(), crate::DagalError>> {
     if let Some(name) = name {
         if let Some(debug_utils) = resource.get_device().clone().get_debug_utils() {
             return Some(resource.set_name(debug_utils, name));
@@ -53,8 +53,8 @@ pub(crate) fn name_resource(
     raw_handle: u64,
     object_type: vk::ObjectType,
     name: &str,
-) -> Result<()> {
-    let name = CString::new(name)?;
+) -> Result<(), crate::DagalError> {
+    let name = CString::new(name).map_err(|_| crate::DagalError::StringContainsNull)?;
     unsafe {
         debug_utils.set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
             s_type: vk::StructureType::DEBUG_UTILS_OBJECT_NAME_INFO_EXT,

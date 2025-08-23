@@ -34,7 +34,7 @@ impl Hash for AccelerationStructure {
 
 impl Resource for AccelerationStructure {
     type CreateInfo<'a> = AccelerationStructureInfo<'a>;
-    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
@@ -56,7 +56,7 @@ impl Resource for AccelerationStructure {
                         ty: ci.ty,
                     })
                 } else {
-                    Err(anyhow::Error::from(DagalError::NoExtensionSupported))
+                    Err(crate::DagalError::NoExtensionSupported)
                 }
             }
         }
@@ -92,7 +92,7 @@ impl AccelerationStructure {
 impl Nameable for AccelerationStructure {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::ACCELERATION_STRUCTURE_KHR;
 
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<()> {
+    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

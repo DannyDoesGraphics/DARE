@@ -34,7 +34,7 @@ impl AsRaw for TestResource {
 impl Resource for TestResource {
     type CreateInfo<'a> = u64;
 
-    fn new(create_info: Self::CreateInfo<'_>) -> anyhow::Result<Self>
+    fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
     {
