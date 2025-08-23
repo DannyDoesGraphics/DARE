@@ -42,6 +42,24 @@ impl<A: Allocator> std::hash::Hash for Image<A> {
     }
 }
 
+/// Similar to [`vk::ImageCreateInfo`], but supports hashing
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct OwnedImageCreateInfo {
+    pub flags: vk::ImageCreateFlags,
+    pub image_type: vk::ImageType,
+    pub format: vk::Format,
+    pub extent: vk::Extent3D,
+    pub mip_levels: u32,
+    pub array_layers: u32,
+    pub samples: vk::SampleCountFlags,
+    pub tiling: vk::ImageTiling,
+    pub usage: vk::ImageUsageFlags,
+    pub sharing_mode: vk::SharingMode,
+    pub queue_family_indices: Vec<u32>,
+    pub initial_layout: vk::ImageLayout,
+    pub location: crate::allocators::MemoryLocation,
+}
+
 pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image from an existing VkImage whose memory is not managed by the application
     /// (i.e. swapchain images)
@@ -70,6 +88,12 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
+    FromOwnedCreateInfo {
+        device: crate::device::LogicalDevice,
+        allocator: &'a mut ArcAllocator<A>,
+        create_info: OwnedImageCreateInfo,
+        name: Option<&'a str>,
+    }
 }
 
 impl<A: Allocator> Image<A> {
@@ -349,6 +373,50 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// }).unwrap();
     /// drop(image);
     /// ```
+    /// Test using owned create info
+    /// ```
+    /// use std::ptr;
+    /// use ash::vk;
+    /// use dagal::allocators::GPUAllocatorImpl;
+    /// use dagal::resource::traits::Resource;
+    /// use dagal::util::tests::TestSettings;
+    /// use dagal::gpu_allocator;
+    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    ///     instance: test_vulkan.instance.get_instance().clone(),
+    ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
+    ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
+    ///     debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
+    ///     buffer_device_address: false,
+    ///     allocation_sizes: Default::default(),
+    ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
+    /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
+    /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::FromOwnedCreateInfo {
+    ///     device: test_vulkan.device.as_ref().unwrap().clone(),
+    ///     create_info: dagal::resource::OwnedImageCreateInfo {
+    ///         flags: vk::ImageCreateFlags::empty(),
+    ///         image_type: vk::ImageType::TYPE_2D,
+    ///         format: vk::Format::R8G8B8A8_SRGB,
+    ///         extent: vk::Extent3D {
+    ///             width: 10,
+    ///             height: 10,
+    ///             depth: 1,
+    ///         },
+    ///         mip_levels: 1,
+    ///         array_layers: 1,
+    ///         samples: vk::SampleCountFlags::TYPE_1,
+    ///         tiling: vk::ImageTiling::LINEAR,
+    ///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+    ///         sharing_mode: vk::SharingMode::EXCLUSIVE,
+    ///         queue_family_indices: vec![],
+    ///         initial_layout: vk::ImageLayout::UNDEFINED,
+    ///         location: dagal::allocators::MemoryLocation::GpuOnly,
+    ///     },
+    ///     allocator: &mut allocator,
+    ///     name: None,
+    /// }).unwrap();
+    /// drop(image);
+    /// ```
     fn new(create_info: ImageCreateInfo<A>) -> Result<Self, crate::DagalError>
     where
         Self: Sized,
@@ -452,6 +520,66 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                 }
                 image.allocation = Some(allocation);
                 Ok(image)
+            },
+            ImageCreateInfo::FromOwnedCreateInfo { device, allocator, create_info, name } => {
+                let handle = unsafe { device.get_handle().create_image(&vk::ImageCreateInfo {
+                    s_type: vk::StructureType::IMAGE_CREATE_INFO,
+                    p_next: ptr::null(),
+                    flags: create_info.flags,
+                    image_type: create_info.image_type,
+                    format: create_info.format,
+                    extent: create_info.extent,
+                    mip_levels: create_info.mip_levels,
+                    array_layers: create_info.array_layers,
+                    samples: create_info.samples,
+                    tiling: create_info.tiling,
+                    usage: create_info.usage,
+                    sharing_mode: create_info.sharing_mode,
+                    queue_family_index_count: create_info.queue_family_indices.len() as u32,
+                    p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
+                    initial_layout: create_info.initial_layout,
+                    _marker: std::marker::PhantomData,
+                    
+                }, None)? };
+                #[cfg(feature = "log-lifetimes")]
+                tracing::trace!("Created VkImage {:p}", handle);
+
+                let allocation = unsafe {
+                    let allocation = allocator.allocate(
+                        name.unwrap_or("IMAGE_ALLOCATION"),
+                        &device
+                            .get_handle()
+                            .get_image_memory_requirements(handle),
+                        create_info.location,
+                    )?;
+                    device.get_handle().bind_image_memory(
+                        handle, allocation.memory()?, allocation.offset()?
+                    )?;
+                    allocation
+                };
+
+
+                let mut handle = Self {
+                    handle,
+                    format: create_info.format,
+                    extent: create_info.extent,
+                    mip_levels: create_info.mip_levels,
+                    usage_flags: create_info.usage,
+                    image_type: create_info.image_type,
+                    device,
+                    allocation: Some(allocation),
+                    image_managed: true,
+                    concurrent_queue_families: if create_info.sharing_mode
+                        == vk::SharingMode::CONCURRENT
+                    {
+                        Some(create_info.queue_family_indices.clone().into_boxed_slice())
+                    } else {
+                        None
+                    },
+                };
+                crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
+
+                Ok(handle)
             }
         }
     }

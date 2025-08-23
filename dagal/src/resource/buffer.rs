@@ -40,13 +40,13 @@ impl<A: Allocator> std::hash::Hash for Buffer<A> {
 /// Similar to [`vk::BufferCreateInfo`], but supports hashing + cloning, but restrictive in regards to extensions
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OwnedBufferCreateInfo {
-    name: Option<String>,
-    location: crate::allocators::MemoryLocation,
-    flags: vk::BufferCreateFlags,
-    size: vk::DeviceSize,
-    usage: vk::BufferUsageFlags,
-    sharing_mode: vk::SharingMode,
-    queue_family_indices: Vec<u32>,
+    pub name: Option<String>,
+    pub location: crate::allocators::MemoryLocation,
+    pub flags: vk::BufferCreateFlags,
+    pub size: vk::DeviceSize,
+    pub usage: vk::BufferUsageFlags,
+    pub sharing_mode: vk::SharingMode,
+    pub queue_family_indices: Vec<u32>,
 }
 
 pub enum BufferCreateInfo<'a, A: Allocator> {
