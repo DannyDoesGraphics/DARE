@@ -1,12 +1,11 @@
 use anyhow::Result;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter, Pointer};
+use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Flash map implementation of erased storage
-
 /// A flash map backed type erased storage
 ///
 /// # Performance characteristics
@@ -32,6 +31,12 @@ impl Debug for FlashMapErasedStorage {
     }
 }
 
+impl Default for FlashMapErasedStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FlashMapErasedStorage {
     pub fn new() -> Self {
         let (write, read) = flashmap::new::<TypeId, Box<dyn Any>>();
@@ -45,10 +50,9 @@ impl FlashMapErasedStorage {
     pub fn get_mut_write_guard(
         &self,
     ) -> Result<MutexGuard<flashmap::WriteHandle<TypeId, Box<dyn Any>>>> {
-        Ok(self
-            .write_handle
+        self.write_handle
             .lock()
-            .map_err(|_| anyhow::Error::from(anyhow::anyhow!("Poison error")))?)
+            .map_err(|_| anyhow::anyhow!("Poison error"))
     }
 
     /// Get the write handle
@@ -74,7 +78,6 @@ impl FlashMapErasedStorage {
         for<'b> F: FnOnce(&'b T) -> Fut + 'a,
         for<'b> Fut: Future<Output = R> + 'b,
     {
-        let read_handle = self.read_handle.clone();
         Some(async move {
             let guard = self.read_handle.guard();
             let data = guard.get(&TypeId::of::<T>()).unwrap();
@@ -86,7 +89,7 @@ impl FlashMapErasedStorage {
 
 impl From<HashMap<TypeId, Box<dyn Any>>> for FlashMapErasedStorage {
     fn from(value: HashMap<TypeId, Box<dyn Any>>) -> Self {
-        let mut flashmap = Self::new();
+        let flashmap = Self::new();
         for (key, value) in value.into_iter() {
             let mut guard = flashmap.write_handle.lock().unwrap();
             guard.guard().insert(key, value).unwrap();

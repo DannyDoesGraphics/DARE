@@ -48,8 +48,7 @@ impl ErasedStorageDashMap {
                 // SAFETY: we know this must exist
                 self.dash_map
                     .get(&TypeId::of::<T>())
-                    .map(|data| data.downcast_ref::<T>().map(f))
-                    .flatten()
+                    .and_then(|data| data.downcast_ref::<T>().map(f))
                     .unwrap()
             }
             Some(data) => data.downcast_ref::<T>().map(f).unwrap(),
@@ -62,17 +61,17 @@ impl ErasedStorageDashMap {
             .and_then(|mut data| data.downcast_mut::<T>().map(f))
     }
 
-    pub fn iter<'a>(
-        &'a self,
-    ) -> IterMut<'a, TypeId, Box<dyn Any>, RandomState, DashMap<TypeId, Box<dyn Any>>> {
+    pub fn iter(
+        &self,
+    ) -> IterMut<'_, TypeId, Box<dyn Any>, RandomState, DashMap<TypeId, Box<dyn Any>>> {
         self.dash_map.iter_mut()
     }
 
-    pub fn get<'a, T: 'static>(&'a self) -> Option<Ref<'a, TypeId, Box<dyn Any>>> {
+    pub fn get<T: 'static>(&self) -> Option<Ref<'_, TypeId, Box<dyn Any>>> {
         self.dash_map.get(&TypeId::of::<T>())
     }
 
-    pub fn get_mut<'a, T: 'static>(&'a self) -> Option<RefMut<'a, TypeId, Box<dyn Any>>> {
+    pub fn get_mut<T: 'static>(&self) -> Option<RefMut<'_, TypeId, Box<dyn Any>>> {
         self.dash_map.get_mut(&TypeId::of::<T>())
     }
 

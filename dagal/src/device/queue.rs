@@ -4,12 +4,13 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::prelude as dagal;
+use crate::traits::AsRaw;
 #[allow(unused_imports)]
 use crate::DagalError;
+use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
 #[allow(unused_imports)]
 use anyhow::Result;
-use ash::vk;
+use ash::vk::{self};
 
 /// Information about queues
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,14 +27,14 @@ pub struct QueueInfo {
     pub can_present: bool,
 }
 
-impl<'a> Into<vk::DeviceQueueInfo2<'a>> for QueueInfo {
-    fn into(self) -> vk::DeviceQueueInfo2<'a> {
+impl From<QueueInfo> for vk::DeviceQueueInfo2<'_> {
+    fn from(val: QueueInfo) -> Self {
         vk::DeviceQueueInfo2 {
             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
             p_next: ptr::null(),
             flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: self.family_index,
-            queue_index: self.index,
+            queue_family_index: val.family_index,
+            queue_index: val.index,
             _marker: Default::default(),
         }
     }
@@ -49,12 +50,14 @@ pub struct Queue<
 > {
     /// Handle to [`vk::Queue`]
     handle: Arc<M>,
+    device: crate::device::LogicalDevice,
     queue_info: QueueInfo,
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for Queue<M> {
     fn clone(&self) -> Self {
         Self {
             handle: self.handle.clone(),
+            device: self.device.clone(),
             queue_info: self.queue_info.clone(),
         }
     }
@@ -97,9 +100,14 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
 
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     /// It is undefined behavior to pass in a [`vk:Queue`] from an already existing [`Queue`]
-    pub unsafe fn new(handle: vk::Queue, queue_info: QueueInfo) -> Self {
+    pub unsafe fn new(
+        device: crate::device::LogicalDevice,
+        handle: vk::Queue,
+        queue_info: QueueInfo,
+    ) -> Self {
         Self {
             handle: Arc::new(M::new(handle)),
+            device,
             queue_info,
         }
     }
@@ -128,5 +136,71 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> Queue<M> {
 
     pub fn acquire_queue_blocking(&self) -> M::Lock<'_> {
         self.handle.blocking_lock().unwrap()
+    }
+}
+
+/// Extension trait for queue guards that provides async command buffer submission
+pub trait QueueGuardExt<T: ?Sized> {
+    /// Submit a command buffer with an already acquired queue guard and wait for fence completion
+    fn try_submit_async<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: &'a mut crate::sync::Fence,
+    ) -> impl std::future::Future<Output = Result<(), crate::DagalError>>;
+
+    fn try_submit_no_wait<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: Option<&'a mut crate::sync::Fence>,
+    ) -> Result<(), crate::DagalError>;
+}
+
+impl<G> QueueGuardExt<vk::Queue> for G
+where
+    G: crate::concurrency::Guard<vk::Queue>,
+{
+    #[allow(clippy::manual_async_fn)]
+    fn try_submit_async<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: &'a mut crate::sync::Fence,
+    ) -> impl std::future::Future<Output = Result<(), crate::DagalError>> {
+        async move {
+            unsafe {
+                command_buffer.get_device().get_handle().queue_submit2(
+                    **self,
+                    submit_infos,
+                    *fence.as_raw(),
+                )
+            }?;
+
+            fence.fence_await().await?;
+
+            Ok(())
+        }
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn try_submit_no_wait<'a>(
+        &mut self,
+        command_buffer: &mut crate::command::CommandBufferExecutable,
+        submit_infos: &'a [vk::SubmitInfo2<'a>],
+        fence: Option<&'a mut crate::sync::Fence>,
+    ) -> Result<(), crate::DagalError> {
+        unsafe {
+            command_buffer.get_device().get_handle().queue_submit2(
+                **self,
+                submit_infos,
+                match fence {
+                    Some(fence) => *fence.as_raw(),
+                    None => vk::Fence::null(),
+                },
+            )
+        }?;
+        // Do not wait for the fence here
+        Ok(())
     }
 }

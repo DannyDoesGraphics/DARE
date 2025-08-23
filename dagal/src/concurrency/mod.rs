@@ -2,6 +2,10 @@
 pub mod lockable;
 pub mod lockable_impl;
 
+pub use lockable::{
+    AsyncLockable, Guard, Lockable, MutableGuard, SyncLockable, TryLockError, TryLockable,
+};
+
 #[cfg(feature = "tokio")]
 pub use tokio;
 /// Redefines

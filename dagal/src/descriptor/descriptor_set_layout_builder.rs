@@ -17,7 +17,7 @@ pub struct DescriptorSetLayoutBinding<'a> {
     flags: vk::DescriptorBindingFlags,
 }
 
-impl<'a> DescriptorSetLayoutBinding<'a> {
+impl DescriptorSetLayoutBinding<'_> {
     pub fn flag(mut self, flag: vk::DescriptorBindingFlags) -> Self {
         self.flags = flag;
         self
@@ -73,26 +73,9 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
     /// ```
     /// use std::ptr;
     /// use ash::vk;
-    /// use dagal::allocators::GPUAllocatorImpl;
     /// use dagal::resource::traits::Resource;
     /// use dagal::util::tests::TestSettings;
-    /// use dagal::gpu_allocator;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-    ///     instance: test_vulkan.instance.get_instance().clone(),
-    ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
-    ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
-    ///     debug_settings: gpu_allocator::AllocatorDebugSettings {
-    ///         log_memory_information: false,
-    ///             log_leaks_on_shutdown: true,
-    ///             store_stack_traces: false,
-    ///             log_allocations: false,
-    ///             log_frees: false,
-    ///             log_stack_traces: false,
-    ///         },
-    ///         buffer_device_address: false,
-    ///         allocation_sizes: Default::default(),
-    ///  }).unwrap();
     /// let descriptor_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
     /// .add_binding(0, vk::DescriptorType::SAMPLER)
     /// .build(test_vulkan.device.as_ref().unwrap().clone(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None).unwrap();

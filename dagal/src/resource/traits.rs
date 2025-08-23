@@ -1,6 +1,5 @@
-use std::any::Any;
 use std::ffi::CString;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::ptr;
 
 use anyhow::Result;

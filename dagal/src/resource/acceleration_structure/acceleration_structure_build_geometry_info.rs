@@ -9,7 +9,7 @@ pub struct AccelerationStructureBuildGeometryInfo<'a> {
     handle: vk::AccelerationStructureBuildGeometryInfoKHR<'a>,
 }
 
-impl<'a> Default for AccelerationStructureBuildGeometryInfo<'a> {
+impl Default for AccelerationStructureBuildGeometryInfo<'_> {
     fn default() -> Self {
         Self {
             handle: vk::AccelerationStructureBuildGeometryInfoKHR {

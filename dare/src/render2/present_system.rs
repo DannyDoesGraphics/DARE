@@ -1,26 +1,26 @@
 use crate::prelude as dare;
 use crate::prelude::render;
-use crate::prelude::render::components::RenderBuffer;
-use crate::render2::components::RenderImage;
-use crate::render2::render_assets::RenderAssetsStorage;
+use crate::render2::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dagal::ash::vk;
-use dagal::ash::vk::CommandBuffer;
 use dagal::command::CommandBufferState;
+use dagal::device::queue::QueueGuardExt;
 use dagal::traits::AsRaw;
-use std::mem::swap;
+use dagal::{
+    allocators::GPUAllocatorImpl,
+    ash::khr::surface,
+    command::command_buffer::{self, CmdBuffer},
+};
 use std::ptr;
-use std::ptr::write;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use tokio::sync::MutexGuard;
 
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
-    frame_count: becs::ResMut<'_, super::frame_number::FrameCount>,
-    render_context: becs::Res<'_, super::render_context::RenderContext>,
+    mut frame_counter: becs::ResMut<'_, super::frame_number::FrameCounter>,
+    device_context: becs::Res<'_, crate::render2::contexts::DeviceContext>,
+    graphics_context: becs::Res<'_, crate::render2::contexts::GraphicsContext>,
+    transfer_context: becs::Res<'_, crate::render2::contexts::TransferContext>,
+    mut window_context: becs::ResMut<'_, crate::render2::contexts::WindowContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     surfaces: Query<
         '_,
@@ -31,58 +31,62 @@ pub fn present_system_begin(
             Option<&dare::engine::components::Material>,
             &render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
-    textures: becs::Res<
+    mut textures: becs::ResMut<
         '_,
-        render::render_assets::storage::RenderAssetManagerStorage<RenderImage<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderImage<GPUAllocatorImpl>,
+        >,
     >,
-    buffers: becs::Res<
+    mut samplers: becs::ResMut<
+        physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+    >,
+    mut buffers: becs::ResMut<
         '_,
-        render::render_assets::storage::RenderAssetManagerStorage<RenderBuffer<GPUAllocatorImpl>>,
+        physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
+        >,
     >,
     camera: becs::Res<'_, render::components::camera::Camera>,
 ) {
     rt.clone().runtime.block_on(async {
-        let frame_count = frame_count.clone();
-        let render_context = render_context.clone();
-        let mut surface_guard = render_context
-            .inner
-            .window_context
-            .surface_context
-            .write()
-            .unwrap();
-        let surface = surface_guard.as_mut();
-        if surface.is_none() {
-            return;
-        }
-        let surface_context = surface.unwrap();
-        let frame_number = frame_count.load(Ordering::Acquire);
+        let frame_number = frame_counter.get();
+        let present_queue = window_context.present_queue.clone();
+        let surface_context = match window_context.surface_context.as_mut() {
+            Some(surface) => surface,
+            None => {
+                return;
+            }
+        };
         #[cfg(feature = "tracing")]
         tracing::trace!("Starting frame {frame_number}");
-        let mut frame_guard = surface_context.frames
-            [frame_number % surface_context.frames_in_flight]
-            .lock()
-            .await;
-        let mut frame = &mut *frame_guard;
-        // wait until semaphore is ready
-        unsafe {
-            // wait for frame to finish rendering before rendering again
-            frame.render_fence.wait(u64::MAX).unwrap();
-            frame.render_fence.reset().unwrap();
-            // drop all resource handles
-            frame.resources.clear();
-            // drop all staging buffers
-            frame.staging_buffers.clear();
-        }
+        let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
+        let frame_submission_span = tracy_client::span!("frame_submission_cpu");
+        frame_submission_span
+            .emit_value(frame_number as u64 % surface_context.frames_in_flight as u64);
+        // update physical resources
+        textures.update();
+        samplers.update();
+        buffers.update();
+
+        // handle sync
+        frame.render_fence.fence_await().await.unwrap();
+        frame.render_fence.reset().unwrap();
+        frame.command_buffer.reset(None).unwrap();
+        // drop all resource handles
+        frame.resources.clear();
+        // drop all staging buffers
+        frame.staging_buffers.clear();
         let swapchain_image_index = surface_context.swapchain.next_image_index(
             u64::MAX,
             Some(&frame.swapchain_semaphore),
             None,
         );
-        let swapchain_image_index = match swapchain_image_index {
+        match swapchain_image_index {
             Ok(swapchain_image_index) => {
-                *surface_context.swapchain_image_index.write().await = swapchain_image_index;
+                surface_context.swapchain_image_index = swapchain_image_index;
                 //let swapchain_image = &window_context.swapchain_images[swapchain_image_index as usize];
                 // Reset and set command buffer into executable
                 frame
@@ -95,7 +99,7 @@ pub fn present_system_begin(
                 };
                 frame.draw_image.transition(
                     recording_cmd,
-                    &render_context.inner.window_context.present_queue,
+                    &present_queue,
                     vk::ImageLayout::UNDEFINED,
                     vk::ImageLayout::GENERAL,
                 );
@@ -129,13 +133,13 @@ pub fn present_system_begin(
                     // transition image states first
                     frame.draw_image.transition(
                         recording_cmd,
-                        &render_context.inner.window_context.present_queue,
+                        &present_queue,
                         vk::ImageLayout::GENERAL,
                         vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     );
                     frame.depth_image.transition(
                         recording_cmd,
-                        &render_context.inner.window_context.present_queue,
+                        &present_queue,
                         vk::ImageLayout::UNDEFINED,
                         vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
                     );
@@ -143,53 +147,55 @@ pub fn present_system_begin(
                 // mesh render
                 super::mesh_render_system::mesh_render(
                     frame_number,
-                    render_context.clone(),
+                    &device_context,
+                    &graphics_context,
+                    &transfer_context,
                     &camera,
                     frame,
                     surfaces,
-                    textures,
-                    buffers,
+                    &mut textures,
+                    &mut samplers,
+                    &mut buffers,
                 )
                 .await;
                 // end present
                 present_system_end(
-                    frame_count.clone(),
-                    render_context.clone(),
+                    frame_number,
+                    &present_queue,
                     surface_context,
-                    frame,
                     swapchain_image_index,
+                    &mut textures,
+                    &mut buffers,
                 )
                 .await;
             }
             Err(e) => {
                 tracing::error!("Failed to acquire next swapchain image due to: {e}");
-                // early return
-                render_context
-                    .inner
-                    .new_swapchain_requested
-                    .store(true, Ordering::Release);
+                drop(frame_submission_span);
                 return;
             }
         };
+        drop(frame_submission_span);
+        frame_counter.increment();
     });
 }
 
 pub async fn present_system_end(
-    frame_count: super::frame_number::FrameCount,
-    render_context: super::render_context::RenderContext,
-    surface_context: &super::surface_context::SurfaceContext,
-    mut frame: &mut super::frame::Frame,
+    frame_number: usize,
+    present_queue: &dagal::device::Queue,
+    surface_context: &mut crate::render2::contexts::SurfaceContext,
     swapchain_image_index: u32,
+    _textures: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderImage<GPUAllocatorImpl>,
+    >,
+    buffers: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderBuffer<GPUAllocatorImpl>,
+    >,
 ) {
-    let window_context = render_context.inner.window_context.clone();
-    let frame_count = frame_count.0.clone();
-
     #[cfg(feature = "tracing")]
     tracing::trace!("Submitting frame {:?}", frame_count);
-    let mut swapchain_image: std::sync::MutexGuard<dagal::resource::Image<GPUAllocatorImpl>> =
-        surface_context.swapchain_images[swapchain_image_index as usize]
-            .lock()
-            .unwrap();
+    let frame = &mut surface_context.frames[frame_number % surface_context.frames_in_flight];
+    let swapchain_image = &mut surface_context.swapchain_images[swapchain_image_index as usize];
     {
         let cmd_recording = match &frame.command_buffer {
             CommandBufferState::Recording(r) => r,
@@ -197,13 +203,13 @@ pub async fn present_system_end(
         };
         frame.draw_image.transition(
             cmd_recording,
-            &window_context.present_queue,
+            present_queue,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         );
         swapchain_image.transition(
             cmd_recording,
-            &window_context.present_queue,
+            present_queue,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         );
@@ -211,11 +217,10 @@ pub async fn present_system_end(
         swapchain_image.copy_from(cmd_recording, &frame.draw_image);
         swapchain_image.transition(
             cmd_recording,
-            &window_context.present_queue,
+            present_queue,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
         );
-        drop(swapchain_image);
     }
     {
         let submit_info = {
@@ -237,52 +242,65 @@ pub async fn present_system_end(
             )
         };
         {
-            frame
-                .command_buffer
-                .submit(
-                    *window_context
-                        .present_queue
-                        .acquire_queue_async()
-                        .await
-                        .unwrap(),
-                    &[submit_info],
-                    unsafe { *frame.render_fence.as_raw() },
-                )
-                .unwrap();
-            let present_info = vk::PresentInfoKHR {
-                s_type: vk::StructureType::PRESENT_INFO_KHR,
-                p_next: ptr::null(),
-                wait_semaphore_count: 1,
-                p_wait_semaphores: unsafe { frame.render_semaphore.as_raw() },
-                swapchain_count: 1,
-                p_swapchains: unsafe { surface_context.swapchain.as_raw() },
-                p_image_indices: &swapchain_image_index,
-                p_results: ptr::null_mut(),
-                _marker: Default::default(),
-            };
-            unsafe {
-                match surface_context.swapchain.get_ext().queue_present(
-                    *window_context
-                        .present_queue
-                        .acquire_queue_async()
-                        .await
-                        .unwrap(),
-                    &present_info,
-                ) {
-                    Ok(_) => {}
-                    Err(error) => match error {
-                        vk::Result::ERROR_OUT_OF_DATE_KHR => {
-                            println!("Old swapchain found");
-                            return;
+            match &mut frame.command_buffer {
+                CommandBufferState::Executable(command_buffer) => {
+                    let mut present_guard = present_queue.acquire_queue_async().await.unwrap();
+                    present_guard
+                        .try_submit_no_wait(
+                            command_buffer,
+                            &[submit_info],
+                            Some(&mut frame.render_fence),
+                        )
+                        .unwrap();
+
+                    let present_info = vk::PresentInfoKHR {
+                        s_type: vk::StructureType::PRESENT_INFO_KHR,
+                        p_next: ptr::null(),
+                        wait_semaphore_count: 1,
+                        p_wait_semaphores: unsafe { frame.render_semaphore.as_raw() },
+                        swapchain_count: 1,
+                        p_swapchains: unsafe { surface_context.swapchain.as_raw() },
+                        p_image_indices: &swapchain_image_index,
+                        p_results: ptr::null_mut(),
+                        _marker: Default::default(),
+                    };
+                    unsafe {
+                        match surface_context
+                            .swapchain
+                            .get_ext()
+                            .queue_present(*present_guard, &present_info)
+                        {
+                            Ok(_) => unsafe {
+                                let raw_fence = *frame.render_fence.as_raw();
+                                let device = frame.render_fence.get_device().clone();
+                                std::thread::spawn(move || {
+                                    let _ = unsafe {
+                                        device.get_handle().wait_for_fences(
+                                            &[raw_fence],
+                                            true,
+                                            u64::MAX,
+                                        )
+                                    };
+                                    tracy_client::frame_mark();
+                                });
+                            },
+                            Err(error) => match error {
+                                vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                                    println!("Old swapchain found");
+                                    return;
+                                }
+                                e => panic!("Error in queue present {e}"),
+                            },
                         }
-                        e => panic!("Error in queue present {:?}", e),
-                    },
+                    }
                 }
-            }
+                _ => unimplemented!(),
+            };
         }
     }
-    // progress to next frame
-    frame_count.fetch_add(1, Ordering::AcqRel);
+    // progress to next frame + update physical storage
+    buffers.update();
+    //textures.update();
     #[cfg(feature = "tracing")]
-    tracing::trace!("Finished frame {frame_number}");
+    tracing::trace!("Finished frame {frame_count}");
 }

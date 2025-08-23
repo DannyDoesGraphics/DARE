@@ -1,6 +1,4 @@
 use super::prelude as asset;
-use crate::asset2::asset_id::AssetId;
-use std::any::Any;
 use std::fmt::Debug;
 use std::hash::Hash;
 

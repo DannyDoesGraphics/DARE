@@ -26,9 +26,18 @@ pub struct QueueRequest<M: dagal::concurrency::Lockable<Target = vk::Queue>> {
     pub _phantom_data: PhantomData<M>,
 }
 
+#[derive(Debug)]
 pub struct QueueAllocator<M: dagal::concurrency::Lockable<Target = vk::Queue>> {
     queues: Arc<[dagal::device::Queue<M>]>,
 }
+impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for QueueAllocator<M> {
+    fn clone(&self) -> Self {
+        Self {
+            queues: Arc::clone(&self.queues),
+        }
+    }
+}
+
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> From<Vec<dagal::device::Queue<M>>>
     for QueueAllocator<M>
 {
@@ -52,17 +61,19 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
     /// To apply the exclusion mask, it assumes an array pair u32s (index, family_index)
     pub fn retrieve_queues(
         &self,
-        exclusion_mask: &[(u32, u32)],
+        exclusion_mask: Option<&[(u32, u32)]>,
         queue_flags: vk::QueueFlags,
-        count: usize,
+        count: Option<usize>,
     ) -> Result<Vec<dagal::device::Queue<M>>, QueueAllocatorError> {
-        let exclude: HashSet<(u32, u32)> = exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect();
+        let exclude: HashSet<(u32, u32)> = exclusion_mask
+            .map(|exclusion_mask| exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect())
+            .unwrap_or_default();
         let mut n: usize = 0;
         let v: Vec<dagal::device::Queue<M>> = self
             .queues
             .iter()
             .filter_map(|queue| {
-                if n < count
+                if count.map(|count| n < count).unwrap_or(true)
                     && !exclude.contains(&(queue.get_index(), queue.get_family_index()))
                     && queue.get_queue_flags().contains(queue_flags)
                 {
@@ -73,7 +84,7 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
                 }
             })
             .collect();
-        if v.len() < count {
+        if count.map(|count| v.len() < count).unwrap_or(false) {
             Err(QueueAllocatorError::ImpossibleRequest)
         } else {
             Ok(v)

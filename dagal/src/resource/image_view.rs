@@ -6,7 +6,7 @@ use ash::vk;
 use ash::vk::Handle;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 pub struct ImageView {
     handle: vk::ImageView,
     device: crate::device::LogicalDevice,
@@ -38,6 +38,7 @@ pub enum ImageViewCreateInfo<'a> {
     /// use ash::vk;
     /// use dagal::allocators::GPUAllocatorImpl;
     /// use dagal::resource::traits::Resource;
+    /// use dagal::traits::AsRaw;
     /// use dagal::util::tests::TestSettings;
     /// use dagal::gpu_allocator;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
@@ -45,19 +46,12 @@ pub enum ImageViewCreateInfo<'a> {
     ///     instance: test_vulkan.instance.get_instance().clone(),
     ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
     ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
-    ///     debug_settings: gpu_allocator::AllocatorDebugSettings {
-    ///         log_memory_information: false,
-    ///             log_leaks_on_shutdown: true,
-    ///             store_stack_traces: false,
-    ///             log_allocations: false,
-    ///             log_frees: false,
-    ///             log_stack_traces: false,
-    ///         },
-    ///         buffer_device_address: false,
-    ///         allocation_sizes: Default::default(),
-    ///  }).unwrap();
+    ///     debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
+    ///     buffer_device_address: false,
+    ///     allocation_sizes: Default::default(),
+    ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
     /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
-    /// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+    /// let image: dagal::resource::Image<GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     image_ci: vk::ImageCreateInfo {
     ///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -76,8 +70,8 @@ pub enum ImageViewCreateInfo<'a> {
     ///         tiling: vk::ImageTiling::LINEAR,
     ///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
     ///         sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///         queue_family_index_count: 1,
-    ///         p_queue_family_indices: &test_vulkan.compute_queue.as_ref().unwrap().get_family_index(),
+    ///         queue_family_index_count: 0,
+    ///         p_queue_family_indices: std::ptr::null(),
     ///         initial_layout: vk::ImageLayout::UNDEFINED,
     ///         _marker: Default::default(),
     ///     },
@@ -90,14 +84,15 @@ pub enum ImageViewCreateInfo<'a> {
     ///         s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
     ///         p_next: ptr::null(),
     ///         flags: vk::ImageViewCreateFlags::empty(),
-    ///         image: image.handle(),
+    ///         image: unsafe { *image.as_raw() },
     ///         view_type: vk::ImageViewType::TYPE_2D,
     ///         format: image.format(),
     ///         components: vk::ComponentMapping::default(),
-    ///         subresource_range: dagal::resource::Image::image_subresource_range(vk::ImageAspectFlags::COLOR),
+    ///         subresource_range: dagal::resource::Image::<GPUAllocatorImpl>::image_subresource_range(vk::ImageAspectFlags::COLOR),
     ///         _marker: Default::default(),
     ///     },
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
+    ///     name: None,
     /// }).unwrap();
     /// drop(image_view);
     /// drop(image);

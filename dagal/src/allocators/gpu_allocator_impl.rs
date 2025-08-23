@@ -14,7 +14,9 @@ use crate::traits::Destructible;
 pub struct GPUAllocatorImpl {
     handle: Arc<RwLock<Option<gpu_allocator::vulkan::Allocator>>>,
     device: LogicalDevice,
+    #[allow(dead_code)]
     memory_properties: vk::PhysicalDeviceMemoryProperties,
+    #[allow(dead_code)]
     buffer_device_address: bool,
 }
 

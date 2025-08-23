@@ -1,4 +1,5 @@
 use std::ffi::c_char;
+use std::hash::Hash;
 use std::ptr;
 
 use anyhow::Result;
@@ -7,7 +8,7 @@ use ash::vk;
 use crate::pipelines::traits::PipelineBuilder;
 use crate::traits::Destructible;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ComputePipeline {
     device: crate::device::LogicalDevice,
     handle: vk::Pipeline,
@@ -42,7 +43,7 @@ pub struct ComputePipelineBuilder<'a> {
     layout: Option<vk::PipelineLayout>,
 }
 
-impl<'a> PipelineBuilder for ComputePipelineBuilder<'a> {
+impl PipelineBuilder for ComputePipelineBuilder<'_> {
     type BuildTo = ComputePipeline;
 
     /// Destroy and existing layout and replace it.

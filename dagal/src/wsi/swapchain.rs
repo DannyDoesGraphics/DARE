@@ -129,8 +129,8 @@ impl Swapchain {
                 .acquire_next_image(
                     self.handle,
                     timeout,
-                    semaphore.map_or(vk::Semaphore::null(), |semaphore| semaphore.handle()),
-                    fence.map_or(vk::Fence::null(), |fence| fence.handle()),
+                    semaphore.map_or(vk::Semaphore::null(), |semaphore| *semaphore.as_raw()),
+                    fence.map_or(vk::Fence::null(), |fence| *fence.as_raw()),
                 )
                 .map(|res| res.0)?)
         }

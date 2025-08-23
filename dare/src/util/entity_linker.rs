@@ -15,8 +15,8 @@ enum ComponentsLinkerDelta<T: Component + Clone> {
 }
 
 impl ComponentsLinker {
-    pub fn default<T: Component + Send + Clone>(
-    ) -> (ComponentsLinkerSender<T>, ComponentsLinkerReceiver<T>) {
+    pub fn default<T: Component + Send + Clone>()
+    -> (ComponentsLinkerSender<T>, ComponentsLinkerReceiver<T>) {
         let (send, recv) = crossbeam_channel::unbounded::<ComponentsLinkerDelta<T>>();
         (
             ComponentsLinkerSender { send },

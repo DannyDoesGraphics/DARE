@@ -12,3 +12,9 @@ impl Default for BevyTokioRunTime {
         }
     }
 }
+
+impl BevyTokioRunTime {
+    pub fn new(runtime: tokio::runtime::Handle) -> Self {
+        Self { runtime }
+    }
+}

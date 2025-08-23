@@ -1,16 +1,17 @@
 use crate::error::ContainerErrors;
-use crate::prelude::Slot;
+use crate::prelude::DefaultSlot;
+use crate::slot::{Slot, SlotWithGeneration};
 use std::slice::{Iter, IterMut};
 
 /// Regular slot map implementation
 #[derive(Debug, PartialEq, Eq)]
-pub struct SlotMap<T> {
+pub struct SlotMap<T, S: Slot + SlotWithGeneration = DefaultSlot<T>> {
     // usize is a reference to the proxy slot index
     pub(crate) data: Vec<(T, u64)>,
-    pub(crate) slots: Vec<Slot<T>>,
+    pub(crate) slots: Vec<S>,
     pub(crate) free_list: Vec<u64>,
 }
-impl<T> Default for SlotMap<T> {
+impl<T, S: Slot + SlotWithGeneration> Default for SlotMap<T, S> {
     fn default() -> Self {
         Self {
             data: Default::default(),
@@ -20,89 +21,81 @@ impl<T> Default for SlotMap<T> {
     }
 }
 
-impl<T> SlotMap<T> {
-    pub fn insert(&mut self, element: T) -> Slot<T> {
+impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
+    pub fn insert(&mut self, element: T) -> S {
         // find the next free slot for indirect
-        let mut slots_len = self.slots.len();
-        let mut free_slot_index = 0;
-        let mut free_slot: &mut Slot<T> = if let Some(index) = self.free_list.pop() {
+        let free_slot_index;
+        let free_slot: &mut S = if let Some(index) = self.free_list.pop() {
             free_slot_index = index;
             self.slots.get_mut(index as usize).unwrap()
         } else {
-            let slot = Slot::new(0, 0);
+            let slot: S = S::new_with_gen(0, 0);
             free_slot_index = self.slots.len() as u64;
             self.slots.push(slot);
-            slots_len += 1;
             self.slots.last_mut().unwrap()
         };
         // update index the inner slot will point to
-        free_slot.id = self.data.len() as u64;
+        free_slot.set_id(self.data.len() as u64);
         // push data into data vec
         self.data.push((element, free_slot_index));
 
         // produce and out slot from mapping to the proxy slot
-        let out_slot = Slot::new(free_slot_index as u64, free_slot.generation);
-        out_slot
+
+        S::new_with_gen(free_slot_index, free_slot.generation())
     }
 
-    pub fn remove(&mut self, slot: Slot<T>) -> Result<T, ContainerErrors> {
-        if let Some(mut proxy_slot) = self.slots.get_mut(slot.id as usize).map(|proxy_slot| {
-            if slot.generation != proxy_slot.generation {
+    pub fn remove(&mut self, slot: S) -> Result<T, ContainerErrors> {
+        if let Some(proxy_slot) = self.slots.get_mut(slot.id() as usize).map(|proxy_slot| {
+            if slot.generation() != proxy_slot.generation() {
                 return Err(ContainerErrors::GenerationMismatch);
             }
             // increment generation
-            proxy_slot.generation += 1;
-            Ok::<Slot<T>, ContainerErrors>(proxy_slot.clone())
+            proxy_slot.set_generation(proxy_slot.generation() + 1);
+            Ok::<S, ContainerErrors>(proxy_slot.clone())
         }) {
             let proxy_slot = proxy_slot?;
             // swap (if needed) data before popping
-            if self.data.len() > 0 && proxy_slot.id != (self.data.len() - 1) as u64 {
-                let proxy_slot_data_index = proxy_slot.id;
+            if !self.data.is_empty() && proxy_slot.id() != (self.data.len() - 1) as u64 {
+                let proxy_slot_data_index = proxy_slot.id();
                 let last_index = self.data.len() - 1;
                 // swap with the last
                 self.data.swap(last_index, proxy_slot_data_index as usize);
                 // update the indirect slot
                 let swapped_proxy = self.data.get(proxy_slot_data_index as usize).unwrap().1;
                 // since we swapped, we must update to the indirect to point to the data index
-                self.slots
-                    .get_mut(swapped_proxy as usize)
-                    .map(|slot| slot.id = proxy_slot_data_index);
+                if let Some(slot) = self.slots.get_mut(swapped_proxy as usize) {
+                    slot.set_id(proxy_slot_data_index)
+                }
             }
             // to be removed must be last in data and slots
             let data = self.data.pop().unwrap();
-            self.free_list.push(slot.id);
+            self.free_list.push(slot.id());
             Ok(data.0)
         } else {
             Err(ContainerErrors::NonexistentSlot)
         }
     }
 
-    pub fn get(&self, slot: Slot<T>) -> Option<&T> {
-        self.slots
-            .get(slot.id as usize)
-            .map(|proxy_slot| {
-                if proxy_slot.generation == slot.generation {
-                    self.data.get(proxy_slot.id as usize).map(|data| &data.0)
-                } else {
-                    None
-                }
-            })
-            .flatten()
+    pub fn get(&self, slot: S) -> Option<&T> {
+        self.slots.get(slot.id() as usize).and_then(|proxy_slot| {
+            if proxy_slot.generation() == slot.generation() {
+                self.data.get(proxy_slot.id() as usize).map(|data| &data.0)
+            } else {
+                None
+            }
+        })
     }
 
-    pub fn get_mut(&mut self, slot: Slot<T>) -> Option<&mut T> {
-        self.slots
-            .get(slot.id as usize)
-            .map(|proxy_slot| {
-                if proxy_slot.generation == slot.generation {
-                    self.data
-                        .get_mut(proxy_slot.id as usize)
-                        .map(|data| &mut data.0)
-                } else {
-                    None
-                }
-            })
-            .flatten()
+    pub fn get_mut(&mut self, slot: S) -> Option<&mut T> {
+        self.slots.get(slot.id() as usize).and_then(|proxy_slot| {
+            if proxy_slot.generation() == slot.generation() {
+                self.data
+                    .get_mut(proxy_slot.id() as usize)
+                    .map(|data| &mut data.0)
+            } else {
+                None
+            }
+        })
     }
 
     pub fn iter(&self) -> Iter<'_, (T, u64)> {
@@ -121,14 +114,14 @@ mod tests {
     #[test]
     fn test_insert_and_get() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         assert_eq!(slot_map.get(slot), Some(&42));
     }
 
     #[test]
     fn test_insert_multiple_and_get() {
         let mut slot_map = SlotMap::default();
-        let slot1 = slot_map.insert(42);
+        let slot1: DefaultSlot<i32> = slot_map.insert(42);
         let slot2 = slot_map.insert(43);
         let slot3 = slot_map.insert(44);
 
@@ -140,7 +133,7 @@ mod tests {
     #[test]
     fn test_remove() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         let removed = slot_map.remove(slot.clone()).unwrap();
         assert_eq!(removed, 42);
         assert_eq!(slot_map.get(slot), None);
@@ -149,7 +142,7 @@ mod tests {
     #[test]
     fn test_remove_and_insert() {
         let mut slot_map = SlotMap::default();
-        let slot1 = slot_map.insert(42);
+        let slot1: DefaultSlot<i32> = slot_map.insert(42);
         let slot2 = slot_map.insert(43);
         let _ = slot_map.remove(slot1.clone()).unwrap();
         let slot3 = slot_map.insert(44);
@@ -164,7 +157,7 @@ mod tests {
     #[test]
     fn test_generation_mismatch() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         // Remove the slot
         let _ = slot_map.remove(slot.clone()).unwrap();
         // Try to get or remove using the same slot (should fail due to generation mismatch)
@@ -178,7 +171,7 @@ mod tests {
     #[test]
     fn test_nonexistent_slot() {
         let mut slot_map: SlotMap<i32> = SlotMap::default();
-        let invalid_slot = Slot::new(999, 0); // Assuming we have less than 999 slots
+        let invalid_slot = DefaultSlot::new(999, 0); // Assuming we have less than 999 slots
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -188,7 +181,7 @@ mod tests {
     #[test]
     fn test_get_mut() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         if let Some(value) = slot_map.get_mut(slot.clone()) {
             *value = 100;
         }
@@ -197,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let mut slot_map = SlotMap::default();
+        let mut slot_map = SlotMap::<i32, DefaultSlot<i32>>::default();
         let _ = slot_map.insert(1);
         let _ = slot_map.insert(2);
         let _ = slot_map.insert(3);
@@ -208,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_iter_mut() {
-        let mut slot_map = SlotMap::default();
+        let mut slot_map = SlotMap::<i32, DefaultSlot<i32>>::default();
         let _ = slot_map.insert(1);
         let _ = slot_map.insert(2);
         let _ = slot_map.insert(3);
@@ -228,7 +221,7 @@ mod tests {
         let mut slots = Vec::new();
 
         for i in 0..num_elements {
-            let slot = slot_map.insert(i);
+            let slot: DefaultSlot<usize> = slot_map.insert(i);
             slots.push(slot);
         }
 
@@ -255,7 +248,7 @@ mod tests {
     #[test]
     fn test_reuse_of_slots() {
         let mut slot_map = SlotMap::default();
-        let slot1 = slot_map.insert(1);
+        let slot1: DefaultSlot<i32> = slot_map.insert(1);
         let slot2 = slot_map.insert(2);
         let slot3 = slot_map.insert(3);
 
@@ -278,7 +271,7 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_slot() {
         let mut slot_map: SlotMap<u64> = SlotMap::default();
-        let slot = Slot::new(0, 0);
+        let slot = DefaultSlot::new(0, 0);
         match slot_map.remove(slot) {
             Err(ContainerErrors::NonexistentSlot) => {}
             _ => panic!("Expected NonexistentSlot error"),
@@ -288,8 +281,8 @@ mod tests {
     #[test]
     fn test_remove_invalid_generation() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
-        let invalid_slot = Slot::new(slot.id, slot.generation + 1);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
+        let invalid_slot = DefaultSlot::new(slot.id, slot.generation + 1);
         match slot_map.remove(invalid_slot) {
             Err(ContainerErrors::GenerationMismatch) => {}
             _ => panic!("Expected GenerationMismatch error"),
@@ -299,7 +292,7 @@ mod tests {
     #[test]
     fn test_double_remove() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         let _ = slot_map.remove(slot.clone()).unwrap();
         // Try to remove again
         match slot_map.remove(slot) {
@@ -311,7 +304,7 @@ mod tests {
     #[test]
     fn test_get_after_remove() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(42);
+        let slot: DefaultSlot<i32> = slot_map.insert(42);
         let _ = slot_map.remove(slot.clone()).unwrap();
         assert_eq!(slot_map.get(slot), None);
     }
@@ -319,7 +312,7 @@ mod tests {
     #[test]
     fn test_insert_after_remove() {
         let mut slot_map = SlotMap::default();
-        let slot1 = slot_map.insert(42);
+        let slot1: DefaultSlot<i32> = slot_map.insert(42);
         let _ = slot_map.remove(slot1.clone()).unwrap();
         let slot2 = slot_map.insert(43);
 
@@ -334,7 +327,7 @@ mod tests {
     #[test]
     fn test_remove_all_and_insert() {
         let mut slot_map = SlotMap::default();
-        let slot1 = slot_map.insert(1);
+        let slot1: DefaultSlot<i32> = slot_map.insert(1);
         let slot2 = slot_map.insert(2);
 
         let _ = slot_map.remove(slot1.clone()).unwrap();
@@ -358,7 +351,7 @@ mod tests {
     #[test]
     fn test_insert_and_get_strings() {
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(String::from("Hello"));
+        let slot: DefaultSlot<i32> = slot_map.insert(String::from("Hello"));
         assert_eq!(slot_map.get(slot), Some(&String::from("Hello")));
     }
 
@@ -371,7 +364,7 @@ mod tests {
         }
 
         let mut slot_map = SlotMap::default();
-        let slot = slot_map.insert(Point { x: 1, y: 2 });
+        let slot: DefaultSlot<i32> = slot_map.insert(Point { x: 1, y: 2 });
         assert_eq!(slot_map.get(slot), Some(&Point { x: 1, y: 2 }));
     }
 

@@ -9,6 +9,71 @@ use std::ptr;
 use anyhow::Result;
 use ash::vk;
 
+use crate::traits::AsRaw;
+
+/// Defines a command buffer in the failed state
+#[derive(Debug, Clone)]
+pub struct CommandBufferInvalid {
+    handle: vk::CommandBuffer,
+    device: crate::device::LogicalDevice,
+    reason: crate::DagalError,
+}
+impl CommandBufferInvalid {
+    pub fn new(
+        handle: vk::CommandBuffer,
+        device: crate::device::LogicalDevice,
+        reason: crate::DagalError,
+    ) -> Self {
+        Self {
+            handle,
+            device,
+            reason,
+        }
+    }
+
+    pub fn error(&self) -> crate::DagalError {
+        self.reason
+    }
+
+    pub fn reset(
+        self,
+        flags: Option<vk::CommandBufferResetFlags>,
+    ) -> Result<CommandBuffer, vk::Result> {
+        unsafe {
+            self.device.get_handle().reset_command_buffer(
+                self.handle,
+                flags.unwrap_or(vk::CommandBufferResetFlags::empty()),
+            )
+        }?;
+        Ok(CommandBuffer {
+            handle: self.handle,
+            device: self.device,
+        })
+    }
+}
+
+impl CmdBuffer for CommandBufferInvalid {
+    fn get_device(&self) -> &crate::device::LogicalDevice {
+        &self.device
+    }
+}
+
+impl AsRaw for CommandBufferInvalid {
+    type RawType = vk::CommandBuffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandBuffer {
     handle: vk::CommandBuffer,
@@ -20,12 +85,12 @@ impl CommandBuffer {
         Self { handle, device }
     }
 
-    /// If a command buffer submission fails for whatever reason, it [`Err`] returns a tuple
-    /// containing the original command buffer and the [`VkResult`](vk::Result) error.
+    /// If a command buffer submission fails for whatever reason, it [`Err`] returns a
+    /// [`CommandBufferInvalid`] containing the error details.
     pub fn begin(
         self,
         flags: vk::CommandBufferUsageFlags,
-    ) -> Result<CommandBufferRecording, (CommandBuffer, vk::Result)> {
+    ) -> Result<CommandBufferRecording, CommandBufferInvalid> {
         let cmd_begin = unsafe {
             self.device.get_handle().begin_command_buffer(
                 self.handle,
@@ -45,12 +110,16 @@ impl CommandBuffer {
             })
         } else {
             let result = cmd_begin.unwrap_err();
-            Err((self, result))
+            Err(CommandBufferInvalid {
+                handle: self.handle,
+                device: self.device,
+                reason: crate::DagalError::VkError(result),
+            })
         }
     }
 
     /// Resets the current command buffer
-    pub fn reset(&self, flags: vk::CommandBufferResetFlags) -> Result<()> {
+    pub fn reset(&self, flags: vk::CommandBufferResetFlags) -> Result<(), vk::Result> {
         unsafe {
             self.device
                 .get_handle()
@@ -65,7 +134,7 @@ impl CommandBuffer {
             self.device.get_handle().wait_for_fences(
                 fences
                     .iter()
-                    .map(|fence| fence.handle())
+                    .map(|fence| *fence.as_raw())
                     .collect::<Vec<vk::Fence>>()
                     .as_slice(),
                 true,
@@ -164,7 +233,7 @@ impl CommandBufferExecutable {
         queue: vk::Queue,
         submit_infos: &[vk::SubmitInfo2],
         fence: vk::Fence,
-    ) -> Result<CommandBuffer, (CommandBuffer, vk::Result)> {
+    ) -> Result<CommandBuffer, CommandBufferInvalid> {
         let res = unsafe {
             self.device
                 .get_handle()
@@ -172,36 +241,44 @@ impl CommandBufferExecutable {
         };
         let cmd_buf = CommandBuffer {
             handle: self.handle,
-            device: self.device,
+            device: self.device.clone(),
         };
         if res.is_ok() {
             Ok(cmd_buf)
         } else {
-            Err((cmd_buf, res.unwrap_err()))
+            Err(CommandBufferInvalid {
+                handle: self.handle,
+                device: self.device,
+                reason: crate::DagalError::VkError(res.unwrap_err()),
+            })
         }
     }
 }
 
 /// Traits that all command buffers are expected to have
-pub trait CmdBuffer: Deref {
+pub trait CmdBuffer: AsRaw<RawType = vk::CommandBuffer> {
     /// Get the [`VkDevice`](ash::Device) attached
     fn get_device(&self) -> &crate::device::LogicalDevice;
-    /// Get the underlying [`VkCommandBuffer`](vk::CommandBuffer) reference
-    fn get_handle(&self) -> &vk::CommandBuffer;
-    /// Get the underlying [`VkCommandBuffer`](vk::CommandBuffer) copy
-    fn handle(&self) -> vk::CommandBuffer;
 }
 
 impl CmdBuffer for CommandBufferExecutable {
     fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
     }
+}
 
-    fn get_handle(&self) -> &vk::CommandBuffer {
+impl AsRaw for CommandBufferExecutable {
+    type RawType = vk::CommandBuffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> vk::CommandBuffer {
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
         self.handle
     }
 }
@@ -218,12 +295,20 @@ impl CmdBuffer for CommandBufferRecording {
     fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
     }
+}
 
-    fn get_handle(&self) -> &vk::CommandBuffer {
+impl AsRaw for CommandBufferRecording {
+    type RawType = vk::CommandBuffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> vk::CommandBuffer {
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
         self.handle
     }
 }
@@ -240,12 +325,20 @@ impl CmdBuffer for CommandBuffer {
     fn get_device(&self) -> &crate::device::LogicalDevice {
         &self.device
     }
+}
 
-    fn get_handle(&self) -> &vk::CommandBuffer {
+impl AsRaw for CommandBuffer {
+    type RawType = vk::CommandBuffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
         &self.handle
     }
 
-    fn handle(&self) -> vk::CommandBuffer {
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
+    }
+
+    unsafe fn raw(self) -> Self::RawType {
         self.handle
     }
 }
@@ -263,6 +356,7 @@ pub enum CommandBufferState {
     Ready(CommandBuffer),
     Recording(CommandBufferRecording),
     Executable(CommandBufferExecutable),
+    Invalid(CommandBufferInvalid),
 }
 
 impl From<CommandBuffer> for CommandBufferState {
@@ -283,6 +377,12 @@ impl From<CommandBufferExecutable> for CommandBufferState {
     }
 }
 
+impl From<CommandBufferInvalid> for CommandBufferState {
+    fn from(value: CommandBufferInvalid) -> Self {
+        Self::Invalid(value)
+    }
+}
+
 impl Deref for CommandBufferState {
     type Target = vk::CommandBuffer;
 
@@ -291,6 +391,7 @@ impl Deref for CommandBufferState {
             CommandBufferState::Ready(r) => r,
             CommandBufferState::Recording(r) => r,
             CommandBufferState::Executable(r) => r,
+            CommandBufferState::Invalid(r) => &r.handle,
         }
     }
 }
@@ -301,30 +402,93 @@ impl CmdBuffer for CommandBufferState {
             CommandBufferState::Ready(r) => r.get_device(),
             CommandBufferState::Recording(r) => r.get_device(),
             CommandBufferState::Executable(r) => r.get_device(),
+            CommandBufferState::Invalid(r) => r.get_device(),
+        }
+    }
+}
+
+impl AsRaw for CommandBufferState {
+    type RawType = vk::CommandBuffer;
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        match self {
+            CommandBufferState::Ready(r) => r.as_raw(),
+            CommandBufferState::Recording(r) => r.as_raw(),
+            CommandBufferState::Executable(r) => r.as_raw(),
+            CommandBufferState::Invalid(r) => r.as_raw(),
         }
     }
 
-    fn get_handle(&self) -> &vk::CommandBuffer {
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
         match self {
-            CommandBufferState::Ready(r) => r.get_handle(),
-            CommandBufferState::Recording(r) => r.get_handle(),
-            CommandBufferState::Executable(r) => r.get_handle(),
+            CommandBufferState::Ready(r) => r.as_raw_mut(),
+            CommandBufferState::Recording(r) => r.as_raw_mut(),
+            CommandBufferState::Executable(r) => r.as_raw_mut(),
+            CommandBufferState::Invalid(r) => r.as_raw_mut(),
         }
     }
 
-    fn handle(&self) -> vk::CommandBuffer {
+    unsafe fn raw(self) -> Self::RawType {
         match self {
-            CommandBufferState::Ready(r) => r.handle(),
-            CommandBufferState::Recording(r) => r.handle(),
-            CommandBufferState::Executable(r) => r.handle(),
+            CommandBufferState::Ready(r) => r.raw(),
+            CommandBufferState::Recording(r) => r.raw(),
+            CommandBufferState::Executable(r) => r.raw(),
+            CommandBufferState::Invalid(r) => r.raw(),
         }
     }
 }
 
 impl CommandBufferState {
+    /// Get the error if the command buffer is in the invalid state
+    pub fn get_error(&self) -> Option<crate::DagalError> {
+        match self {
+            CommandBufferState::Invalid(invalid) => Some(invalid.error()),
+            _ => None,
+        }
+    }
+
+    /// Resets a command buffer
+    pub fn reset(
+        &mut self,
+        flags: Option<vk::CommandBufferResetFlags>,
+    ) -> Result<(), crate::DagalError> {
+        match self {
+            CommandBufferState::Recording(_) => {
+                Err(crate::DagalError::VkError(vk::Result::ERROR_DEVICE_LOST))
+            }
+            CommandBufferState::Ready(cmd) => {
+                cmd.reset(flags.unwrap_or(vk::CommandBufferResetFlags::empty()))
+                    .map_err(|_| crate::DagalError::VkError(vk::Result::ERROR_DEVICE_LOST))?;
+                Ok(())
+            }
+            CommandBufferState::Executable(cmd) => {
+                // Move out of executable state and reset
+                let cmd_buf = CommandBuffer {
+                    handle: unsafe { *cmd.as_raw() },
+                    device: cmd.get_device().clone(),
+                };
+                cmd_buf
+                    .reset(flags.unwrap_or(vk::CommandBufferResetFlags::empty()))
+                    .map_err(crate::DagalError::VkError)?;
+                *self = CommandBufferState::Ready(cmd_buf);
+                Ok(())
+            }
+            CommandBufferState::Invalid(invalid) => {
+                // Try to reset from invalid state
+                match invalid.clone().reset(flags) {
+                    Ok(cmd_buf) => {
+                        *self = CommandBufferState::Ready(cmd_buf);
+                        Ok(())
+                    }
+                    Err(vk_error) => Err(crate::DagalError::VkError(vk_error)),
+                }
+            }
+        }
+    }
+
     pub fn begin(&mut self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
         *self = Self::from(match self {
-            CommandBufferState::Recording(r) => {
+            CommandBufferState::Recording(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Ready, got Recording"
                 ))
@@ -334,8 +498,21 @@ impl CommandBufferState {
                     "Expected command buffer state to be in Ready, got Executable"
                 ))
             }
-            CommandBufferState::Ready(cmd) => unsafe {
-                Ok::<CommandBufferRecording, anyhow::Error>(cmd.clone().begin(flags).unwrap())
+            CommandBufferState::Invalid(invalid) => {
+                return Err(anyhow::anyhow!(
+                    "Command buffer is in invalid state: {}",
+                    invalid.error()
+                ))
+            }
+            CommandBufferState::Ready(cmd) => match cmd.clone().begin(flags) {
+                Ok(recording) => Ok::<CommandBufferRecording, anyhow::Error>(recording),
+                Err(invalid) => {
+                    *self = Self::Invalid(invalid);
+                    return Err(anyhow::anyhow!(
+                        "Failed to begin command buffer: {}",
+                        self.get_error().unwrap()
+                    ));
+                }
             },
         }?);
         Ok(())
@@ -344,8 +521,9 @@ impl CommandBufferState {
     // Recording
     pub fn end(&mut self) -> Result<()> {
         *self = Self::from(match self {
-            CommandBufferState::Recording(r) => unsafe {
-                Ok::<CommandBufferExecutable, anyhow::Error>(r.clone().end()?)
+            CommandBufferState::Recording(r) => match unsafe { r.clone().end() } {
+                Ok(executable) => Ok::<CommandBufferExecutable, anyhow::Error>(executable),
+                Err(e) => return Err(e),
             },
             CommandBufferState::Executable(_) => {
                 return Err(anyhow::anyhow!(
@@ -357,31 +535,10 @@ impl CommandBufferState {
                     "Expected command buffer state to be in Recording, got Ready"
                 ))
             }
-        }?);
-        Ok(())
-    }
-
-    // Executable
-    pub fn submit(
-        &mut self,
-        queue: vk::Queue,
-        submit_infos: &[vk::SubmitInfo2],
-        fence: vk::Fence,
-    ) -> Result<()> {
-        *self = Self::from(match self {
-            CommandBufferState::Executable(r) => unsafe {
-                Ok::<CommandBuffer, anyhow::Error>(
-                    r.clone().submit(queue, submit_infos, fence).unwrap(),
-                )
-            },
-            CommandBufferState::Recording(_) => {
+            CommandBufferState::Invalid(invalid) => {
                 return Err(anyhow::anyhow!(
-                    "Command buffer state expected to be in Executable, got Recording"
-                ))
-            }
-            CommandBufferState::Ready(_) => {
-                return Err(anyhow::anyhow!(
-                    "Command buffer state expected to be in Executable, got Ready"
+                    "Command buffer is in invalid state: {}",
+                    invalid.error()
                 ))
             }
         }?);

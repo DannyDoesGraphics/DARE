@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::allocators::{Allocation, Allocator, MemoryLocation};
 use crate::device::LogicalDevice;
 use ash::vk::{DeviceMemory, DeviceSize, MemoryRequirements};

@@ -1,13 +1,14 @@
 use crate::device::physical_device::PhysicalDevice;
 use crate::device::QueueInfo;
 use crate::resource::traits::Resource;
-use crate::traits::{AsRaw, Destructible};
+use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
 use std::collections::HashSet;
 use std::ffi::c_char;
+use std::hash::Hash;
 use std::sync::{Arc, Weak};
 
 #[derive(Clone, Derivative)]
@@ -27,37 +28,19 @@ struct LogicalDeviceInner {
     #[derivative(PartialEq = "ignore", Debug = "ignore")]
     acceleration_structure: Option<ash::khr::acceleration_structure::Device>,
 }
-
-impl LogicalDeviceInner {
-    /// Acquire a [`device::Queue`](crate::device::Queue)
-    ///
-    /// # Safety
-    /// Queues created here do not guarantee thread safety whatsoever with other queues
-    pub unsafe fn get_queue(
-        &self,
-        queue_info: &vk::DeviceQueueInfo2,
-        strict: bool,
-        queue_flags: vk::QueueFlags,
-    ) -> crate::device::Queue {
-        let queue = unsafe { self.handle.get_device_queue2(queue_info) };
-        crate::device::Queue::new(
-            queue,
-            QueueInfo {
-                family_index: queue_info.queue_family_index,
-                index: queue_info.queue_index,
-                strict,
-                queue_flags,
-                can_present: true,
-            },
-        )
-    }
-}
-
 impl PartialEq for LogicalDeviceInner {
     fn eq(&self, other: &Self) -> bool {
         self.handle.handle() == other.handle.handle()
     }
 }
+impl Eq for LogicalDeviceInner {}
+impl Hash for LogicalDeviceInner {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.handle.handle().hash(state);
+    }
+}
+
+impl LogicalDeviceInner {}
 
 impl Destructible for LogicalDeviceInner {
     fn destroy(&mut self) {
@@ -69,8 +52,6 @@ impl Destructible for LogicalDeviceInner {
         }
     }
 }
-
-impl Eq for LogicalDeviceInner {}
 
 #[cfg(feature = "raii")]
 impl Drop for LogicalDeviceInner {
@@ -91,6 +72,11 @@ impl Drop for LogicalDeviceInner {
 pub struct LogicalDevice {
     #[derivative(Debug = "ignore")]
     inner: Arc<LogicalDeviceInner>,
+}
+impl Hash for LogicalDevice {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.handle.handle().hash(state);
+    }
 }
 
 /// A weak reference to a logical device
@@ -194,6 +180,7 @@ impl LogicalDevice {
     ) -> crate::device::Queue<M> {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
         crate::device::Queue::<M>::new(
+            self.clone(),
             queue,
             QueueInfo {
                 family_index: queue_info.queue_family_index,
@@ -206,7 +193,7 @@ impl LogicalDevice {
     }
 
     pub fn get_used_queue_families(&self) -> &[u32] {
-        assert!(self.inner.queue_families.len() > 0);
+        assert!(!self.inner.queue_families.is_empty());
         self.inner.queue_families.as_slice()
     }
 

@@ -2,8 +2,17 @@ use anyhow::Result;
 use std::ops::{Deref, DerefMut};
 /// Abstracts over multiple concurrency libraries
 
+/// Trait representing a guard that provides read-only access to protected data
+pub trait Guard<T: ?Sized>: Deref<Target = T> {}
+
+/// Trait representing a guard that provides mutable access to protected data
+pub trait MutableGuard<T: ?Sized>: Guard<T> + DerefMut<Target = T> {}
+
+impl<G, T: ?Sized> Guard<T> for G where G: Deref<Target = T> {}
+impl<G, T: ?Sized> MutableGuard<T> for G where G: Deref<Target = T> + DerefMut<Target = T> {}
+
 pub trait Lockable {
-    type Lock<'a>: Deref<Target = Self::Target> + DerefMut + 'a
+    type Lock<'a>: MutableGuard<Self::Target> + 'a
     where
         Self: 'a;
     type Target: ?Sized;
@@ -11,7 +20,7 @@ pub trait Lockable {
     fn new(t: Self::Target) -> Self;
 }
 
-#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TryLockError {
     #[error("Poison error")]
     PoisonError,

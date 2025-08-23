@@ -20,21 +20,6 @@ impl BoundingBox {
         }
     }
 
-    /// Checks if the bounds are correct on the bounding box
-    ///
-    /// Checks if min(low, upper) == low
-    pub fn is_bounds_correct(&self) -> bool {
-        self.min.min(self.max) == self.min
-    }
-
-    /// Correct the bounding box to the correct min and max extents
-    pub fn correct_bounding_box(&mut self) {
-        let min = self.min.min(self.max);
-        let max = self.max.max(self.min);
-        self.min = min;
-        self.max = max;
-    }
-
     /// Given a frustum + transformation of a model, check if it is within the bounds
     pub fn visible_in_frustum(&self, model_transform: glam::Mat4, view_proj: glam::Mat4) -> bool {
         let cube = [

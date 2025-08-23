@@ -1,20 +1,21 @@
+use crate::asset2::assets::BufferStreamInfo;
+use crate::asset2::prelude::AssetHandle;
 use crate::prelude as dare;
-use crate::prelude::render::util::GPUResourceTable;
 use crate::render2::c::CPushConstant;
-use crate::render2::render_assets::storage::asset_manager_system;
+use crate::render2::physical_resource;
+use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
+use crate::render2::prelude::util::TransferPool;
 use bevy_ecs::prelude::*;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
-use dagal::command::command_buffer::CmdBuffer;
 use dagal::command::CommandBufferState;
+use dagal::command::command_buffer::CmdBuffer;
 use dagal::pipelines::Pipeline;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
-use image::imageops::unsharpen;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-use tokio::task;
+use std::mem::size_of;
 
 /// Functions effectively as a collection
 struct SurfaceRender<'a> {
@@ -43,26 +44,34 @@ pub fn build_instancing_data(
             Option<&dare::engine::components::Material>,
             &dare::render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
-    textures: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-        dare::render::components::RenderImage<GPUAllocatorImpl>,
+    allocator: ArcAllocator<GPUAllocatorImpl>,
+    transfer_pool: TransferPool<GPUAllocatorImpl>,
+    textures: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
-    buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-        dare::render::components::RenderBuffer<GPUAllocatorImpl>,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+    buffers: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) -> (
     Vec<dare::engine::components::Surface>,
     Vec<dare::render::c::CSurface>,
     Vec<dare::render::c::CMaterial>,
     Vec<dare::render::c::InstancedSurfacesInfo>,
-    Vec<[f32; 16]>,
+    HashSet<VirtualResource>,
 ) {
+    let build_instancing_data_span = tracy_client::span!("build_instancing_data_span");
+    build_instancing_data_span.emit_value(query.iter().len() as u64);
     // Acquire a tightly packed map
     let mut surface_map: HashMap<dare::engine::components::Surface, Option<usize>> =
         HashMap::with_capacity(query.iter().len());
     let mut unique_surfaces: Vec<dare::render::c::CSurface> = Vec::new();
     let mut asset_unique_surfaces: Vec<dare::engine::components::Surface> = Vec::new();
+    // Collection of strong virtual handles
+    let mut used_resources: HashSet<VirtualResource> = HashSet::new();
 
     let mut material_map: HashMap<dare::engine::components::Material, usize> =
         HashMap::with_capacity(surface_map.len());
@@ -75,15 +84,162 @@ pub fn build_instancing_data(
         normal_texture_id: 0,
         normal_sampler_id: 0,
     }];
-    for (index, (entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+    for (_index, (_entity, surface, material, bounding_box, transform, name)) in
+        query.iter().enumerate()
+    {
         // check if it even exists in frame
         if !bounding_box.visible_in_frustum(transform.get_transform_matrix(), view_proj) {
             continue;
         }
         surface_map.entry((*surface).clone()).or_insert_with(|| {
             let id: usize = unique_surfaces.len();
+            // attempt a load of everything
+            //println!("Index: {:?}", &surface.index_buffer);
+            const BUFFER_LIFETIME: u32 = 64;
+            buffers.load_or_create_asset_handle(
+                surface.index_buffer.clone(),
+                BufferPrepareInfo {
+                    allocator: allocator.clone(),
+                    handle: surface.index_buffer.clone(),
+                    transfer_pool: transfer_pool.clone(),
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::INDEX_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                    location: MemoryLocation::GpuOnly,
+                    name: Some(format!("{}_index_buffer", name.0.clone())),
+                },
+                BufferStreamInfo {
+                    chunk_size: transfer_pool
+                        .cpu_staging_size()
+                        .min(transfer_pool.gpu_staging_size())
+                        as usize,
+                },
+                BUFFER_LIFETIME,
+            );
+            //println!("Vertex: {:?}", &surface.vertex_buffer.id());
+            buffers.load_or_create_asset_handle(
+                surface.vertex_buffer.clone(),
+                BufferPrepareInfo {
+                    allocator: allocator.clone(),
+                    handle: surface.vertex_buffer.clone(),
+                    transfer_pool: transfer_pool.clone(),
+                    usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::VERTEX_BUFFER
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                    location: MemoryLocation::GpuOnly,
+                    name: Some(format!("{}_vertex_buffer", name.0.clone())),
+                },
+                BufferStreamInfo {
+                    chunk_size: transfer_pool
+                        .cpu_staging_size()
+                        .min(transfer_pool.gpu_staging_size())
+                        as usize,
+                },
+                BUFFER_LIFETIME,
+            );
+            //println!("Normal: {:?}", &surface.normal_buffer);
+            if let Some(buffer) = surface.normal_buffer.as_ref() {
+                buffers.load_or_create_asset_handle(
+                    buffer.clone(),
+                    BufferPrepareInfo {
+                        allocator: allocator.clone(),
+                        handle: buffer.clone(),
+                        transfer_pool: transfer_pool.clone(),
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        location: MemoryLocation::GpuOnly,
+                        name: Some(format!("{}_normal_buffer", name.0.clone())),
+                    },
+                    BufferStreamInfo {
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
+                    },
+                    BUFFER_LIFETIME,
+                );
+            }
+            //println!("UV: {:?}", &surface.uv_buffer);
+            if let Some(buffer) = surface.uv_buffer.as_ref() {
+                buffers.load_or_create_asset_handle(
+                    buffer.clone(),
+                    BufferPrepareInfo {
+                        allocator: allocator.clone(),
+                        handle: buffer.clone(),
+                        transfer_pool: transfer_pool.clone(),
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        location: MemoryLocation::GpuOnly,
+                        name: Some(format!("{}_uv_buffer", name.0.clone())),
+                    },
+                    BufferStreamInfo {
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
+                    },
+                    BUFFER_LIFETIME,
+                );
+            }
+            if let Some(buffer) = surface.tangent_buffer.as_ref() {
+                buffers.load_or_create_asset_handle(
+                    buffer.clone(),
+                    BufferPrepareInfo {
+                        allocator: allocator.clone(),
+                        handle: buffer.clone(),
+                        transfer_pool: transfer_pool.clone(),
+                        usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                            | vk::BufferUsageFlags::TRANSFER_DST
+                            | vk::BufferUsageFlags::STORAGE_BUFFER
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        location: MemoryLocation::GpuOnly,
+                        name: Some(format!("{}_tangent_buffer", name.0.clone())),
+                    },
+                    BufferStreamInfo {
+                        chunk_size: transfer_pool
+                            .cpu_staging_size()
+                            .min(transfer_pool.gpu_staging_size())
+                            as usize,
+                    },
+                    BUFFER_LIFETIME,
+                );
+            }
+
+            let mut buffer_resolve =
+                |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
+                    // Optimized: Try direct resolution first
+                    if let Some(_buffer) = buffers.resolve_asset(virtual_resource) {
+                        // Get the virtual resource handle for tracking
+                        buffers
+                            .resolve_virtual_resource(virtual_resource)
+                            .and_then(|vr| vr.upgrade())
+                            .map(|vr| {
+                                used_resources.insert(vr.clone());
+                                vr
+                            })
+                    } else {
+                        None
+                    }
+                };
+
+            // Check if the required buffers can be resolved and upgrade them
+            buffer_resolve(&surface.index_buffer)?;
+            buffer_resolve(&surface.vertex_buffer)?;
+            if let Some(buffer) = surface.uv_buffer.as_ref() {
+                buffer_resolve(buffer)?;
+            }
+            if let Some(buffer) = surface.tangent_buffer.as_ref() {
+                buffer_resolve(buffer)?;
+            }
+
             if let Some(c_surface) =
-                dare::render::c::CSurface::from_surface(buffers, (*surface).clone())
+                dare::render::c::CSurface::from_surface(buffers, surface, transform, bounding_box)
             {
                 unique_surfaces.push(c_surface);
                 asset_unique_surfaces.push((*surface).clone());
@@ -103,7 +259,35 @@ pub fn build_instancing_data(
             .or_insert_with(|| {
                 let id: usize = unique_materials.len();
                 if let Some(material) = material.cloned() {
-                    match dare::render::c::CMaterial::from_material(textures, material) {
+                    material.albedo_texture.as_ref().map(|texture| {
+                        /*
+                        textures.load_or_create_asset_handle(
+                            texture.asset_handle.clone(),
+                            (
+                                allocator.clone(),
+                                texture.asset_handle.clone(),
+                                transfer_pool.clone(),
+                                Some(format!("{}_albedo_texture", name.0.clone())),
+                            ),
+                            (),
+                            128,
+                        );*/
+                        /*
+                        samplers.load_or_create(
+                            texture.sampler.clone(),
+                            (),
+                            (),
+                            128
+                        );
+                        */
+                    });
+
+                    match dare::render::c::CMaterial::from_material(
+                        allocator.clone(),
+                        transfer_pool.clone(),
+                        textures,
+                        material,
+                    ) {
                         None => 0,
                         Some(material) => {
                             unique_materials.push(material);
@@ -118,7 +302,9 @@ pub fn build_instancing_data(
 
     /// (surface_index, material_index) -> transforms
     let mut instance_groups: HashMap<(u64, u64), Vec<glam::Mat4>> = HashMap::new();
-    for (index, (entity, surface, material, bounding_box, transform)) in query.iter().enumerate() {
+    for (_index, (_entity, surface, material, _bounding_box, transform, name)) in
+        query.iter().enumerate()
+    {
         // ignore surfaces which failed to resolve
         if surface_map
             .get(surface)
@@ -137,54 +323,35 @@ pub fn build_instancing_data(
                     .map(|material| *material_map.get(material).unwrap() as u64)
                     .unwrap_or(0),
             ))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(transform.get_transform_matrix());
     }
 
     // turn all transformations into one global buffer
     let mut instancing_information: Vec<dare::render::c::InstancedSurfacesInfo> =
         Vec::with_capacity(instance_groups.len());
-    let mut transforms: Vec<[f32; 16]> = Vec::new();
     for ((surface, material), transformations) in instance_groups.iter() {
         instancing_information.push(dare::render::c::InstancedSurfacesInfo {
             surface: *surface,
             material: *material,
             instances: transformations.len() as u64,
-            transformation_offset: transforms.len() as u64,
         });
-        transforms.append(
-            &mut transformations
-                .iter()
-                .map(|transform| transform.transpose().to_cols_array())
-                .collect::<Vec<[f32; 16]>>(),
-        );
     }
-    // sanity check
-    for (instancing, (_, tfs)) in instancing_information.iter().zip(instance_groups.iter()) {
-        let start = instancing.transformation_offset as usize;
-        let end = instancing.transformation_offset as usize + instancing.instances as usize;
-        if transforms[start..end]
-            != tfs
-                .iter()
-                .map(|t| t.transpose().to_cols_array())
-                .collect::<Vec<[f32; 16]>>()
-        {
-            panic!("Not equivalent?");
-        }
-    }
-
+    drop(build_instancing_data_span);
     (
         asset_unique_surfaces,
         unique_surfaces,
         unique_materials,
         instancing_information,
-        transforms,
+        used_resources,
     )
 }
 
 pub async fn mesh_render(
     frame_number: usize,
-    render_context: super::render_context::RenderContext,
+    device_context: &crate::render2::contexts::DeviceContext,
+    graphics_context: &crate::render2::contexts::GraphicsContext,
+    transfer_context: &crate::render2::contexts::TransferContext,
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     surfaces: Query<
@@ -196,35 +363,49 @@ pub async fn mesh_render(
             Option<&dare::engine::components::Material>,
             &dare::render::components::BoundingBox,
             &dare::physics::components::Transform,
+            &dare::engine::components::Name,
         ),
     >,
-    textures: Res<
-        '_,
-        dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderImage<GPUAllocatorImpl>,
-        >,
+    mut textures: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
-    buffers: Res<
-        '_,
-        dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
-        >,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+    mut buffers: &mut physical_resource::PhysicalResourceStorage<
+        physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
 ) {
+    let mesh_render_span = tracy_client::span!("mesh_render");
     #[cfg(feature = "tracing")]
     tracing::trace!("Rendering meshes into {frame_number}");
     {
-        let cmd_recording = match &frame.command_buffer {
+        match &frame.command_buffer {
             CommandBufferState::Ready(_) => {
                 panic!("Mesh recording invalid cmd buffer state")
             }
             CommandBufferState::Recording(recording) => {
-                let (asset_surfaces, surfaces, materials, instancing_information, transforms) = {
+                // Culling step
+                let (
+                    asset_surfaces,
+                    surfaces,
+                    materials,
+                    instancing_information,
+                    used_virtual_resources,
+                ) = {
                     let view_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     ) * camera.get_view_matrix();
-                    build_instancing_data(view_proj, &surfaces, &textures, &buffers)
+                    build_instancing_data(
+                        view_proj,
+                        &surfaces,
+                        device_context.allocator.clone(),
+                        transfer_context.transfer_pool.clone(),
+                        textures,
+                        samplers,
+                        buffers,
+                    )
                 };
+                frame.resources.clear();
+                frame.resources = used_virtual_resources;
                 // check for empty surfaces, before going
                 if instancing_information.is_empty() {
                     #[cfg(feature = "tracing")]
@@ -243,20 +424,13 @@ pub async fn mesh_render(
                         first_instance: 0,
                     })
                     .collect();
-                // TODO: save handles for lifetime purposes
-                // we only need the instanced info
                 let mut instanced_surfaces_bytes_offset: Vec<u64> = vec![0];
                 // upload indirect calls
                 frame
                     .indirect_buffer
                     .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         indirect_calls.as_slice(),
-                        render_context
-                            .inner
-                            .window_context
-                            .present_queue
-                            .get_family_index(),
                     )
                     .await
                     .unwrap();
@@ -264,7 +438,7 @@ pub async fn mesh_render(
                 frame
                     .instanced_buffer
                     .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
+                        &transfer_context.immediate_submit,
                         instancing_information
                             .iter()
                             .flat_map(|instancing| {
@@ -277,85 +451,32 @@ pub async fn mesh_render(
                             })
                             .collect::<Vec<u8>>()
                             .as_slice(),
-                        render_context
-                            .inner
-                            .window_context
-                            .present_queue
-                            .get_family_index(),
                     )
                     .await
                     .unwrap();
-                // upload surface information
-                frame
-                    .surface_buffer
-                    .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
-                        surfaces
-                            .iter()
-                            .flat_map(|surface| bytemuck::bytes_of(surface))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
-                        render_context
-                            .inner
-                            .window_context
-                            .present_queue
-                            .get_family_index(),
-                    )
-                    .await
-                    .unwrap();
-                // upload material information
-                frame
-                    .material_buffer
-                    .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
-                        materials
-                            .iter()
-                            .flat_map(|material| bytemuck::bytes_of(material))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
-                        render_context
-                            .inner
-                            .window_context
-                            .present_queue
-                            .get_family_index(),
-                    )
-                    .await
-                    .unwrap();
-                // upload transform information
-                frame
-                    .transform_buffer
-                    .upload_to_buffer(
-                        &render_context.inner.immediate_submit,
-                        transforms
-                            .iter()
-                            .flat_map(|transform| bytemuck::bytes_of(transform))
-                            .copied()
-                            .collect::<Vec<u8>>()
-                            .as_slice(),
-                        render_context
-                            .inner
-                            .window_context
-                            .present_queue
-                            .get_family_index(),
-                    )
-                    .await
-                    .unwrap();
-                // finally, store asset handles
-                for surface in asset_surfaces.iter() {
-                    frame
-                        .resources
-                        .insert(surface.vertex_buffer.clone().into_untyped_handle());
-                    frame
-                        .resources
-                        .insert(surface.index_buffer.clone().into_untyped_handle());
-                    surface
-                        .normal_buffer
-                        .clone()
-                        .map(|b| frame.resources.insert(b.clone().into_untyped_handle()));
-                }
 
+                // upload surface information
+                let surface_slice = surfaces
+                    .iter()
+                    .flat_map(bytemuck::bytes_of)
+                    .copied()
+                    .collect::<Vec<u8>>();
+                let material_slice = materials
+                    .iter()
+                    .flat_map(bytemuck::bytes_of)
+                    .copied()
+                    .collect::<Vec<u8>>();
+                tokio::try_join!(
+                    frame.surface_buffer.upload_to_buffer(
+                        &transfer_context.immediate_submit,
+                        surface_slice.as_slice(),
+                    ),
+                    frame.material_buffer.upload_to_buffer(
+                        &transfer_context.immediate_submit,
+                        material_slice.as_slice(),
+                    ),
+                )
+                .unwrap();
                 // begin rendering
                 let dynamic_rendering = unsafe {
                     recording
@@ -383,8 +504,8 @@ pub async fn mesh_render(
                     max_depth: 1.0,
                 };
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_set_viewport(
-                        recording.handle(),
+                    device_context.device.get_handle().cmd_set_viewport(
+                        *recording.as_raw(),
                         0,
                         &[viewport],
                     );
@@ -398,8 +519,8 @@ pub async fn mesh_render(
                 };
 
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_set_scissor(
-                        recording.handle(),
+                    device_context.device.get_handle().cmd_set_scissor(
+                        *recording.as_raw(),
                         0,
                         &[scissor],
                     );
@@ -407,10 +528,10 @@ pub async fn mesh_render(
 
                 // bind pipeline
                 unsafe {
-                    render_context.inner.device.get_handle().cmd_bind_pipeline(
-                        recording.handle(),
+                    device_context.device.get_handle().cmd_bind_pipeline(
+                        *recording.as_raw(),
                         vk::PipelineBindPoint::GRAPHICS,
-                        render_context.inner.graphics_pipeline.handle(),
+                        graphics_context.graphics_pipeline.handle(),
                     );
                 }
                 let view_proj = {
@@ -418,28 +539,25 @@ pub async fn mesh_render(
                     let camera_proj = camera.get_projection(
                         frame.image_extent.width as f32 / frame.image_extent.height as f32,
                     );
-                    let view_proj = camera_proj * camera_view;
-                    view_proj
+                    camera_proj * camera_view
                 };
 
                 let mut push_constant = CPushConstant {
                     transform: view_proj.to_cols_array(),
                     instanced_surface_info: frame.instanced_buffer.get_buffer().address(),
                     surface_infos: frame.surface_buffer.get_buffer().address(),
-                    transforms: frame.transform_buffer.get_buffer().address(),
                     draw_id: 0,
                 };
                 for (index, instancing) in instancing_information.iter().enumerate() {
                     let surface_asset = &asset_surfaces[instancing.surface as usize];
                     let index_buffer = buffers
-                        .get_loaded_from_asset_handle(
-                            &asset_surfaces[instancing.surface as usize].index_buffer,
-                        )
+                        .resolve_asset(&asset_surfaces[instancing.surface as usize].index_buffer)
                         .unwrap();
                     // push new constants
                     push_constant.instanced_surface_info =
                         frame.instanced_buffer.get_buffer().address()
                             + instanced_surfaces_bytes_offset[index] as vk::DeviceAddress;
+                    //println!("Instanced surface offset: {:?} or {:?} or {:?}", instanced_surfaces_bytes_offset[index], instancing_information[index], surfaces[instancing_information[index].surface as usize]);
                     let draw_id: u32 = (surfaces[instancing.surface as usize].positions
                         % u32::MAX as u64)
                         .try_into()
@@ -450,9 +568,9 @@ pub async fn mesh_render(
                             &push_constant as *const CPushConstant as *const u8,
                             size_of::<CPushConstant>(),
                         );
-                        render_context.inner.device.get_handle().cmd_push_constants(
-                            recording.handle(),
-                            *render_context.inner.graphics_layout.as_raw(),
+                        device_context.device.get_handle().cmd_push_constants(
+                            *recording.as_raw(),
+                            *graphics_context.graphics_layout.as_raw(),
                             vk::ShaderStageFlags::VERTEX,
                             0,
                             bytes,
@@ -461,22 +579,17 @@ pub async fn mesh_render(
 
                     // indirect draw
                     unsafe {
-                        render_context
-                            .inner
-                            .device
-                            .get_handle()
-                            .cmd_bind_index_buffer(
-                                recording.handle(),
-                                *index_buffer.buffer.as_raw(),
-                                0,
-                                vk::IndexType::UINT32,
-                            );
-                        render_context
-                            .inner
+                        device_context.device.get_handle().cmd_bind_index_buffer(
+                            *recording.as_raw(),
+                            *index_buffer.as_raw(),
+                            0,
+                            vk::IndexType::UINT32,
+                        );
+                        device_context
                             .device
                             .get_handle()
                             .cmd_draw_indexed_indirect(
-                                recording.handle(),
+                                *recording.as_raw(),
                                 *frame.indirect_buffer.get_buffer().as_raw(),
                                 (index * size_of::<vk::DrawIndexedIndirectCommand>())
                                     as vk::DeviceSize,
@@ -490,6 +603,10 @@ pub async fn mesh_render(
             CommandBufferState::Executable(_) => {
                 panic!("Mesh recording invalid cmd buffer state")
             }
+            CommandBufferState::Invalid(invalid) => {
+                tracing::error!("Command buffer is in invalid state: {}", invalid.error());
+            }
         };
     }
+    drop(mesh_render_span);
 }

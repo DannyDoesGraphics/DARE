@@ -1,8 +1,6 @@
 use super::super::prelude as asset;
 use dare_containers::dashmap::DashMap;
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::hash::Hash;
+use std::any::Any;
 use std::sync::{Arc, Weak};
 
 /// Responsible for an individual asset's state

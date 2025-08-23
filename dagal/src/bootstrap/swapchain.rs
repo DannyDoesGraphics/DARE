@@ -32,7 +32,7 @@ use derivative::Derivative;
 ///         .add_physical_device_extension(ash::khr::swapchain::NAME.as_ptr())
 /// 	);
 ///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
-///     surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
+///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
 ///     let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface)
 /// 	.request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
 /// 	.request_image_format(vk::Format::R8G8B8A8_SRGB)
@@ -40,7 +40,7 @@ use derivative::Derivative;
 ///     .request_present_mode(vk::PresentModeKHR::FIFO) // If not, falls back to FIFO (Hence, FIFO)
 ///     .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
 ///     .query_extent_from_window(window)
-/// 	.build(test_vulkan.instance.get_instance(), test_vulkan.device.as_ref().unwrap().clone());///
+/// 	.build(test_vulkan.instance.get_instance(), test_vulkan.device.as_ref().unwrap().clone()).unwrap();
 ///     drop(swapchain);
 ///     drop(surface);
 ///     drop(test_vulkan);
@@ -48,18 +48,12 @@ use derivative::Derivative;
 /// ```
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct SwapchainBuilder {
-    surface: vk::SurfaceKHR,
-    surface_capabilities: vk::SurfaceCapabilitiesKHR,
+pub struct SwapchainBuilder<'a> {
+    surface_queried: &'a crate::wsi::SurfaceQueried,
 
-    image_formats: Vec<vk::Format>,
     preferred_image_formats: Vec<vk::Format>,
-
-    present_modes: Vec<vk::PresentModeKHR>,
     preferred_present_modes: Vec<vk::PresentModeKHR>,
-
     preferred_color_spaces: Vec<vk::ColorSpaceKHR>,
-    color_spaces: Vec<vk::ColorSpaceKHR>,
 
     family_indices: HashSet<u32>,
     image_usage: vk::ImageUsageFlags,
@@ -68,26 +62,14 @@ pub struct SwapchainBuilder {
     preferred_image_counts: u32,
 }
 
-impl SwapchainBuilder {
-    pub fn new(surface: &crate::wsi::SurfaceQueried) -> Self {
+impl<'a> SwapchainBuilder<'a> {
+    pub fn new(surface: &'a crate::wsi::SurfaceQueried) -> Self {
         Self {
-            surface: surface.handle(),
-            surface_capabilities: surface.get_capabilities(),
-            image_formats: surface
-                .get_formats()
-                .iter()
-                .map(|format| format.format)
-                .collect(),
+            surface_queried: surface,
             preferred_image_formats: Vec::new(),
-            present_modes: surface.get_present_modes().to_vec(),
             family_indices: HashSet::new(),
             image_usage: vk::ImageUsageFlags::empty(),
             image_extent: vk::Extent2D::default(),
-            color_spaces: surface
-                .get_formats()
-                .iter()
-                .map(|format| format.color_space)
-                .collect(),
             preferred_color_spaces: vec![],
             preferred_present_modes: vec![],
             preferred_image_counts: 0,
@@ -128,42 +110,44 @@ impl SwapchainBuilder {
 
     /// Clamps extent to the surface capabilities
     pub fn clamp_extent(&self, extent: &vk::Extent2D) -> vk::Extent2D {
+        let surface_capabilities = self.surface_queried.get_capabilities();
         vk::Extent2D {
             width: extent.width.clamp(
-                self.surface_capabilities.min_image_extent.width,
-                self.surface_capabilities.max_image_extent.width,
+                surface_capabilities.min_image_extent.width,
+                surface_capabilities.max_image_extent.width,
             ),
             height: extent.height.clamp(
-                self.surface_capabilities.min_image_extent.height,
-                self.surface_capabilities.max_image_extent.height,
+                surface_capabilities.min_image_extent.height,
+                surface_capabilities.max_image_extent.height,
             ),
         }
     }
 
     /// Set swapchain image extents
     pub fn set_extent(mut self, extent: vk::Extent2D) -> Self {
+        let surface_capabilities = self.surface_queried.get_capabilities();
         assert!(
-            self.surface_capabilities.min_image_extent.width <= extent.width,
+            surface_capabilities.min_image_extent.width <= extent.width,
             "{} <= {}",
-            self.surface_capabilities.min_image_extent.width,
+            surface_capabilities.min_image_extent.width,
             extent.width
         );
         assert!(
-            self.surface_capabilities.max_image_extent.width >= extent.width,
+            surface_capabilities.max_image_extent.width >= extent.width,
             "{} >= {}",
-            self.surface_capabilities.max_image_extent.width,
+            surface_capabilities.max_image_extent.width,
             extent.width
         );
         assert!(
-            self.surface_capabilities.min_image_extent.height <= extent.height,
+            surface_capabilities.min_image_extent.height <= extent.height,
             "{} <= {}",
-            self.surface_capabilities.min_image_extent.height,
+            surface_capabilities.min_image_extent.height,
             extent.height
         );
         assert!(
-            self.surface_capabilities.max_image_extent.height >= extent.height,
+            surface_capabilities.max_image_extent.height >= extent.height,
             "{} >= {}",
-            self.surface_capabilities.max_image_extent.height,
+            surface_capabilities.max_image_extent.height,
             extent.height
         );
         self.image_extent = extent;
@@ -172,14 +156,15 @@ impl SwapchainBuilder {
 
     /// Queries a window for it's width
     pub fn query_extent_from_window<T: crate::wsi::DagalWindow>(mut self, window: &T) -> Self {
+        let surface_capabilities = self.surface_queried.get_capabilities();
         self.image_extent = vk::Extent2D {
             width: window.width().clamp(
-                self.surface_capabilities.min_image_extent.width,
-                self.surface_capabilities.max_image_extent.width,
+                surface_capabilities.min_image_extent.width,
+                surface_capabilities.max_image_extent.width,
             ),
             height: window.height().clamp(
-                self.surface_capabilities.min_image_extent.height,
-                self.surface_capabilities.max_image_extent.height,
+                surface_capabilities.min_image_extent.height,
+                surface_capabilities.max_image_extent.height,
             ),
         };
         self
@@ -206,8 +191,9 @@ impl SwapchainBuilder {
     /// [`None`] and 0 represents using the minimum amount from [`VkSurfaceCapabilitiesKHR`](vk::SurfaceCapabilitiesKHR)
     pub fn min_image_count(mut self, preferred_count: Option<u32>) -> Self {
         if let Some(preferred_count) = preferred_count {
-            assert!(preferred_count >= self.surface_capabilities.min_image_count);
-            assert!(preferred_count <= self.surface_capabilities.max_image_count)
+            let surface_capabilities = self.surface_queried.get_capabilities();
+            assert!(preferred_count >= surface_capabilities.min_image_count);
+            assert!(preferred_count <= surface_capabilities.max_image_count)
         }
         self.preferred_image_counts = preferred_count.unwrap_or(0);
         self
@@ -220,24 +206,42 @@ impl SwapchainBuilder {
         device: crate::device::LogicalDevice,
     ) -> Result<crate::wsi::Swapchain> {
         let queue_family_indices: Vec<u32> = self.family_indices.iter().copied().collect();
+        let surface_capabilities = self.surface_queried.get_capabilities();
+
+        // Get available formats from surface
+        let available_formats: Vec<vk::Format> = self
+            .surface_queried
+            .get_formats()
+            .iter()
+            .map(|format| format.format)
+            .collect();
+
+        // Get available color spaces from surface
+        let available_color_spaces: Vec<vk::ColorSpaceKHR> = self
+            .surface_queried
+            .get_formats()
+            .iter()
+            .map(|format| format.color_space)
+            .collect();
+
         let swapchain_ci = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
             p_next: ptr::null(),
             flags: vk::SwapchainCreateFlagsKHR::empty(),
-            surface: self.surface,
+            surface: self.surface_queried.handle(),
             min_image_count: if self.preferred_image_counts == 0 {
-                self.surface_capabilities.min_image_count
+                surface_capabilities.min_image_count
             } else {
                 self.preferred_image_counts
             },
             image_format: Self::find_first_occurrence(
                 self.preferred_image_formats.as_slice(),
-                self.image_formats.as_slice(),
+                available_formats.as_slice(),
             )
             .unwrap(),
             image_color_space: Self::find_first_occurrence(
                 self.preferred_color_spaces.as_slice(),
-                self.color_spaces.as_slice(),
+                available_color_spaces.as_slice(),
             )
             .unwrap(),
             image_extent: self.image_extent,
@@ -254,11 +258,11 @@ impl SwapchainBuilder {
                 self.family_indices.len() as u32
             },
             p_queue_family_indices: queue_family_indices.as_ptr(),
-            pre_transform: self.surface_capabilities.current_transform,
+            pre_transform: surface_capabilities.current_transform,
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             present_mode: Self::find_first_occurrence(
                 self.preferred_present_modes.as_slice(),
-                self.present_modes.as_slice(),
+                self.surface_queried.get_present_modes(),
             )
             .unwrap(),
             clipped: vk::TRUE,

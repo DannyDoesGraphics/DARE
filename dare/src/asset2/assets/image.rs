@@ -1,14 +1,7 @@
 use super::super::prelude as asset;
-use crate::asset2::loaders::MetaDataStreamable;
 use crate::asset2::metadata_location::MetaDataLocation;
-use crate::prelude as dare;
-use crate::render2::util::{handle_cast_stream, ElementFormat};
-use bytemuck::Pod;
 use derivative::Derivative;
-use futures::{FutureExt, StreamExt, TryStreamExt};
-use futures_core::stream::BoxStream;
-use image::{EncodableLayout, GenericImageView};
-use std::sync::Arc;
+use image::EncodableLayout;
 
 pub struct Image {}
 impl asset::Asset for Image {
@@ -41,9 +34,9 @@ impl asset::AssetMetadata for ImageMetaData {}
 impl asset::loaders::MetaDataLoad for ImageMetaData {
     type Loaded = ImageAsset;
     type LoadInfo<'a>
+        = ()
     where
-        Self: 'a,
-    = ();
+        Self: 'a;
 
     async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
         let bytes: Vec<u8> = match &self.location {

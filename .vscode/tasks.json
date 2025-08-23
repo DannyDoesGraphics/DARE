@@ -1,0 +1,170 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "cargo test dare stride_stream",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--lib",
+				"stride_stream"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test dare all",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--tests",
+				"--",
+				"stride_stream"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo check dare",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check",
+				"-p",
+				"dare"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test dare stride_stream filter",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--",
+				"stride_stream"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test dare stride_stream filter",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--",
+				"stride_stream"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test dare stride_stream filter",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--",
+				"stride_stream"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test strided.rs tests",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--",
+				"physical_resource::streams::strided::tests",
+				"--show-output"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo test strided.rs tests again",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"-p",
+				"dare",
+				"--",
+				"physical_resource::streams::strided::tests",
+				"--show-output"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo check dare",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check",
+				"-p",
+				"dare"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo check dagal",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check",
+				"-p",
+				"dagal"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo check workspace",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check"
+			],
+			"group": "build"
+		},
+		{
+			"label": "cargo check dare",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check",
+				"-p",
+				"dare"
+			],
+			"group": "build"
+		}
+	]
+}

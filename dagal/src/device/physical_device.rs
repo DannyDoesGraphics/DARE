@@ -1,9 +1,8 @@
-use crate::bootstrap::app_info::{Expected, QueueRequest};
+use crate::bootstrap::app_info::Expected;
 use crate::device::QueueInfo;
 use crate::traits::AsRaw;
 use ash;
 use ash::vk;
-use std::cmp::Ordering;
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
@@ -22,34 +21,6 @@ pub struct PhysicalDevice {
 
     /// Queue families of the [`vk::PhysicalDevice`]
     available_queue_families: Vec<vk::QueueFamilyProperties>,
-}
-
-fn allocated_preferred_queues(
-    families_cap: &mut [u32],
-    family_infos: &[vk::QueueFamilyProperties2],
-    request: &QueueRequest,
-    needed: u32,
-) -> u32 {
-    let mut remaining = needed;
-
-    for (i, family) in family_infos.iter().enumerate() {
-        if remaining == 0 {
-            break;
-        }
-        if !request.contains_required(family) {
-            continue;
-        }
-
-        let available = families_cap[i];
-        let to_take = available.min(remaining);
-        if to_take > 0 {
-            families_cap[i] -= to_take;
-            remaining -= to_take;
-        }
-    }
-
-    let allocated = needed - remaining;
-    allocated
 }
 
 impl PhysicalDevice {
@@ -106,10 +77,10 @@ impl PhysicalDevice {
     }
 
     /// Selects the most suitable device
-    pub fn select<Window: crate::wsi::DagalWindow>(
+    pub fn select(
         instance: &crate::core::Instance,
         surface: Option<&crate::wsi::Surface>,
-        mut settings: crate::bootstrap::app_info::AppSettings<Window>,
+        settings: crate::bootstrap::app_info::AppSettings,
     ) -> anyhow::Result<Self> {
         use std::ffi::c_void;
 
@@ -129,7 +100,7 @@ impl PhysicalDevice {
         }
 
         let suitable_device: Option<PhysicalDeviceInfo> = unsafe {
-            /// Find all physical devices
+            // Find all physical devices
             let physical_devices: Vec<PhysicalDeviceInfo> = instance
                 .enumerate_physical_devices()?
                 .into_iter()
@@ -256,6 +227,20 @@ impl PhysicalDevice {
                                     continue;
                                 }
                                 if family_capacity[fam_idx] >= needed {
+                                    // Check if this queue family supports presentation to the surface
+                                    let can_present = if let Some(surface) = surface {
+                                        surface
+                                            .get_extension()
+                                            .get_physical_device_surface_support(
+                                                pd.physical_device,
+                                                fam_idx as u32,
+                                                surface.handle(),
+                                            )
+                                            .unwrap_or(false)
+                                    } else {
+                                        false
+                                    };
+
                                     // Allocate [0..needed) from this family's next offset
                                     let start_offset = family_offsets[fam_idx];
                                     for i in 0..needed {
@@ -267,7 +252,7 @@ impl PhysicalDevice {
                                             queue_flags: fam_props
                                                 .queue_family_properties
                                                 .queue_flags,
-                                            can_present: false,
+                                            can_present,
                                         });
                                     }
                                     family_offsets[fam_idx] += needed;
@@ -309,6 +294,21 @@ impl PhysicalDevice {
                                     continue;
                                 }
                                 let to_take = available.min(remaining);
+
+                                // Check if this queue family supports presentation to the surface
+                                let can_present = if let Some(surface) = surface {
+                                    surface
+                                        .get_extension()
+                                        .get_physical_device_surface_support(
+                                            pd.physical_device,
+                                            fam_idx as u32,
+                                            surface.handle(),
+                                        )
+                                        .unwrap_or(false)
+                                } else {
+                                    false
+                                };
+
                                 // Allocate these `to_take` queues
                                 let start_offset = family_offsets[fam_idx];
                                 for i in 0..to_take {
@@ -318,7 +318,7 @@ impl PhysicalDevice {
                                         index: queue_index,
                                         strict: queue_req.strict,
                                         queue_flags: fam_props.queue_family_properties.queue_flags,
-                                        can_present: false,
+                                        can_present,
                                     });
                                 }
                                 family_offsets[fam_idx] += to_take;

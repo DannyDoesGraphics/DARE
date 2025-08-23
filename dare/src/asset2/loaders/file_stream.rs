@@ -67,7 +67,7 @@ impl<'a> DerefMut for FileStream<'a> {
     }
 }
 
-impl<'a> futures_core::Stream for FileStream<'a> {
+impl<'a> futures::Stream for FileStream<'a> {
     type Item = Result<Vec<u8>, std::io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

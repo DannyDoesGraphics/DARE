@@ -1,9 +1,9 @@
+use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;
-
-use crate::traits::{AsRaw, Destructible};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -77,7 +77,7 @@ impl Surface {
     ///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
     ///     assert!(surface.get_capabilities().min_image_count > 0);
     ///     assert!(surface.get_formats().len() > 0);
-    ///     assert!(surface.get_present_modes().as_ref().unwrap().len() > 0);
+    ///     assert!(surface.get_present_modes().len() > 0);
     ///     drop(surface);
     /// }).run();
     /// ```
@@ -97,8 +97,8 @@ impl Surface {
     pub fn new_with_handles(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        display_handle: raw_window_handle::RawDisplayHandle,
-        window_handle: raw_window_handle::RawWindowHandle,
+        display_handle: RawDisplayHandle,
+        window_handle: RawWindowHandle,
     ) -> Result<Self> {
         let ext = ash::khr::surface::Instance::new(entry, instance);
         let handle = unsafe {

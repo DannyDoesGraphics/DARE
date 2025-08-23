@@ -2,17 +2,17 @@ use anyhow::Result;
 
 use crate::error::ContainerErrors;
 use crate::prelude::{SlotUnion, SlotUnionMut};
-use crate::slot::Slot;
+use crate::slot::{DefaultSlot, Slot};
 use crate::traits::Container;
 
 #[derive(Debug)]
 pub struct FreeList<T: 'static> {
     data: Vec<Option<T>>,
-    free_list: Vec<Slot<T>>,
+    free_list: Vec<DefaultSlot<T>>,
 }
 
 impl<T: 'static> Container<T> for FreeList<T> {
-    type Slot = Slot<T>;
+    type Slot = DefaultSlot<T>;
 
     fn new() -> Self {
         Self {
@@ -21,13 +21,25 @@ impl<T: 'static> Container<T> for FreeList<T> {
         }
     }
 
-    fn insert(&mut self, element: T) -> Slot<T> {
-        let next_free_slot = self.free_list.pop().unwrap_or_else(|| {
-            self.data.push(None);
-            Slot::new(self.data.len() as u64, 0)
-        });
-        self.data.push(Some(element));
-        next_free_slot
+    fn insert(&mut self, element: T) -> DefaultSlot<T> {
+        if let Some(free_slot) = self.free_list.pop() {
+            // Reuse an existing freed slot
+            let index = free_slot.id() as usize;
+            if let Some(slot_ref) = self.data.get_mut(index) {
+                *slot_ref = Some(element);
+                free_slot
+            } else {
+                // Free slot index is invalid, fall back to growing
+                let new_index = self.data.len();
+                self.data.push(Some(element));
+                DefaultSlot::new(new_index as u64, 0)
+            }
+        } else {
+            // No free slots available, grow the data vector
+            let new_index = self.data.len();
+            self.data.push(Some(element));
+            DefaultSlot::new(new_index as u64, 0)
+        }
     }
 
     fn is_valid(&self, slot: &Self::Slot) -> bool {
@@ -35,10 +47,18 @@ impl<T: 'static> Container<T> for FreeList<T> {
     }
 
     fn remove(&mut self, slot: Self::Slot) -> Result<T> {
-        self.free_list.push(slot.clone());
-        self.data
-            .remove(slot.id() as usize)
-            .ok_or(anyhow::Error::from(ContainerErrors::NonexistentSlot))
+        let index = slot.id() as usize;
+        if let Some(slot_ref) = self.data.get_mut(index) {
+            if let Some(element) = slot_ref.take() {
+                // Mark this slot as free for reuse
+                self.free_list.push(slot);
+                Ok(element)
+            } else {
+                Err(anyhow::Error::from(ContainerErrors::NonexistentSlot))
+            }
+        } else {
+            Err(anyhow::Error::from(ContainerErrors::NonexistentSlot))
+        }
     }
 
     fn total_data_len(&self) -> usize {
@@ -71,7 +91,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
 
     fn iter(&self) -> impl Iterator<Item = SlotUnion<T>> {
         self.data.iter().enumerate().map(|(index, data)| SlotUnion {
-            slot: Slot::new(index as u64, 0),
+            slot: DefaultSlot::new(index as u64, 0),
             data: data.as_ref(),
         })
     }
@@ -81,7 +101,7 @@ impl<T: 'static> Container<T> for FreeList<T> {
             .iter_mut()
             .enumerate()
             .map(|(index, data)| SlotUnionMut {
-                slot: Slot::new(index as u64, 0),
+                slot: DefaultSlot::new(index as u64, 0),
                 data: data.as_mut(),
             })
     }

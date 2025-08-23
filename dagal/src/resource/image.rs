@@ -6,7 +6,6 @@ use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;
-use ash::prelude::VkResult;
 use ash::vk;
 use ash::vk::Handle;
 use derivative::Derivative;
@@ -20,7 +19,6 @@ pub struct Image<A: Allocator> {
     mip_levels: u32,
     /// Queue families for concurrent access only
     concurrent_queue_families: Option<Box<[u32]>>,
-    layout: vk::ImageLayout,
     usage_flags: vk::ImageUsageFlags,
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
@@ -153,7 +151,7 @@ impl<A: Allocator> Image<A> {
         unsafe {
             cmd.get_device()
                 .get_handle()
-                .cmd_pipeline_barrier2(cmd.handle(), &dependency_info);
+                .cmd_pipeline_barrier2(*cmd.as_raw(), &dependency_info);
         }
     }
 
@@ -208,7 +206,7 @@ impl<A: Allocator> Image<A> {
         unsafe {
             self.device
                 .get_handle()
-                .cmd_blit_image2(cmd.handle(), &blint_info);
+                .cmd_blit_image2(*cmd.as_raw(), &blint_info);
         }
     }
 
@@ -246,7 +244,7 @@ impl<A: Allocator> Image<A> {
                     _marker: Default::default(),
                 }
             },
-            name: None,
+            name: Some(String::from("Full Image CI")),
         })
     }
 }
@@ -275,7 +273,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// use dagal::resource::traits::Resource;
     /// use dagal::util::tests::TestSettings;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewUnallocated {
+    /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewUnallocated {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     image_ci:vk::ImageCreateInfo {
     ///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -294,8 +292,8 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///         tiling: vk::ImageTiling::LINEAR,
     ///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
     ///         sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///         queue_family_index_count: 1,
-    ///         p_queue_family_indices: &test_vulkan.compute_queue.as_ref().unwrap().get_family_index(),
+    ///         queue_family_index_count: 0,
+    ///         p_queue_family_indices: std::ptr::null(),
     ///         initial_layout: vk::ImageLayout::UNDEFINED,
     ///         _marker: Default::default(),
     ///     },
@@ -316,19 +314,12 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///     instance: test_vulkan.instance.get_instance().clone(),
     ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
     ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
-    ///     debug_settings: gpu_allocator::AllocatorDebugSettings {
-    ///         log_memory_information: false,
-    ///             log_leaks_on_shutdown: true,
-    ///             store_stack_traces: false,
-    ///             log_allocations: false,
-    ///             log_frees: false,
-    ///             log_stack_traces: false,
-    ///         },
-    ///         buffer_device_address: false,
-    ///         allocation_sizes: Default::default(),
-    ///  }).unwrap();
+    ///     debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
+    ///     buffer_device_address: false,
+    ///     allocation_sizes: Default::default(),
+    ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
     /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
-    /// let image: dagal::resource::Image = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
+    /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     image_ci: vk::ImageCreateInfo {
     ///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
@@ -347,8 +338,8 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///         tiling: vk::ImageTiling::LINEAR,
     ///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
     ///         sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///         queue_family_index_count: 1,
-    ///         p_queue_family_indices: &test_vulkan.compute_queue.as_ref().unwrap().get_family_index(),
+    ///         queue_family_index_count: 0,
+    ///         p_queue_family_indices: std::ptr::null(),
     ///         initial_layout: vk::ImageLayout::UNDEFINED,
     ///         _marker: Default::default(),
     ///     },
@@ -380,7 +371,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format,
                     extent,
                     mip_levels,
-                    layout,
                     usage_flags,
                     image_type,
                     allocation: None,
@@ -404,7 +394,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     format: image_ci.format,
                     extent: image_ci.extent,
                     mip_levels: image_ci.mip_levels,
-                    layout: image_ci.initial_layout,
                     usage_flags: image_ci.usage,
                     image_type: image_ci.image_type,
                     device,
@@ -449,8 +438,11 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                         .get_handle()
                         .get_image_memory_requirements(image.handle)
                 };
-                let allocation =
-                    allocator.allocate(name.unwrap_or(""), &memory_requirements, location)?;
+                let allocation = allocator.allocate(
+                    name.unwrap_or("IMAGE ALLOCATION"),
+                    &memory_requirements,
+                    location,
+                )?;
                 unsafe {
                     image.device.get_handle().bind_image_memory(
                         image.handle,

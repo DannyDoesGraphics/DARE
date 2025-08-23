@@ -11,6 +11,5 @@ pub mod buffer;
 pub mod image_view;
 pub mod sampler;
 mod test;
+mod texture;
 pub mod traits;
-pub mod virtual_resources;
-pub use virtual_resources::*;

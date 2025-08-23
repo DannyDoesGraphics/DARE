@@ -8,7 +8,6 @@ use std::ptr::NonNull;
 use std::{mem, ptr};
 
 use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
-use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 
@@ -46,6 +45,15 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         allocator: &'a mut ArcAllocator<A>,
         size: vk::DeviceSize,
         memory_type: crate::allocators::MemoryLocation,
+        usage_flags: vk::BufferUsageFlags,
+    },
+    /// Create a buffer with an existing memory allocation
+    NewBufferWithAllocation {
+        device: crate::device::LogicalDevice,
+        name: Option<String>,
+        allocator: &'a mut ArcAllocator<A>,
+        size: vk::DeviceSize,
+        allocation: ArcAllocation<A>,
         usage_flags: vk::BufferUsageFlags,
     },
 }
@@ -98,7 +106,7 @@ impl<A: Allocator> Buffer<A> {
             unsafe {
                 let data_ptr = data.as_ptr() as *const _ as *const c_void;
                 let mapped_ptr = mapped_ptr.as_ptr().add(offset_bytes as usize);
-                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, mem::size_of_val(data));
+                ptr::copy_nonoverlapping(data_ptr, mapped_ptr, size_of_val(data));
             }
             Ok(())
         } else {
@@ -216,6 +224,7 @@ impl<A: Allocator> Resource for Buffer<A> {
 
                 Ok(buffer)
             }
+            _ => unimplemented!(),
         }
     }
     fn get_device(&self) -> &crate::device::LogicalDevice {

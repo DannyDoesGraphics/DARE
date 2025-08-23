@@ -4,7 +4,8 @@ use crate::DagalError::PoisonError;
 use std::sync::Mutex;
 
 impl<T> Lockable for std::sync::Mutex<T> {
-    type Lock<'a> = std::sync::MutexGuard<'a, T>
+    type Lock<'a>
+        = std::sync::MutexGuard<'a, T>
     where
         T: 'a;
     type Target = T;
@@ -29,7 +30,8 @@ impl<T> SyncLockable for std::sync::Mutex<T> {
 
 #[cfg(feature = "tokio")]
 impl<T> Lockable for tokio::sync::Mutex<T> {
-    type Lock<'a> = tokio::sync::MutexGuard<'a, Self::Target>
+    type Lock<'a>
+        = tokio::sync::MutexGuard<'a, Self::Target>
     where
         T: 'a;
     type Target = T;

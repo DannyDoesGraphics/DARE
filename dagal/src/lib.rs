@@ -13,8 +13,8 @@ pub mod wsi;
 
 pub mod concurrency;
 pub mod descriptor;
-mod graph;
 pub mod pipelines;
+pub mod render_graph;
 pub mod shader;
 pub mod traits;
 
@@ -29,7 +29,4 @@ pub use vk_mem;
 pub use winit;
 pub use {ash, ash_window, raw_window_handle};
 
-#[cfg(all(feature = "gpu-allocator", not(feature = "vk-mem-rs")))]
-type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
-#[cfg(all(feature = "vk-mem-rs", not(feature = "gpu-allocator")))]
-type DEFAULT_ALLOCATOR = allocators::GpuAllocation;
+pub type DefaultAllocator = allocators::GPUAllocatorImpl;

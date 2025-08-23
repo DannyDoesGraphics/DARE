@@ -1,5 +1,5 @@
 use crate::prelude as dare;
-use crate::render2::surface_context::SurfaceContext;
+use crate::render2::contexts::SurfaceContext;
 use anyhow::Result;
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -8,7 +8,6 @@ use dagal::traits::AsRaw;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
-use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Contains all information necessary to render current frame
 #[derive(Debug)]
@@ -24,8 +23,8 @@ pub struct Frame {
     pub queue: dagal::device::Queue,
     pub image_extent: vk::Extent2D,
 
-    /// any resources binded for the current frame
-    pub resources: HashSet<dare::asset2::AssetHandleUntyped>,
+    /// any resources bound for the current frame
+    pub resources: HashSet<dare::render::physical_resource::VirtualResource>,
     /// any material buffers
     pub material_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold indirect commands
@@ -33,12 +32,12 @@ pub struct Frame {
     /// Buffer used to hold instanced information
     pub instanced_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// Buffer used to hold surface information
-    pub surface_buffer:
-        dare::render::resources::surface_buffer::RenderSurfaceBuffer<GPUAllocatorImpl>,
-    /// Contains buffer for transformation
-    pub transform_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
+    pub surface_buffer: dare::render::util::GrowableBuffer<GPUAllocatorImpl>,
     /// staging buffers used
     pub staging_buffers: Vec<dagal::resource::Buffer<GPUAllocatorImpl>>,
+    /// Surface information buffer
+    pub surface_buffer_2:
+        dare::render::util::PersistentBuffer<GPUAllocatorImpl, dare::render::c::CSurface>,
 
     // cmd buffers
     pub command_pool: dagal::command::CommandPool,
@@ -178,11 +177,12 @@ impl Frame {
             vk::FenceCreateFlags::SIGNALED,
         )?;
         // make pools and buffers
-        let command_pool = dagal::command::CommandPool::new(
-            allocator.device(),
-            present_queue,
-            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-        )?;
+        let command_pool =
+            dagal::command::CommandPool::new(dagal::command::CommandPoolCreateInfo::WithQueue {
+                device: allocator.device(),
+                queue: present_queue,
+                flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            })?;
         let command_buffer =
             dagal::command::CommandBufferState::from(command_pool.allocate(1)?.pop().unwrap());
         Ok(Frame {
@@ -197,7 +197,7 @@ impl Frame {
             image_extent: surface_context.image_extent,
 
             resources: HashSet::default(),
-            material_buffer: dare::render::util::GrowableBuffer::new(
+            material_buffer: dare::render::util::GrowableBuffer::with_config(
                 dagal::resource::buffer::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
@@ -212,16 +212,23 @@ impl Frame {
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 },
+                dare::render::util::GrowableBufferConfig {
+                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(2.0),
+                    min_size: size_of::<crate::render2::c::CMaterial>() as u64 * 64,
+                    alignment: 256,
+                    enable_staging_pool: false,
+                    ..Default::default()
+                },
             )?,
-            indirect_buffer: dare::render::util::GrowableBuffer::new(
+            indirect_buffer: dare::render::util::GrowableBuffer::with_config(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
-                        "Indirect buffer for frame {}",
+                        "VkDrawIndexedIndirectCommand[] | Frame {}",
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,
-                    size: 128_000,
+                    size: size_of::<vk::DrawIndexedIndirectCommand>() as u64 * 256, // More reasonable initial size
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::TRANSFER_DST
                         | vk::BufferUsageFlags::TRANSFER_SRC
@@ -229,8 +236,15 @@ impl Frame {
                         | vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
+                dare::render::util::GrowableBufferConfig {
+                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                    min_size: size_of::<vk::DrawIndexedIndirectCommand>() as u64 * 256,
+                    alignment: 16, // Smaller alignment for indirect commands
+                    enable_staging_pool: false,
+                    ..Default::default()
+                },
             )?,
-            instanced_buffer: dare::render::util::GrowableBuffer::new(
+            instanced_buffer: dare::render::util::GrowableBuffer::with_config(
                 dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                     device: surface_context.allocator.device(),
                     name: Some(String::from(format!(
@@ -238,7 +252,7 @@ impl Frame {
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,
-                    size: 128_000,
+                    size: 4096, // Start smaller for instanced data
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
                         | vk::BufferUsageFlags::TRANSFER_SRC
@@ -246,17 +260,49 @@ impl Frame {
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
+                dare::render::util::GrowableBufferConfig {
+                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(2.0),
+                    min_size: 4096,
+                    alignment: 64, // Good for instance data
+                    enable_staging_pool: false,
+                    ..Default::default()
+                },
             )?,
-            surface_buffer: dare::render::resources::RenderSurfaceBuffer::new(
-                dare::render::util::GrowableBuffer::new(
+            surface_buffer: dare::render::util::GrowableBuffer::with_config(
+                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+                    device: surface_context.allocator.device(),
+                    name: Some(format!(
+                        "Render surface buffer for buffer {}",
+                        image_number.as_ref().unwrap_or(&0)
+                    )),
+                    allocator: &mut allocator,
+                    size: 8192, // Start reasonable for surface data
+                    memory_type: MemoryLocation::GpuOnly,
+                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
+                        | vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::TRANSFER_SRC
+                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+                        | vk::BufferUsageFlags::VERTEX_BUFFER,
+                },
+                dare::render::util::GrowableBufferConfig {
+                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                    min_size: 8192,
+                    alignment: 256,
+                    enable_staging_pool: false,
+                    ..Default::default()
+                },
+            )?,
+            staging_buffers: Vec::new(),
+            surface_buffer_2: dare::render::util::PersistentBuffer::new(
+                dare::render::util::GrowableBuffer::with_config(
                     dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                         device: surface_context.allocator.device(),
-                        name: Some(String::from(format!(
-                            "Render surface buffer for buffer {}",
+                        name: Some(format!(
+                            "Render surface persistent buffer | Frame {}",
                             image_number.as_ref().unwrap_or(&0)
-                        ))),
+                        )),
                         allocator: &mut allocator,
-                        size: 128_000,
+                        size: 8192, // Start reasonable for surface data
                         memory_type: MemoryLocation::GpuOnly,
                         usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
                             | vk::BufferUsageFlags::TRANSFER_DST
@@ -264,35 +310,18 @@ impl Frame {
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
                             | vk::BufferUsageFlags::VERTEX_BUFFER,
                     },
+                    dare::render::util::GrowableBufferConfig {
+                        growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                        min_size: 8192,
+                        alignment: 256,
+                        enable_staging_pool: false,
+                        ..Default::default()
+                    },
                 )?,
             ),
-            transform_buffer: dare::render::util::GrowableBuffer::new(
-                dagal::resource::BufferCreateInfo::NewEmptyBuffer {
-                    device: surface_context.allocator.device(),
-                    name: Some(String::from(format!(
-                        "Transform buffer for frame {}",
-                        image_number.as_ref().unwrap_or(&0)
-                    ))),
-                    allocator: &mut allocator,
-                    size: 128_000,
-                    memory_type: MemoryLocation::GpuOnly,
-                    usage_flags: vk::BufferUsageFlags::STORAGE_BUFFER
-                        | vk::BufferUsageFlags::TRANSFER_DST
-                        | vk::BufferUsageFlags::TRANSFER_SRC
-                        | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                        | vk::BufferUsageFlags::VERTEX_BUFFER,
-                },
-            )?,
-            staging_buffers: Vec::new(),
             command_pool,
             command_buffer,
         })
-    }
-
-    /// Wait until the frame can be rendered into again
-    pub async fn await_render(&self) -> Result<()> {
-        //self.render_semaphore.clone().await;
-        Ok(())
     }
 }
 

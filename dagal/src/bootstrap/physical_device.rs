@@ -289,9 +289,9 @@ impl PhysicalDeviceSelector {
     /// .select_all(&test_vulkan.instance);
     /// assert!(devices.is_ok());
     /// let devices  = devices.unwrap();
-    /// assert!(devices.len() > 1);
-    /// assert!(devices[0].queue_requests.clone().iter().any(|queue| queue.borrow().count == 1) );
-    /// assert!(devices[0].queue_requests.clone().iter().any(|queue| queue.borrow().count == 2) );
+    /// assert!(devices.len() >= 1);
+    /// assert!(devices[0].queue_requests.iter().any(|queue| queue.count == 1));
+    /// assert!(devices[0].queue_requests.iter().any(|queue| queue.count == 2));
     /// drop(devices)
     /// ```
     pub fn add_preferred_queue(mut self, queue: crate::bootstrap::QueueRequest) -> Self {

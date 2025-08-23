@@ -6,13 +6,13 @@ use std::task::{Context, Poll};
 ///
 /// This is cancellation safe so long as the input stream is as well
 pub struct Framer<'a, T: AsRef<[u8]>> {
-    stream: futures_core::stream::BoxStream<'a, T>,
+    stream: futures::stream::BoxStream<'a, T>,
     frame_size: usize,
     buffer: Vec<u8>,
 }
 impl<'a, T: AsRef<[u8]>> Unpin for Framer<'a, T> {}
 impl<'a, T: AsRef<[u8]>> Framer<'a, T> {
-    pub fn new(stream: futures_core::stream::BoxStream<'a, T>, frame_size: usize) -> Self {
+    pub fn new(stream: futures::stream::BoxStream<'a, T>, frame_size: usize) -> Self {
         Self {
             stream,
             frame_size,
@@ -37,7 +37,7 @@ impl<'a, T: AsRef<[u8]>> Framer<'a, T> {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> futures_core::stream::Stream for Framer<'a, T> {
+impl<'a, T: AsRef<[u8]>> futures::stream::Stream for Framer<'a, T> {
     type Item = Vec<u8>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -87,7 +87,7 @@ impl<'a, T: AsRef<[u8]>> futures_core::stream::Stream for Framer<'a, T> {
 mod tests {
     use super::*;
     use futures::executor::block_on;
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use std::pin::Pin;
     use std::task::{Context, Poll, Waker};
 

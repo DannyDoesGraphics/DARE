@@ -1,15 +1,11 @@
 use crate::prelude as dare;
 use crate::prelude::engine;
-use crate::prelude::render::RenderServerAssetRelationDelta;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use dare::asset2 as asset;
 use gltf;
-use gltf::accessor::DataType;
 use gltf::texture::{MagFilter, MinFilter};
 use std::collections::VecDeque;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// This is similar to [`gltf::Semantic`], but includes the Index

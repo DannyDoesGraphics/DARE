@@ -1,6 +1,6 @@
 use crate::render2::util::WrappingMode::MirrorClampToEdge;
 use dagal::ash::vk;
-use futures_core::stream::BoxStream;
+use futures::stream::BoxStream;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Format {
@@ -24,6 +24,7 @@ impl Format {
         self.dimension
     }
 
+    /// Total size accounting for element size * dimensions
     pub fn size(&self) -> usize {
         self.element_format.size() * self.dimension
     }
@@ -49,6 +50,7 @@ pub enum ElementFormat {
 }
 
 impl ElementFormat {
+    /// Size of a single element
     pub fn size(&self) -> usize {
         match &self {
             ElementFormat::U8 => 1,

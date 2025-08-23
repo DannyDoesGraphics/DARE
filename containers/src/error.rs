@@ -6,4 +6,6 @@ pub enum ContainerErrors {
     NonexistentSlot,
     #[error("Slot generation mismatch")]
     GenerationMismatch,
+    #[error("Duplicate value not allowed")]
+    DuplicateValue,
 }

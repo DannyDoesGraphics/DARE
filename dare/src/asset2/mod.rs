@@ -1,4 +1,3 @@
-use bevy_ecs::prelude::*;
 mod asset_id;
 mod asset_state;
 pub mod assets;
@@ -11,8 +10,3 @@ pub mod prelude;
 /// Describes how components are handled on the engine side
 pub mod server;
 pub mod traits;
-
-#[derive(Resource)]
-pub struct AssetServer {
-    pub servers: dare_containers::erased_storage::FlashMapErasedStorage,
-}

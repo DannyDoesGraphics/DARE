@@ -1,14 +1,9 @@
-use super::*;
-use anyhow::Result;
-use futures::stream::{self, StreamExt};
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::asset2::loaders::StrideStreamBuilder;
     use anyhow::Result;
     use futures::stream::{self, StreamExt};
-    use rand::Rng;
-    use tokio::task;
+    use rand::RngCore;
 
     // Test when element_size equals element_stride (no stride)
     #[tokio::test]
@@ -222,7 +217,7 @@ mod tests {
 
         for _ in 0..element_count {
             // Generate an element of random bytes
-            let element: Vec<u8> = (0..element_size).map(|_| rng.gen()).collect();
+            let element: Vec<u8> = (0..element_size).map(|_| rng.next_u32() as u8).collect();
             input_data.extend_from_slice(&element);
 
             // Add padding/stride bytes (could be random or zeros)

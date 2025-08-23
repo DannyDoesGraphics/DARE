@@ -23,10 +23,10 @@ impl Default for Camera {
             fov: 70.0,
             near: 0.1,
             far: 1000.0,
-            position: Default::default(),
+            position: glam::Vec3::new(0.0, 4.0, 0.0),
             velocity: Default::default(),
             pitch: 0.0,
-            yaw: 0.0,
+            yaw: 75_f32.to_radians(),
             speed: 1.0,
             now_rotating: false,
         }
@@ -152,7 +152,7 @@ impl Camera {
 
 pub fn camera_system(
     mut camera: becs::ResMut<'_, Camera>,
-    mut input: becs::ResMut<'_, dare::util::event::EventReceiver<dare::winit::input::Input>>,
+    mut input: becs::ResMut<'_, dare::util::event::EventReceiver<dare::window::input::Input>>,
     dt: becs::ResMut<dare::render::systems::delta_time::DeltaTime>,
 ) {
     let dt = dt.get_delta();

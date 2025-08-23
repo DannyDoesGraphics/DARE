@@ -3,9 +3,10 @@ pub mod indirect_buffers;
 pub use indirect_buffers::*;
 
 use crate::prelude as dare;
+use crate::render2::physical_resource;
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
 
 bitflags! {
@@ -21,9 +22,12 @@ bitflags! {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CSurface {
+    pub transform: [f32; 16],
+    pub min: [f32; 3],
+    pub max: [f32; 3],
     pub material: u64,
     pub bit_flag: u32,
-    pub _padding: u32,
+    pub index_count: u32,
     pub positions: u64,
     pub indices: u64,
     pub normals: u64,
@@ -48,29 +52,72 @@ impl Hash for CSurface {
 
 impl CSurface {
     pub fn from_surface(
-        buffers: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderBuffer<GPUAllocatorImpl>,
+        buffers: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
         >,
-        surface: dare::engine::components::Surface,
+        surface: &dare::engine::components::Surface,
+        transform: &dare::physics::components::Transform,
+        bounding_box: &dare::render::components::BoundingBox,
     ) -> Option<Self> {
+        let positions = buffers.get_bda(&surface.vertex_buffer)?;
+        let indices = buffers.get_bda(&surface.index_buffer)?;
         Some(Self {
+            transform: transform.get_transform_matrix().transpose().to_cols_array(),
+            min: bounding_box.min.to_array(),
+            max: bounding_box.max.to_array(),
             material: 1,
             bit_flag: 2,
-            _padding: 0,
-            positions: buffers.get_bda_from_asset_handle(&surface.vertex_buffer)?,
-            indices: buffers.get_bda_from_asset_handle(&surface.index_buffer)?,
+            index_count: surface.index_count as u32,
+            positions,
+            indices,
             normals: surface
                 .normal_buffer
                 .as_ref()
-                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
+                .map(|buffer| buffers.get_bda(buffer))
                 .unwrap_or(Some(0))?,
             tangents: surface
                 .tangent_buffer
                 .as_ref()
-                .map(|buffer| buffers.get_bda_from_asset_handle(buffer))
+                .map(|buffer| buffers.get_bda(buffer))
                 .unwrap_or(Some(0))?,
             uv: 0,
         })
+    }
+
+    /// Similar to [`Self::from_surface`], but will fill empty with 0
+    pub fn from_surface_zero(
+        buffers: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderBuffer<GPUAllocatorImpl>,
+        >,
+        surface: &dare::engine::components::Surface,
+        transform: &dare::physics::components::Transform,
+        bounding_box: &dare::render::components::BoundingBox,
+    ) -> Self {
+        let positions = buffers.get_bda(&surface.vertex_buffer).unwrap_or(0);
+        let indices = buffers.get_bda(&surface.index_buffer).unwrap_or(0);
+        Self {
+            transform: transform.get_transform_matrix().transpose().to_cols_array(),
+            min: bounding_box.min.to_array(),
+            max: bounding_box.max.to_array(),
+            material: 1,
+            bit_flag: 2,
+            index_count: surface.index_count as u32,
+            positions,
+            indices,
+            normals: surface
+                .normal_buffer
+                .as_ref()
+                .map(|buffer| buffers.get_bda(buffer))
+                .flatten()
+                .unwrap_or(0),
+            tangents: surface
+                .tangent_buffer
+                .as_ref()
+                .map(|buffer| buffers.get_bda(buffer))
+                .flatten()
+                .unwrap_or(0),
+            uv: 0,
+        }
     }
 }
 
@@ -86,31 +133,31 @@ pub struct CMaterial {
     pub normal_sampler_id: u32,
 }
 impl CMaterial {
-    pub fn from_material(
-        textures: &dare::render::render_assets::storage::RenderAssetManagerStorage<
-            dare::render::components::RenderImage<GPUAllocatorImpl>,
+    pub fn from_material<A: Allocator>(
+        arc_allocator: ArcAllocator<A>,
+        transfer_pool: dare::render::util::TransferPool<A>,
+        textures: &mut physical_resource::PhysicalResourceStorage<
+            physical_resource::RenderImage<A>,
         >,
         material: dare::engine::components::Material,
     ) -> Option<Self> {
+        let mut bit_flag = MaterialFlags::NONE;
         let albedo_texture_id = material
             .albedo_texture
             .map(|t| {
                 textures
-                    .get_storage_handle(&t.asset_handle)
-                    .map(|h| h.id() as u32)
+                    .resolve_virtual_resource(&t.asset_handle)
+                    .map(|h| h.uid as u32)
             })
             .flatten();
 
-        let mut bit_flag = MaterialFlags::NONE;
         if albedo_texture_id.is_some() {
             bit_flag |= MaterialFlags::ALBEDO;
-        } else {
-            panic!("WE FAILED!!");
-        }
+        };
 
         Some(Self {
             bit_flag: bit_flag.bits(),
-            _padding: 0,
+            _padding: 128,
             color_factor: material.albedo_factor.to_array(),
             albedo_texture_id: albedo_texture_id.unwrap_or(0),
             albedo_sampler_id: 0,
@@ -128,7 +175,6 @@ pub struct CPushConstant {
     pub transform: [f32; 16],
     pub instanced_surface_info: u64,
     pub surface_infos: u64,
-    pub transforms: u64,
     pub draw_id: u64,
 }
 unsafe impl Zeroable for CPushConstant {}

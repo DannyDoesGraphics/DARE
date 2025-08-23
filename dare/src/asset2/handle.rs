@@ -1,6 +1,6 @@
 use super::prelude as asset;
 use derivative::Derivative;
-use std::fmt::{Debug, Formatter, Pointer};
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
@@ -199,7 +199,7 @@ impl AssetHandleUntyped {
     pub fn downgrade(self) -> Self {
         match self {
             AssetHandleUntyped::Strong(arc) => AssetHandleUntyped::Weak {
-                id: arc.id.clone(),
+                id: arc.id,
                 weak_ref: Arc::downgrade(&arc),
             },
             AssetHandleUntyped::Weak { .. } => self,
@@ -224,7 +224,7 @@ mod tests {
     use std::hash::{Hash, Hasher};
 
     // Define a simple test asset that meets the trait requirements.
-    #[derive(Hash, Clone)]
+    #[derive(Clone)]
     struct TestAssetMetadata(u64);
     impl asset::AssetMetadata for TestAssetMetadata {}
 
@@ -236,7 +236,13 @@ mod tests {
 
     impl PartialEq for TestAssetMetadata {
         fn eq(&self, other: &Self) -> bool {
-            todo!()
+            self.0 == other.0
+        }
+    }
+
+    impl Hash for TestAssetMetadata {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            state.write_u64(self.0);
         }
     }
 
@@ -246,10 +252,7 @@ mod tests {
 
     impl asset::loaders::MetaDataLoad for TestAssetMetadata {
         type Loaded = TestAssetLoaded;
-        type LoadInfo<'a>
-        where
-            Self: 'a,
-        = ();
+        type LoadInfo<'a> = ();
 
         async fn load<'a>(&self, load_info: Self::LoadInfo<'a>) -> anyhow::Result<Self::Loaded> {
             todo!()
@@ -283,7 +286,7 @@ mod tests {
         let untyped_id = typed_id.as_untyped_id();
 
         let strong_untyped = StrongAssetHandleUntyped {
-            id: untyped_id.clone(),
+            id: untyped_id,
             drop_send: tx,
         };
 
