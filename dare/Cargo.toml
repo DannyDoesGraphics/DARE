@@ -9,7 +9,7 @@ anyhow = "1.0.98"
 thiserror = "2.0.12"
 dagal = { path = "../dagal", features = ["winit", "bootstrap", "gpu-allocator", "log-memory-allocations", "shaderc", "tokio"] }
 tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.20"
 glam = "0.30.5"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
 bytemuck = "1.23.1"
