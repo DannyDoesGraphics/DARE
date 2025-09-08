@@ -1,4 +1,3 @@
-use crate::render_graph::resource::VirtualResourceDescription;
 use crate::render_graph::virtual_resource::VirtualResource;
 use std::collections::HashMap;
 
