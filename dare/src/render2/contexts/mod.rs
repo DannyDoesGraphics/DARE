@@ -4,6 +4,7 @@ pub mod graphics_context;
 pub mod surface_context;
 pub mod transfer_context;
 pub mod window_context;
+pub mod mesh_context;
 
 pub use context_creator::{
     ContextsConfiguration, ContextsCreateInfo, CreatedContexts, create_contexts,

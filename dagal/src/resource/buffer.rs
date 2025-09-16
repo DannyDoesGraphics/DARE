@@ -111,12 +111,28 @@ impl<A: Allocator> Buffer<A> {
         }
     }
 
+    /// Read to a mapper pointer if one exists
+    pub fn read<T: Sized>(&self, offset_bytes: vk::DeviceSize, amount: u64) -> Result<&[T], crate::DagalError> {
+        if offset_bytes + (std::mem::size_of::<T>() as vk::DeviceSize * amount) > self.size {
+            return Err(crate::DagalError::InsufficientSpace);
+        }
+        if let Some(mapped_ptr) = self.mapped_ptr() {
+            // SAFETY: Known that size_of_val(data) + offset < buffer.size
+            unsafe {
+                let mapped_ptr = mapped_ptr.as_ptr().add(offset_bytes as usize) as *const T;
+                Ok(std::slice::from_raw_parts(mapped_ptr, amount as usize))
+            }
+        } else {
+            Err(crate::DagalError::NoMappedPointer)
+        }
+    }
+
     /// Write to a mapped pointer if one exists
     ///
     /// Offset is in bytes
-    pub fn write<T: Sized>(&mut self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<()> {
+    pub fn write<T: Sized>(&mut self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<(), crate::DagalError> {
         if offset_bytes + (size_of_val(data) as vk::DeviceSize) > self.size {
-            return Err(anyhow::Error::from(crate::DagalError::InsufficientSpace));
+            return Err(crate::DagalError::InsufficientSpace);
         }
         if let Some(mapped_ptr) = self.mapped_ptr() {
             // SAFETY: Known that size_of_val(data) + offset < buffer.size
@@ -127,7 +143,7 @@ impl<A: Allocator> Buffer<A> {
             }
             Ok(())
         } else {
-            Err(anyhow::Error::from(crate::DagalError::NoMappedPointer))
+            Err(crate::DagalError::NoMappedPointer)
         }
     }
 
