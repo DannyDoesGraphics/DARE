@@ -1,5 +1,4 @@
 pub mod compiled_graph;
-pub(crate) mod edge;
 mod error;
 pub mod graph;
 pub(crate) mod node;

@@ -1,63 +1,74 @@
-pub(crate) mod memory;
 pub mod buffer;
-mod physical;
+pub mod image;
+pub mod physical;
 
 use std::fmt::Debug;
 use std::hash::Hash;
 use ash::vk;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct ResourceId(pub u64);
+
 #[derive(Debug, PartialEq, Clone)]
-pub enum Extent3D  {
-    Absolute {
-        width: u32,
-        height: u32,
-        depth: u32,
-    },
-    // Size that is relative typically to another resource such as the swapchain
-    Relative {
-        width_factor: f32,
-        height_factor: f32,
-        depth_factor: f32,
-    }
+pub enum Axis {
+    Absolute(u32),
+    /// Relative, typically to the swapchain extent
+    Relative(f32),
 }
-impl Eq for Extent3D  {}
-impl Hash for Extent3D {
+impl Eq for Axis {}
+impl Hash for Axis {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            Extent3D::Absolute { width, height, depth } => {
+            Axis::Absolute(v) => {
                 0u8.hash(state);
-                width.hash(state);
-                height.hash(state);
-                depth.hash(state);
+                v.hash(state);
             }
-            Extent3D::Relative { width_factor, height_factor, depth_factor } => {
+            Axis::Relative(v) => {
                 1u8.hash(state);
-                (width_factor.to_bits()).hash(state);
-                (height_factor.to_bits()).hash(state);
-                (depth_factor.to_bits()).hash(state);
+                (v.to_bits()).hash(state);
             }
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ResourceDescription {
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Extent3D {
+    pub width: Axis,
+    pub height: Axis,
+    pub depth: Axis,
+}
+impl Extent3D {
+    pub fn contains_relative(&self) -> bool {
+        matches!(self.width, Axis::Relative(_)) ||
+        matches!(self.height, Axis::Relative(_)) ||
+        matches!(self.depth, Axis::Relative(_))
+    }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Extent2D {
+    pub width: Axis,
+    pub height: Axis,
+}
+impl Extent2D {
+    pub fn contains_relative(&self) -> bool {
+        matches!(self.width, Axis::Relative(_)) ||
+        matches!(self.height, Axis::Relative(_))
+    }
+}
+
+/// Describes an access to a resource, either a buffer or an image.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum UseDeclaration {
     Buffer {
-        size: vk::DeviceSize,
-        usage: vk::BufferUsageFlags,
-        location: crate::allocators::MemoryLocation,
-        /// Whether or not the buffer should persist across frames
-        persistent: bool,
+        resource: ResourceId,
+        access: buffer::AccessFlag,
+        span: std::ops::Range<u64>,
     },
     Image {
-        format: vk::Format,
-        /// Relative extents reference the swapchain extent
-        extent: Extent3D,
-        samples: u32,
-        levels: u32,
-        layers: u32,
-        location: crate::allocators::MemoryLocation,
-        /// Whether or not the image should persist across frames
-        persistent: bool,
-    }
+        resource: ResourceId,
+        access: image::AccessFlag,
+        subresource: image::ImageSubresourceRange,
+    },
 }
