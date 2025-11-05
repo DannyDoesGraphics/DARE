@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::traits::Destructible;
+use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Semaphore {
@@ -70,6 +70,22 @@ impl Destructible for Semaphore {
         unsafe {
             self.device.get_handle().destroy_semaphore(self.handle, None);
         }
+    }
+}
+
+impl AsRaw for Semaphore {
+    type RawType = vk::Semaphore;
+
+    unsafe fn raw(self) -> Self::RawType {
+        self.handle
+    }
+
+    unsafe fn as_raw(&self) -> &Self::RawType {
+        &self.handle
+    }
+
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+        &mut self.handle
     }
 }
 

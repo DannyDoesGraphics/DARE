@@ -247,9 +247,67 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
         )
         .unwrap()
         .build(device.clone())?;
-
     let graphics_context = GraphicsContext::new(graphics_pipeline, graphics_pipeline_layout);
+    
+    let cull_descriptor_pool = unsafe {
+        device.get_handle()
+        .create_descriptor_pool(
+            &vk::DescriptorPoolCreateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: vk::DescriptorPoolCreateFlags::empty(),
+                max_sets: 1,
+                pool_size_count: 1,
+                p_pool_sizes: &vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: 1,
+                },
+                _marker: std::marker::PhantomData,
+            },
+            None,
+        )
+    }?;
 
+    let cull_descriptor_set_layout: vk::DescriptorSetLayout = unsafe {
+        device.get_handle()
+        .create_descriptor_set_layout(
+            &vk::DescriptorSetLayoutCreateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                p_next: ptr::null(),
+                flags: vk::DescriptorSetLayoutCreateFlags::empty(),
+                binding_count: 1,
+                p_bindings: &vk::DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::COMPUTE,
+                    p_immutable_samplers: ptr::null(),
+                    _marker: std::marker::PhantomData::default(),
+                },
+                _marker: std::marker::PhantomData,
+            },
+            None
+        )
+    }?;
+    let cull_descriptor_sets = unsafe {
+        device.get_handle()
+        .allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+                p_next: ptr::null(),
+                descriptor_pool: cull_descriptor_pool,
+                descriptor_set_count: 1,
+                p_set_layouts: &cull_descriptor_set_layout,
+                ..Default::default()
+            }
+        )?
+    };
+
+    
+    /*
+    let compute_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
+        .push
+    */
     Ok(CreatedContexts {
         device_context,
         graphics_context,

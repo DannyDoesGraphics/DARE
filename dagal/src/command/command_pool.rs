@@ -40,7 +40,7 @@ impl CommandPoolCreateInfo<'_> {
 }
 
 impl CommandPool {
-    pub fn new(ci: CommandPoolCreateInfo) -> Result<Self> {
+    pub fn new(ci: CommandPoolCreateInfo) -> crate::Result<Self> {
         let command_pool_ci = vk::CommandPoolCreateInfo {
             s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
             p_next: ptr::null(),
@@ -80,8 +80,8 @@ impl CommandPool {
         &self.device
     }
 
-    /// Allocate command buffers from a command pool
-    pub fn allocate(&self, count: u32) -> Result<Vec<crate::command::CommandBuffer>> {
+    /// Allocate primary command buffers from this command pool
+    pub fn allocate(&self, count: u32) -> crate::Result<Vec<crate::command::CommandBuffer>> {
         Ok(unsafe {
             self.device
                 .get_handle()

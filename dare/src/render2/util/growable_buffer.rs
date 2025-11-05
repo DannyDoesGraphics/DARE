@@ -14,8 +14,8 @@ use std::sync::Arc;
 pub enum GrowthStrategy {
     /// Grow by exact amount needed
     Exact,
-    /// Grow by exponential factor (1.5x, 2x, etc.)
-    Exponential(f32),
+    /// Grow by a geometric factor (1.5x, 2x, etc.)
+    Geometric(f32),
     /// Grow by fixed amount
     Fixed(u64),
     /// Custom growth function
@@ -24,7 +24,7 @@ pub enum GrowthStrategy {
 
 impl Default for GrowthStrategy {
     fn default() -> Self {
-        GrowthStrategy::Exponential(1.5)
+        GrowthStrategy::Geometric(1.5)
     }
 }
 
@@ -162,7 +162,7 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
     fn calculate_new_size(&self, required_size: u64) -> u64 {
         let new_size = match self.config.growth_strategy {
             GrowthStrategy::Exact => required_size,
-            GrowthStrategy::Exponential(factor) => {
+            GrowthStrategy::Geometric(factor) => {
                 let exponential_size = (self.capacity as f32 * factor) as u64;
                 exponential_size.max(required_size)
             }
@@ -263,8 +263,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             name: self.name.clone(),
             allocator: &mut self.allocator,
             size: new_capacity,
-            memory_type: self.memory_type.clone(),
-            usage_flags: self.usage_flags.clone(),
+            memory_type: self.memory_type,
+            usage_flags: self.usage_flags,
         })?;
 
         // Copy existing data if any

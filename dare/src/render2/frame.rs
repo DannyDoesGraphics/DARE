@@ -213,7 +213,7 @@ impl Frame {
                         | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                 },
                 dare::render::util::GrowableBufferConfig {
-                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(2.0),
+                    growth_strategy: dare::render::util::GrowthStrategy::Geometric(2.0),
                     min_size: size_of::<crate::render2::c::CMaterial>() as u64 * 64,
                     alignment: 256,
                     enable_staging_pool: false,
@@ -237,7 +237,7 @@ impl Frame {
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
                 dare::render::util::GrowableBufferConfig {
-                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                    growth_strategy: dare::render::util::GrowthStrategy::Geometric(1.5),
                     min_size: size_of::<vk::DrawIndexedIndirectCommand>() as u64 * 256,
                     alignment: 16, // Smaller alignment for indirect commands
                     enable_staging_pool: false,
@@ -261,7 +261,7 @@ impl Frame {
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
                 dare::render::util::GrowableBufferConfig {
-                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(2.0),
+                    growth_strategy: dare::render::util::GrowthStrategy::Geometric(2.0),
                     min_size: 4096,
                     alignment: 64, // Good for instance data
                     enable_staging_pool: false,
@@ -285,7 +285,7 @@ impl Frame {
                         | vk::BufferUsageFlags::VERTEX_BUFFER,
                 },
                 dare::render::util::GrowableBufferConfig {
-                    growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                    growth_strategy: dare::render::util::GrowthStrategy::Geometric(1.5),
                     min_size: 8192,
                     alignment: 256,
                     enable_staging_pool: false,
@@ -311,7 +311,7 @@ impl Frame {
                             | vk::BufferUsageFlags::VERTEX_BUFFER,
                     },
                     dare::render::util::GrowableBufferConfig {
-                        growth_strategy: dare::render::util::GrowthStrategy::Exponential(1.5),
+                        growth_strategy: dare::render::util::GrowthStrategy::Geometric(1.5),
                         min_size: 8192,
                         alignment: 256,
                         enable_staging_pool: false,

@@ -19,6 +19,7 @@ pub mod shader;
 pub mod traits;
 
 pub use error::DagalError;
+pub type Result<T> = std::result::Result<T, DagalError>;
 
 // Re-exports
 #[cfg(feature = "gpu-allocator")]

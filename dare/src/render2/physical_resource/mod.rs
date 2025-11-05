@@ -18,6 +18,7 @@ pub use gpu_stream::*;
 pub mod handle;
 pub mod render_buffer;
 pub mod render_image;
+pub mod surface_soa;
 /// Handles render components
 pub mod traits;
 

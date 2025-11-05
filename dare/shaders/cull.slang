@@ -4,11 +4,11 @@
 #include "gpu_rendering.slang"
 
 struct PushConstant {
-   const float4x4 view_proj;
-   const InstancedSurfacesInfo *instanced_surface_info;
-   const Surface *surface_infos;
+    const float4x4 view_proj;
+    const uint64_t surface_count;
+   Ptr<InstancedSurfacesInfo, Access.Read> instanced_surface_info;
+   Ptr<Surface, Access.Read> surface_infos;
 };
-[vk::binding(0)] RWStructuredBuffer<uint> draw_mask;
 
 struct Plane {
   float3 normal;
@@ -59,12 +59,15 @@ bool aabb_in_frustum(
     return true;
 }
 
-
+[vk::binding(0, 0)] RWStructuredBuffer<uint> cull_mask;
 [vk::push_constant] PushConstant pc;
 [shader("compute")]
 [numthreads(32,1,1)]
-void main(uint3 dispatch_id: SV_DispatchThreadID) {
-    uint idx = dispatch_id.x;
+void main(uint3 dispatch_id: SV_DispatchThreadID, uint3 group_id: SV_GroupID, uint3 group_tid: SV_GroupThreadID) {
+    uint32_t idx = dispatch_id.x;
+    if (idx >= pc.surface_count) {
+        return;
+    }
 
     const Surface surface = pc.surface_infos[idx];
     // aa-bb plane test
@@ -80,12 +83,12 @@ void main(uint3 dispatch_id: SV_DispatchThreadID) {
 
     if (WaveGetLaneIndex() == 0) {
         // compute byte offset: one 32-bit word per lane
-        uint wave_size = WaveGetLaneCount();
-        uint wave_number = dispatch_id.x / wave_size;
+        uint32_t wave_size = WaveGetLaneCount();
+        uint32_t wave_number = dispatch_id.x / wave_size;
         // cover full subgroup width
-        draw_mask[wave_number * 4 + 0] = ballot_mask.x;
-        draw_mask[wave_number * 4 + 1] = ballot_mask.y;
-        draw_mask[wave_number * 4 + 2] = ballot_mask.z;
-        draw_mask[wave_number * 4 + 3] = ballot_mask.w;
+        cull_mask[wave_number * 4 + 0] = ballot_mask.x;
+        cull_mask[wave_number * 4 + 1] = ballot_mask.y;
+        cull_mask[wave_number * 4 + 2] = ballot_mask.z;
+        cull_mask[wave_number * 4 + 3] = ballot_mask.w;
     }
 }

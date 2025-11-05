@@ -1,33 +1,22 @@
-use crate::prelude as dagal;
-use anyhow::Result;
+use crate::{prelude as dagal, DagalError};
 use ash::vk;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use thiserror::Error;
-
-#[derive(Error, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum QueueAllocatorError {
-    #[error("Queue is busy")]
-    BusyQueue,
-    #[error("Queue requested is not possible")]
-    ImpossibleRequest,
-    #[error("Poison error")]
-    PoisonError,
-}
 
 #[derive(Debug)]
-pub struct QueueRequest<M: dagal::concurrency::Lockable<Target = vk::Queue>> {
+pub struct QueueRequest<M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
     pub flags: vk::QueueFlags,
     pub min_count: Option<usize>,
-    pub count: usize,
+    /// None implies as many as possible
+    pub count: Option<usize>,
     /// Prefer queues which are not currently locked
     pub prefer_free: bool,
     pub _phantom_data: PhantomData<M>,
 }
 
 #[derive(Debug)]
-pub struct QueueAllocator<M: dagal::concurrency::Lockable<Target = vk::Queue>> {
+pub struct QueueAllocator<M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
     queues: Arc<[dagal::device::Queue<M>]>,
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for QueueAllocator<M> {
@@ -64,7 +53,7 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
         exclusion_mask: Option<&[(u32, u32)]>,
         queue_flags: vk::QueueFlags,
         count: Option<usize>,
-    ) -> Result<Vec<dagal::device::Queue<M>>, QueueAllocatorError> {
+    ) -> crate::Result<Vec<dagal::device::Queue<M>>> {
         let exclude: HashSet<(u32, u32)> = exclusion_mask
             .map(|exclusion_mask| exclusion_mask.iter().map(|(a, b)| (*a, *b)).collect())
             .unwrap_or_default();
@@ -85,7 +74,7 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> QueueAllocator<M> {
             })
             .collect();
         if count.map(|count| v.len() < count).unwrap_or(false) {
-            Err(QueueAllocatorError::ImpossibleRequest)
+            Err(DagalError::ImpossibleQueue)
         } else {
             Ok(v)
         }
@@ -119,12 +108,12 @@ impl<M: dagal::concurrency::SyncLockable<Target = vk::Queue>> QueueAllocator<M> 
     pub fn acquire_queue<'a>(
         &'a self,
         request: QueueRequest<M>,
-    ) -> Result<Vec<M::Lock<'a>>, QueueAllocatorError> {
+    ) -> crate::Result<Vec<M::Lock<'a>>> {
         let mut out: Vec<M::Lock<'a>> =
-            Vec::with_capacity(request.min_count.unwrap_or(request.count));
+            Vec::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
         for queue in self.queues.iter() {
             // stop if we reached requested amount
-            if out.len() >= request.count {
+            if out.len() >= request.count.unwrap_or(usize::MAX) {
                 break;
             }
             if let Ok(guard) = queue.try_queue_lock() {
@@ -132,8 +121,8 @@ impl<M: dagal::concurrency::SyncLockable<Target = vk::Queue>> QueueAllocator<M> 
             }
         }
 
-        if out.len() < request.min_count.unwrap_or(request.count) {
-            Err(QueueAllocatorError::BusyQueue)
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
+            Err(DagalError::QueueBusy)
         } else {
             Ok(out.into_iter().collect::<Vec<M::Lock<'a>>>())
         }
@@ -144,14 +133,14 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
     pub async fn acquire_queue_async<'a>(
         &'a self,
         request: QueueRequest<M>,
-    ) -> Result<Vec<M::Lock<'a>>, QueueAllocatorError> {
+    ) -> crate::Result<Vec<M::Lock<'a>>> {
         let mut used_queues: HashSet<(u32, u32)> =
-            HashSet::with_capacity(request.min_count.unwrap_or(request.count));
+            HashSet::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
         let mut out: Vec<M::Lock<'a>> =
-            Vec::with_capacity(request.min_count.unwrap_or(request.count));
+            Vec::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
         for queue in self.queues.iter() {
             // stop if we reached requested amount
-            if out.len() >= request.count {
+            if out.len() >= request.count.unwrap_or(usize::MAX) {
                 break;
             }
             match queue.try_queue_lock() {
@@ -170,10 +159,10 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             }
         }
         // take the most available queues
-        if out.len() < request.min_count.unwrap_or(request.count) {
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
             for queue in self.queues.iter() {
                 // stop if we reached requested amount
-                if out.len() >= request.count {
+                if out.len() >= request.count.unwrap_or(usize::MAX) {
                     break;
                 }
                 if !used_queues.contains(&(queue.get_family_index(), queue.get_index())) {
@@ -187,8 +176,8 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             }
         }
 
-        if out.len() < request.min_count.unwrap_or(request.count) {
-            Err(QueueAllocatorError::BusyQueue)
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
+            Err(DagalError::QueueBusy)
         } else {
             Ok(out.into_iter().collect())
         }
@@ -197,14 +186,14 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
     pub fn acquire_queue_blocking<'a>(
         &'a self,
         request: QueueRequest<M>,
-    ) -> Result<Vec<M::Lock<'a>>, QueueAllocatorError> {
+    ) -> crate::Result<Vec<M::Lock<'a>>> {
         let mut used_queues: HashSet<(u32, u32)> =
-            HashSet::with_capacity(request.min_count.unwrap_or(request.count));
+            HashSet::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
         let mut out: Vec<M::Lock<'a>> =
-            Vec::with_capacity(request.min_count.unwrap_or(request.count));
+            Vec::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
         for queue in self.queues.iter() {
             // stop if we reached requested amount
-            if out.len() >= request.count {
+            if out.len() >= request.count.unwrap_or(usize::MAX) {
                 break;
             }
             match queue.try_queue_lock() {
@@ -222,10 +211,10 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             }
         }
         // take the most available queues
-        if out.len() < request.min_count.unwrap_or(request.count) {
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
             for queue in self.queues.iter() {
                 // stop if we reached requested amount
-                if out.len() >= request.count {
+                if out.len() >= request.count.unwrap_or(usize::MAX) {
                     break;
                 }
                 if !used_queues.contains(&(queue.get_family_index(), queue.get_index())) {
@@ -238,10 +227,33 @@ impl<M: dagal::concurrency::AsyncLockable<Target = vk::Queue>> QueueAllocator<M>
             }
         }
 
-        if out.len() < request.min_count.unwrap_or(request.count) {
-            Err(QueueAllocatorError::BusyQueue)
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
+            Err(DagalError::QueueBusy)
         } else {
             Ok(out.into_iter().collect())
+        }
+    }
+
+    pub fn try_acquire_queue<'a>(
+        &'a self,
+        request: QueueRequest<M>,
+    ) -> crate::Result<Vec<M::Lock<'a>>> {
+        let mut out: Vec<M::Lock<'a>> =
+            Vec::with_capacity(request.min_count.unwrap_or(request.count.unwrap_or(0)));
+        for queue in self.queues.iter() {
+            // stop if we reached requested amount
+            if out.len() >= request.count.unwrap_or(usize::MAX) {
+                break;
+            }
+            if let Ok(guard) = queue.try_queue_lock() {
+                out.push(guard);
+            }
+        }
+
+        if out.len() < request.min_count.unwrap_or(request.count.unwrap_or(0)) {
+            Err(DagalError::QueueBusy)
+        } else {
+            Ok(out.into_iter().collect::<Vec<M::Lock<'a>>>())
         }
     }
 }

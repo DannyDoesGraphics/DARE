@@ -38,7 +38,7 @@ impl CommandBufferInvalid {
     pub fn reset(
         self,
         flags: Option<vk::CommandBufferResetFlags>,
-    ) -> Result<CommandBuffer, vk::Result> {
+    ) -> Result<CommandBuffer, crate::DagalError> {
         unsafe {
             self.device.get_handle().reset_command_buffer(
                 self.handle,
@@ -480,7 +480,7 @@ impl CommandBufferState {
                         *self = CommandBufferState::Ready(cmd_buf);
                         Ok(())
                     }
-                    Err(vk_error) => Err(crate::DagalError::VkError(vk_error)),
+                    Err(vk_error) => Err(vk_error),
                 }
             }
         }

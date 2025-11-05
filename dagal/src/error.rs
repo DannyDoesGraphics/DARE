@@ -12,6 +12,9 @@ pub enum DagalError {
     #[error("It is impossible to create requested queue")]
     ImpossibleQueue,
 
+    #[error("Unable to acquire queue; all candidates are busy")]
+    QueueBusy,
+
     #[error("No suitable physical device has been found")]
     NoPhysicalDevice,
 

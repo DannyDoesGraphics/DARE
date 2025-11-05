@@ -55,6 +55,7 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         device: crate::device::LogicalDevice,
         name: Option<String>,
         allocator: &'a mut ArcAllocator<A>,
+        /// Size in bytes
         size: vk::DeviceSize,
         memory_type: crate::allocators::MemoryLocation,
         usage_flags: vk::BufferUsageFlags,
@@ -64,6 +65,7 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         device: crate::device::LogicalDevice,
         name: Option<String>,
         allocator: &'a mut ArcAllocator<A>,
+        /// Size in bytes
         size: vk::DeviceSize,
         allocation: ArcAllocation<A>,
         usage_flags: vk::BufferUsageFlags,
