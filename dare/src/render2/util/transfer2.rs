@@ -515,7 +515,7 @@ impl<A: Allocator> TransferPoolInner<A> {
     }
 }
 
-/// Transfer pool unlike [`TransferPoolInner`] is a handle for sending transfer requests, whilse the inner struct handles the actual transfer logic
+/// Transfer pool unlike [`TransferPoolInner`] is a handle for sending transfer requests, whilst the inner struct handles the actual transfer logic
 #[derive(Debug, Clone)]
 pub struct TransferPool {
     send: std::sync::mpsc::Sender<ChunkDestination>,
