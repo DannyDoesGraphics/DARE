@@ -12,6 +12,7 @@ struct UploadSlice {
     retire_ticket: u64
 }
 
+/// Each chunk has a buffer backing it, along with a head cursor for sub-allocations
 #[derive(Debug)]
 struct Chunk<A: Allocator> {
     buffer: dagal::resource::Buffer<A>,
@@ -21,8 +22,11 @@ struct Chunk<A: Allocator> {
     max_ticket: u64,
     /// Destinations to write to
     destinations: Vec<ChunkDestination>,
+    /// Number of consecutive flushes where this chunk was not used
+    unused_flush_count: u64,
 }
 
+/// Destination for each chunk slice
 #[derive(Debug)]
 pub enum ChunkDestination {
     Buffer {
@@ -46,6 +50,16 @@ pub enum ChunkDestination {
         dst_extent: vk::Extent3D,
         src_offset: u64,
         src_size: u64,
+    }
+}
+
+impl ChunkDestination {
+    /// Size in bytes to be transferred
+    pub fn size(&self) -> u64 {
+        match self {
+            ChunkDestination::Buffer { src_size, .. } => *src_size,
+            ChunkDestination::Image { src_size, .. } => *src_size,
+        }
     }
 }
 
@@ -81,10 +95,17 @@ pub struct TransferPoolInner<A: Allocator> {
     
     /// Queue allocator
     queue_allocator: dagal::util::queue_allocator::QueueAllocator,
+
+    /// Queue for transfer requests
+    send: std::sync::mpsc::Sender<ChunkDestination>,
+    recv: std::sync::mpsc::Receiver<ChunkDestination>,
+
+    /// LRU cache size
+    lru_cache: u64,
 }
 
 impl<A: Allocator> TransferPoolInner<A> {
-    pub fn new(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, allocator: ArcAllocator<A>, max_belt_size: u64) -> dagal::Result<Self> {
+    pub fn new(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, allocator: ArcAllocator<A>, max_belt_size: u64, lru_cache: u64) -> dagal::Result<Self> {
         let command_pool = dagal::command::CommandPool::new(
             dagal::command::CommandPoolCreateInfo::WithQueueFamily {
                 device: allocator.get_device().clone(),
@@ -95,7 +116,8 @@ impl<A: Allocator> TransferPoolInner<A> {
 
         // Initialize a simple queue allocator with the provided queue for now
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(vec![queue.clone()]);
-
+        // Queue for transfers
+        let (send, recv) = std::sync::mpsc::channel::<ChunkDestination>();
         Ok(Self {
             chunks_active: Vec::new(),
             chunks_closed: Vec::new(),
@@ -108,14 +130,18 @@ impl<A: Allocator> TransferPoolInner<A> {
             semaphore: dagal::sync::Semaphore::new(vk::SemaphoreCreateFlags::empty(), device.clone(), 0)?,
             next_ticket: 1,
 
-            max_belt_size
+            max_belt_size,
+            send,
+            recv,
+
+            lru_cache,
         })
     }
 
     /// Return an active chunk with enough space for the requested allocation
-    fn find_active_with_space(&self, bytes: u64) -> Option<usize> {
+    fn find_active_with_space(&self, size: u64) -> Option<usize> {
         for (i, chunk) in self.chunks_active.iter().enumerate() {
-            if chunk.head + bytes <= chunk.buffer.get_size() {
+            if chunk.head + size <= chunk.buffer.get_size() {
                 return Some(i);
             }
         }
@@ -139,13 +165,15 @@ impl<A: Allocator> TransferPoolInner<A> {
             head: 0,
             max_ticket: 0,
             destinations: Vec::new(),
+            unused_flush_count: 0,
         };
         self.chunks_free.push(chunk);
 
         Ok(())
     }
 
-    /// Move closed -> active chunks if their device work is done
+    /// Move closed -> free chunks if their device work is done
+    /// Also handles LRU eviction of unused chunks
     fn reclaim(&mut self) -> dagal::Result<()> {
         // Try to reclaim closed chunks
         let value: u64 = self.semaphore.current_value()?;
@@ -156,20 +184,18 @@ impl<A: Allocator> TransferPoolInner<A> {
                 let mut chunk: Chunk<A> = self.chunks_closed.remove(ix);
                 chunk.head = 0; // belt can start at the front again once freed
                 chunk.max_ticket = 0;
-                // notify all oneshots
-                for destination in chunk.destinations.drain(..) {
-                    if let ChunkDestination::Buffer { oneshot, .. } = destination {
-                        if let Some(oneshot) = oneshot {
-                            // TODO: Add error propagation here
-                            let _ = oneshot.send(Ok(()));
-                        }
-                    }
-                }
+                chunk.destinations.clear();
                 self.chunks_free.push(chunk);
             } else {
                 ix += 1;
             }
         }
+
+        // LRU eviction
+        self.chunks_free.retain_mut(|chunk| {
+            chunk.unused_flush_count += 1;
+            chunk.unused_flush_count <= self.lru_cache
+        });
 
         Ok(())
     }
@@ -177,19 +203,42 @@ impl<A: Allocator> TransferPoolInner<A> {
     /// Retrieve a slice of the buffer for the given allocation
     /// 
     /// Returns an index from the [`Self::chunks_active`] list
-    fn allocate_slice(&mut self, bytes: u64) -> dagal::Result<usize> {
+    fn allocate_slice(&mut self, size: u64) -> dagal::Result<usize> {
         self.reclaim()?;
-        if let Some(chunk_ix) = self.find_active_with_space(bytes) {
+        if let Some(chunk_ix) = self.find_active_with_space(size) {
             Ok(chunk_ix)
         } else {
-            // No active chunk has enough space, create a new one
-            self.create_chunk(bytes)?;
-            Ok(self.chunks_active.len() - 1)
+            // No active chunk has enough space, try to use a free chunk or create a new one
+            if let Some(mut chunk) = self.chunks_free.pop() {
+                chunk.unused_flush_count = 0;
+                self.chunks_active.push(chunk);
+                Ok(self.chunks_active.len() - 1)
+            } else {
+                // Create a new chunk
+                self.create_chunk(size)?;
+                let mut chunk = self.chunks_free.pop().unwrap();
+                chunk.unused_flush_count = 0;
+                self.chunks_active.push(chunk);
+                Ok(self.chunks_active.len() - 1)
+            }
         }
     }
 
     /// Flush any pending transfers from host to device
-    fn flush(&mut self) -> dagal::Result<()> {
+    pub async fn flush(&mut self) -> dagal::Result<()> {
+        // flush queue
+        let requests: Vec<ChunkDestination> = self.recv.try_iter().collect();
+        for request in requests {
+            // Allocate a slice for this request
+            let size: u64 = request.size();
+            let chunk_ix: usize = self.allocate_slice(size)?;
+            let chunk: &mut Chunk<A> = &mut self.chunks_active[chunk_ix];
+            // Append destination to chunk
+            chunk.destinations.push(request);
+            // Advance head
+            chunk.head += size;
+        }
+
         let mut chunks_submit: Vec<Chunk<A>> = self.chunks_active.drain(..).collect::<Vec<Chunk<A>>>();
         let command_buffer: dagal::command::CommandBuffer = self.command_pool.allocate(1)?.pop().unwrap();
         let command_buffer: dagal::command::CommandBufferRecording = command_buffer.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT).unwrap();
@@ -207,7 +256,7 @@ impl<A: Allocator> TransferPoolInner<A> {
             let mut image_acquire_barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
             let mut image_release_barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
 
-            // record all copy commands
+
             for destination in chunk.destinations.drain(..) {
                 match destination {
                     ChunkDestination::Buffer { src_queue_family, dst_queue_family, buffer, dst_offset, src_offset, src_size, oneshot } => {
@@ -385,7 +434,23 @@ impl<A: Allocator> TransferPoolInner<A> {
             }
         }
         // submit command buffer
-        let mut command_buffer: dagal::command::CommandBufferExecutable = command_buffer.end().unwrap();
+        let command_buffer: dagal::command::CommandBufferExecutable = command_buffer.end().unwrap();
+        let fence = dagal::sync::Fence::new(self.allocator.get_device().clone(), vk::FenceCreateFlags::empty())?;
+        
+        // Extract oneshots from chunks before moving to closed
+        let mut oneshots: Vec<tokio::sync::oneshot::Sender<dagal::Result<()>>> = Vec::new();
+        for chunk in chunks_submit.iter_mut() {
+            for destination in chunk.destinations.iter_mut() {
+                if let ChunkDestination::Buffer { oneshot: Some(_), .. } = destination {
+                    if let ChunkDestination::Buffer { oneshot, .. } = destination {
+                        if let Some(tx) = oneshot.take() {
+                            oneshots.push(tx);
+                        }
+                    }
+                }
+            }
+        }
+        
         unsafe {
             let submit_info = vk::SubmitInfo2 {
                 s_type: vk::StructureType::SUBMIT_INFO_2,
@@ -413,49 +478,52 @@ impl<A: Allocator> TransferPoolInner<A> {
                 },
                 _marker: std::marker::PhantomData,
             };
-
-            //command_buffer.submit(self.queue.acquire_queue_async().await.unwrap(), &[submit_info], vk::Fence::null())?;
+            command_buffer.submit(*self.queue.acquire_queue_async().await.unwrap(), &[submit_info], *fence.as_raw()).unwrap();
         }
 
-
-
-
+        // Move chunks to closed list for reclaim() to process later
         self.chunks_closed.append(&mut chunks_submit);
+
+        // Spawn a background task to wait for fence and notify callbacks
+        tokio::spawn(async move {
+            if let Ok(_) = fence.fence_await().await {
+                for oneshot in oneshots {
+                    let _ = oneshot.send(Ok(()));
+                }
+            }
+        });
+
         self.next_ticket += 1;
         Ok(())
     }
 
-    /// Transfer data from a host buffer to a device buffer (stub)
-    pub fn host_buffer_to_device_buffer(&mut self, _buffer: dagal::resource::Buffer<A>) -> dagal::Result<()> {
-        // TODO: Implement actual enqueuing of buffer copy slices into destinations
+    /// Transfer bytes. Handles creation of staging buffer -> writing to staging buffer -> transfer
+    pub fn transfer_bytes_to_buffer(&mut self, bytes: &[u8]) -> dagal::Result<()> {
+        let size: u64 = bytes.len() as u64;
+        let chunk_ix: usize = self.allocate_slice(size)?;
+        let start: u64 = self.chunks_active[chunk_ix].head - size;
+        // write
+        self.chunks_active[chunk_ix].buffer.write(start, bytes)?;
         Ok(())
+    }
+
+    /// Get a handle to the transfer pool for sending transfer requests
+    pub fn get_transfer_pool(&self) -> TransferPool {
+        TransferPool {
+            send: self.send.clone(),
+        }
     }
 }
 
+/// Transfer pool unlike [`TransferPoolInner`] is a handle for sending transfer requests, whilse the inner struct handles the actual transfer logic
+#[derive(Debug, Clone)]
 pub struct TransferPool {
-    thread: tokio::task::JoinHandle<()>,
+    send: std::sync::mpsc::Sender<ChunkDestination>,
 }
 
 impl TransferPool {
-    pub fn new<A: Allocator>(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, allocator: ArcAllocator<A>, max_belt_size: u64) -> dagal::Result<Self> {
-        let mut inner = TransferPoolInner::new(device, queue, allocator, max_belt_size)?;
-        let (send, mut recv) = tokio::sync::mpsc::unbounded_channel::<()>();
-
-        let thread = tokio::task::spawn(async move {
-            // Main transfer loop
-            while let Some(request) = recv.recv().await {
-                
-            }
-        });
-
-        Ok(Self {
-            thread,
-        })
-    }
-}
-
-impl Drop for TransferPool {
-    fn drop(&mut self) {
-        self.thread.abort();
+    /// Send a transfer request
+    pub fn send(&self, chunk_destination: ChunkDestination) {
+        self.send.send(chunk_destination).unwrap();
     }
 }
