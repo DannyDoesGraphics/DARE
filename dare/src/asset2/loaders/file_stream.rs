@@ -1,12 +1,12 @@
+use bytes::*;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncSeekExt};
-use bytes::*;
 
-/// A file stream that reads data from a file 
-/// 
+/// A file stream that reads data from a file
+///
 /// Primarily provides a stream that skips n bytes and reads until m bytes have been read
 #[derive(Debug)]
 pub struct FileStream<'a> {

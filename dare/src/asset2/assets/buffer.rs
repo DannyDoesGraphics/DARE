@@ -3,10 +3,10 @@ use crate::asset2::loaders::MetaDataStreamable;
 use crate::prelude as dare;
 use crate::render2::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
+use bytes::*;
 use derivative::Derivative;
 use futures::stream::BoxStream;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use bytes::*;
 
 pub struct Buffer {}
 impl asset::Asset for Buffer {
@@ -110,10 +110,9 @@ impl MetaDataStreamable for BufferMetaData {
                     "Asset data stored in memory. This is extremely bad and will quickly consume a lot of memory in the system."
                 );
                 let memory_slice = memory[self.offset..(self.offset + self.length)].to_vec();
-                let stream = futures::stream::once(async move {
-                    anyhow::Ok(Bytes::from(memory_slice))
-                })
-                .boxed();
+                let stream =
+                    futures::stream::once(async move { anyhow::Ok(Bytes::from(memory_slice)) })
+                        .boxed();
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
                 let stream =
                     handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();

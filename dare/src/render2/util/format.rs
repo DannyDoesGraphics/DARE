@@ -1,7 +1,7 @@
 use crate::render2::util::WrappingMode::MirrorClampToEdge;
+use bytes::*;
 use dagal::ash::vk;
 use futures::stream::BoxStream;
-use bytes::*;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Format {

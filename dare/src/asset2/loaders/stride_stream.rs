@@ -111,8 +111,7 @@ impl<'a, T: Into<Bytes>> futures::Stream for StrideStream<'a, T> {
                             Poll::Ready(Some(buf))
                         } else if !this.processed.is_empty() {
                             // dump remaining out
-                            let remaining =
-                                this.processed.split_to(this.processed.len()).freeze();
+                            let remaining = this.processed.split_to(this.processed.len()).freeze();
                             Poll::Ready(Some(Ok(remaining)))
                         } else {
                             Poll::Ready(None)
@@ -131,13 +130,10 @@ impl<'a, T: Into<Bytes>> futures::Stream for StrideStream<'a, T> {
                                     return Poll::Pending;
                                 }
                                 // Add new data and process it
-                                let start = this
-                                    .offset
-                                    .saturating_sub(this.bytes_recv)
-                                    .min(data_len);
+                                let start =
+                                    this.offset.saturating_sub(this.bytes_recv).min(data_len);
                                 if start < data_len {
-                                    this.buffer
-                                        .extend_from_slice(&data.as_ref()[start..]);
+                                    this.buffer.extend_from_slice(&data.as_ref()[start..]);
                                 }
                                 this.bytes_recv += data_len;
                                 this.process_buffer();
@@ -222,8 +218,10 @@ mod tests {
             .unwrap();
 
         let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
-        let output_chunks: Vec<Vec<u8>> =
-            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
+        let output_chunks: Vec<Vec<u8>> = output_chunks
+            .into_iter()
+            .map(|bytes| bytes.to_vec())
+            .collect();
 
         // Expected output
         let expected_output = vec![vec![0, 1, 4, 5], vec![8, 9]];
@@ -275,8 +273,10 @@ mod tests {
             .unwrap();
 
         let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
-        let output_chunks: Vec<Vec<u8>> =
-            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
+        let output_chunks: Vec<Vec<u8>> = output_chunks
+            .into_iter()
+            .map(|bytes| bytes.to_vec())
+            .collect();
 
         // Expected output
         let expected_output = vec![vec![2, 3, 6, 7], vec![10, 11]];
@@ -328,8 +328,10 @@ mod tests {
             .unwrap();
 
         let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
-        let output_chunks: Vec<Vec<u8>> =
-            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
+        let output_chunks: Vec<Vec<u8>> = output_chunks
+            .into_iter()
+            .map(|bytes| bytes.to_vec())
+            .collect();
 
         // Expected output
         let expected_output = vec![vec![0, 1, 2, 3, 4, 5, 6, 7], vec![8, 9, 10, 11]];

@@ -133,8 +133,8 @@ mod tests {
 
         let input_data: Vec<u8> = vec![10, 20, 30, 40, 50];
 
-        let data_stream = stream::iter(vec![Ok(Bytes::copy_from_slice(&input_data[0..5]))])
-            .boxed_local();
+        let data_stream =
+            stream::iter(vec![Ok(Bytes::copy_from_slice(&input_data[0..5]))]).boxed_local();
 
         let mut stride_stream = StrideStreamBuilder {
             offset: 0,

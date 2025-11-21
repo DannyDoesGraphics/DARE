@@ -76,9 +76,7 @@ impl<
                         (source_data.len() + this.source_dimension - 1) / this.source_dimension
                     };
                     let mut data_out = BytesMut::with_capacity(
-                        chunk_groups
-                            * this.dest_dimension
-                            * size_of::<Destination>(),
+                        chunk_groups * this.dest_dimension * size_of::<Destination>(),
                     );
                     let chunk_size = this.source_dimension.max(1);
                     for sources in source_data.chunks(chunk_size) {

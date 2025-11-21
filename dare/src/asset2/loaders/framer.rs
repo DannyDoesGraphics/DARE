@@ -235,10 +235,7 @@ mod tests {
         impl<T: std::marker::Unpin> stream::Stream for PendingOnceStream<T> {
             type Item = T;
 
-            fn poll_next(
-                self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<Option<Self::Item>> {
+            fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
                 let this = self.get_mut();
                 if this.pending_once {
                     this.pending_once = false;
