@@ -136,7 +136,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
             )
         })
         .collect::<Vec<dagal::device::Queue>>();
-    
+
     let (graphics_queue, present_queue, remaining_queues) = {
         let mut graphics_queue = None;
         let mut present_queue = None;
@@ -153,7 +153,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
                 remaining.push(queue);
             }
         }
-        
+
         (graphics_queue.unwrap(), present_queue.unwrap(), remaining)
     };
 
@@ -229,10 +229,9 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
         .unwrap()
         .build(device.clone())?;
     let graphics_context = GraphicsContext::new(graphics_pipeline, graphics_pipeline_layout);
-    
+
     let cull_descriptor_pool = unsafe {
-        device.get_handle()
-        .create_descriptor_pool(
+        device.get_handle().create_descriptor_pool(
             &vk::DescriptorPoolCreateInfo {
                 s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
                 p_next: ptr::null(),
@@ -250,8 +249,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
     }?;
 
     let cull_descriptor_set_layout: vk::DescriptorSetLayout = unsafe {
-        device.get_handle()
-        .create_descriptor_set_layout(
+        device.get_handle().create_descriptor_set_layout(
             &vk::DescriptorSetLayoutCreateInfo {
                 s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 p_next: ptr::null(),
@@ -267,24 +265,22 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
                 },
                 _marker: std::marker::PhantomData,
             },
-            None
+            None,
         )
     }?;
     let cull_descriptor_sets = unsafe {
-        device.get_handle()
-        .allocate_descriptor_sets(
-            &vk::DescriptorSetAllocateInfo {
+        device
+            .get_handle()
+            .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
                 s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
                 p_next: ptr::null(),
                 descriptor_pool: cull_descriptor_pool,
                 descriptor_set_count: 1,
                 p_set_layouts: &cull_descriptor_set_layout,
                 ..Default::default()
-            }
-        )?
+            })?
     };
 
-    
     /*
     let compute_pipeline_layout = dagal::pipelines::PipelineLayoutBuilder::default()
         .push

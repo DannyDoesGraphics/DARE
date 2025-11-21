@@ -5,7 +5,9 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct QueueRequest<M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
+pub struct QueueRequest<
+    M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,
+> {
     pub flags: vk::QueueFlags,
     pub min_count: Option<usize>,
     /// None implies as many as possible
@@ -16,7 +18,9 @@ pub struct QueueRequest<M: dagal::concurrency::Lockable<Target = vk::Queue> = da
 }
 
 #[derive(Debug)]
-pub struct QueueAllocator<M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>> {
+pub struct QueueAllocator<
+    M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,
+> {
     queues: Arc<[dagal::device::Queue<M>]>,
 }
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Clone for QueueAllocator<M> {

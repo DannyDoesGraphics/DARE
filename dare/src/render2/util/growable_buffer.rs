@@ -207,7 +207,8 @@ impl<A: Allocator + 'static> GrowableBuffer<A> {
             size,
             memory_type: MemoryLocation::CpuToGpu,
             usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
-        }).map_err(|e| e.into())
+        })
+        .map_err(|e| e.into())
     }
 
     /// Return a staging buffer to the pool

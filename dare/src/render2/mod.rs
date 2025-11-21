@@ -1,3 +1,4 @@
+pub mod allocators;
 pub mod c;
 pub mod components;
 pub mod contexts;
@@ -10,4 +11,3 @@ pub mod present_system;
 pub mod server;
 pub mod systems;
 pub mod util;
-pub mod allocators;

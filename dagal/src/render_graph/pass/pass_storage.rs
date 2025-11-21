@@ -1,6 +1,5 @@
-
-use std::collections::HashMap;
 use ash::vk;
+use std::collections::HashMap;
 
 /// Extremely primitive version of a PSO manager, and we should rely on one later
 #[derive(Debug)]

@@ -93,7 +93,7 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         allocator: &'a mut ArcAllocator<A>,
         create_info: OwnedImageCreateInfo,
         name: Option<&'a str>,
-    }
+    },
 }
 
 impl<A: Allocator> Image<A> {
@@ -520,44 +520,52 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                 }
                 image.allocation = Some(allocation);
                 Ok(image)
-            },
-            ImageCreateInfo::FromOwnedCreateInfo { device, allocator, create_info, name } => {
-                let handle = unsafe { device.get_handle().create_image(&vk::ImageCreateInfo {
-                    s_type: vk::StructureType::IMAGE_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags: create_info.flags,
-                    image_type: create_info.image_type,
-                    format: create_info.format,
-                    extent: create_info.extent,
-                    mip_levels: create_info.mip_levels,
-                    array_layers: create_info.array_layers,
-                    samples: create_info.samples,
-                    tiling: create_info.tiling,
-                    usage: create_info.usage,
-                    sharing_mode: create_info.sharing_mode,
-                    queue_family_index_count: create_info.queue_family_indices.len() as u32,
-                    p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
-                    initial_layout: create_info.initial_layout,
-                    _marker: std::marker::PhantomData,
-                    
-                }, None)? };
+            }
+            ImageCreateInfo::FromOwnedCreateInfo {
+                device,
+                allocator,
+                create_info,
+                name,
+            } => {
+                let handle = unsafe {
+                    device.get_handle().create_image(
+                        &vk::ImageCreateInfo {
+                            s_type: vk::StructureType::IMAGE_CREATE_INFO,
+                            p_next: ptr::null(),
+                            flags: create_info.flags,
+                            image_type: create_info.image_type,
+                            format: create_info.format,
+                            extent: create_info.extent,
+                            mip_levels: create_info.mip_levels,
+                            array_layers: create_info.array_layers,
+                            samples: create_info.samples,
+                            tiling: create_info.tiling,
+                            usage: create_info.usage,
+                            sharing_mode: create_info.sharing_mode,
+                            queue_family_index_count: create_info.queue_family_indices.len() as u32,
+                            p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
+                            initial_layout: create_info.initial_layout,
+                            _marker: std::marker::PhantomData,
+                        },
+                        None,
+                    )?
+                };
                 #[cfg(feature = "log-lifetimes")]
                 tracing::trace!("Created VkImage {:p}", handle);
 
                 let allocation = unsafe {
                     let allocation = allocator.allocate(
                         name.unwrap_or("IMAGE_ALLOCATION"),
-                        &device
-                            .get_handle()
-                            .get_image_memory_requirements(handle),
+                        &device.get_handle().get_image_memory_requirements(handle),
                         create_info.location,
                     )?;
                     device.get_handle().bind_image_memory(
-                        handle, allocation.memory()?, allocation.offset()?
+                        handle,
+                        allocation.memory()?,
+                        allocation.offset()?,
                     )?;
                     allocation
                 };
-
 
                 let mut handle = Self {
                     handle,
@@ -607,7 +615,11 @@ impl<A: Allocator> AsRaw for Image<A> {
 
 impl<A: Allocator> Nameable for Image<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::IMAGE;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
+    fn set_name(
+        &mut self,
+        debug_utils: &ash::ext::debug_utils::Device,
+        name: &str,
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

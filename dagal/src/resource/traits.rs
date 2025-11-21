@@ -24,7 +24,11 @@ pub trait Nameable {
     const OBJECT_TYPE: vk::ObjectType;
 
     /// Set the name of the resource
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError>;
+    fn set_name(
+        &mut self,
+        debug_utils: &ash::ext::debug_utils::Device,
+        name: &str,
+    ) -> Result<(), crate::DagalError>;
 }
 
 pub(crate) fn name_nameable<T: Nameable>(

@@ -28,7 +28,7 @@ impl<T: Clone> Clone for PersistentDelta<T> {
 
 /// Responsible for handling fine additions, removals, and updates to buffers
 /// Uses a free list to manage allocations within the GPU buffer
-/// 
+///
 /// Wraps around a [`GrowableBuffer`] to handle dynamic resizing as needed
 #[derive(Debug, Resource)]
 pub struct PersistentBuffer<A: Allocator + 'static, T: 'static> {

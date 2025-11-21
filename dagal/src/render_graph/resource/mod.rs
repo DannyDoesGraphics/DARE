@@ -2,9 +2,9 @@ pub mod buffer;
 pub mod image;
 pub mod physical;
 
+use ash::vk;
 use std::fmt::Debug;
 use std::hash::Hash;
-use ash::vk;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct ResourceId(pub u64);
@@ -39,12 +39,11 @@ pub struct Extent3D {
 }
 impl Extent3D {
     pub fn contains_relative(&self) -> bool {
-        matches!(self.width, Axis::Relative(_)) ||
-        matches!(self.height, Axis::Relative(_)) ||
-        matches!(self.depth, Axis::Relative(_))
+        matches!(self.width, Axis::Relative(_))
+            || matches!(self.height, Axis::Relative(_))
+            || matches!(self.depth, Axis::Relative(_))
     }
 }
-
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Extent2D {
@@ -53,8 +52,7 @@ pub struct Extent2D {
 }
 impl Extent2D {
     pub fn contains_relative(&self) -> bool {
-        matches!(self.width, Axis::Relative(_)) ||
-        matches!(self.height, Axis::Relative(_))
+        matches!(self.width, Axis::Relative(_)) || matches!(self.height, Axis::Relative(_))
     }
 }
 

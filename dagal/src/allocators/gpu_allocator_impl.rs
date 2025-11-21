@@ -83,20 +83,23 @@ impl Allocator for GPUAllocatorImpl {
             linear: false,
             allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
         };
-        let handle = guard.as_mut().unwrap().allocate(&allocate_ci).map_err(|_| crate::DagalError::AllocationError)?;
+        let handle = guard
+            .as_mut()
+            .unwrap()
+            .allocate(&allocate_ci)
+            .map_err(|_| crate::DagalError::AllocationError)?;
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
 
         Ok(GPUAllocatorAllocation {
             handle: Some(handle),
-            name: name.to_string(), 
+            name: name.to_string(),
         })
     }
 
     fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
-        self.free_impl(allocation).map_err(|_| {
-            crate::DagalError::AllocationError
-        })
+        self.free_impl(allocation)
+            .map_err(|_| crate::DagalError::AllocationError)
     }
 
     fn get_device(&self) -> &LogicalDevice {

@@ -1,7 +1,12 @@
 use std::{collections::HashMap, hash::Hash};
 
-use dagal::{allocators::{Allocator, ArcAllocator}, ash::vk::Handle, resource::traits::Resource, traits::AsRaw};
 use dagal::ash::vk;
+use dagal::{
+    allocators::{Allocator, ArcAllocator},
+    ash::vk::Handle,
+    resource::traits::Resource,
+    traits::AsRaw,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct UploadSlice {
@@ -9,7 +14,7 @@ struct UploadSlice {
     offset: u64,
     size: u64,
     /// Timeline value that frees this slice
-    retire_ticket: u64
+    retire_ticket: u64,
 }
 
 /// Each chunk has a buffer backing it, along with a head cursor for sub-allocations
@@ -50,7 +55,7 @@ pub enum ChunkDestination {
         dst_extent: vk::Extent3D,
         src_offset: u64,
         src_size: u64,
-    }
+    },
 }
 
 impl ChunkDestination {
@@ -65,12 +70,12 @@ impl ChunkDestination {
 
 /**
  * 2nd generation transfer manager
- * 
+ *
  * Uses a belt allocator to stream transfers onto the CPU <-> GPU
- * 
+ *
  * # Chunk
  * - An allocation of contiguous memory
- * 
+ *
  * # Slice
  * - A sub-allocation of a chunk that actually contains the transfer data
  */
@@ -92,7 +97,7 @@ pub struct TransferPoolInner<A: Allocator> {
 
     /// Max belt size of all chunks
     max_belt_size: u64,
-    
+
     /// Queue allocator
     queue_allocator: dagal::util::queue_allocator::QueueAllocator,
 
@@ -105,17 +110,24 @@ pub struct TransferPoolInner<A: Allocator> {
 }
 
 impl<A: Allocator> TransferPoolInner<A> {
-    pub fn new(device: dagal::device::LogicalDevice, queue: dagal::device::Queue, allocator: ArcAllocator<A>, max_belt_size: u64, lru_cache: u64) -> dagal::Result<Self> {
+    pub fn new(
+        device: dagal::device::LogicalDevice,
+        queue: dagal::device::Queue,
+        allocator: ArcAllocator<A>,
+        max_belt_size: u64,
+        lru_cache: u64,
+    ) -> dagal::Result<Self> {
         let command_pool = dagal::command::CommandPool::new(
             dagal::command::CommandPoolCreateInfo::WithQueueFamily {
                 device: allocator.get_device().clone(),
                 flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 queue_family_index: queue.get_family_index(),
-            }
+            },
         )?;
 
         // Initialize a simple queue allocator with the provided queue for now
-        let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(vec![queue.clone()]);
+        let queue_allocator =
+            dagal::util::queue_allocator::QueueAllocator::from(vec![queue.clone()]);
         // Queue for transfers
         let (send, recv) = std::sync::mpsc::channel::<ChunkDestination>();
         Ok(Self {
@@ -127,7 +139,11 @@ impl<A: Allocator> TransferPoolInner<A> {
             command_pool,
             allocator,
 
-            semaphore: dagal::sync::Semaphore::new(vk::SemaphoreCreateFlags::empty(), device.clone(), 0)?,
+            semaphore: dagal::sync::Semaphore::new(
+                vk::SemaphoreCreateFlags::empty(),
+                device.clone(),
+                0,
+            )?,
             next_ticket: 1,
 
             max_belt_size,
@@ -149,17 +165,18 @@ impl<A: Allocator> TransferPoolInner<A> {
     }
 
     /// Create a new chunk in the belt buffer which is sent into the free list
-    fn create_chunk(&mut self, size: u64) -> dagal::Result<()>{
-        let buffer = dagal::resource::Buffer::new(
-            dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+    fn create_chunk(&mut self, size: u64) -> dagal::Result<()> {
+        let buffer =
+            dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
                 device: self.allocator.get_device().clone(),
                 name: Some("TransferManager2 Chunk Buffer".to_string()),
                 allocator: &mut self.allocator,
                 size,
                 memory_type: dagal::allocators::MemoryLocation::CpuToGpu,
-                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            }
-        )?;
+                usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            })?;
         let chunk = Chunk {
             buffer,
             head: 0,
@@ -201,7 +218,7 @@ impl<A: Allocator> TransferPoolInner<A> {
     }
 
     /// Retrieve a slice of the buffer for the given allocation
-    /// 
+    ///
     /// Returns an index from the [`Self::chunks_active`] list
     fn allocate_slice(&mut self, size: u64) -> dagal::Result<usize> {
         self.reclaim()?;
@@ -239,9 +256,13 @@ impl<A: Allocator> TransferPoolInner<A> {
             chunk.head += size;
         }
 
-        let mut chunks_submit: Vec<Chunk<A>> = self.chunks_active.drain(..).collect::<Vec<Chunk<A>>>();
-        let command_buffer: dagal::command::CommandBuffer = self.command_pool.allocate(1)?.pop().unwrap();
-        let command_buffer: dagal::command::CommandBufferRecording = command_buffer.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT).unwrap();
+        let mut chunks_submit: Vec<Chunk<A>> =
+            self.chunks_active.drain(..).collect::<Vec<Chunk<A>>>();
+        let command_buffer: dagal::command::CommandBuffer =
+            self.command_pool.allocate(1)?.pop().unwrap();
+        let command_buffer: dagal::command::CommandBufferRecording = command_buffer
+            .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+            .unwrap();
         for chunk in chunks_submit.iter_mut() {
             // Record copy commands for each chunk
             chunk.max_ticket = self.next_ticket;
@@ -256,18 +277,27 @@ impl<A: Allocator> TransferPoolInner<A> {
             let mut image_acquire_barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
             let mut image_release_barriers: Vec<vk::ImageMemoryBarrier2> = Vec::new();
 
-
             for destination in chunk.destinations.drain(..) {
                 match destination {
-                    ChunkDestination::Buffer { src_queue_family, dst_queue_family, buffer, dst_offset, src_offset, src_size, oneshot } => {
-                        buffer_copy_maps.entry(buffer.as_raw()).or_default().push(vk::BufferCopy2 {
-                            s_type: vk::StructureType::BUFFER_COPY_2,
-                            p_next: std::ptr::null(),
-                            src_offset,
-                            dst_offset,
-                            size: src_size,
-                            _marker: std::marker::PhantomData,
-                        });
+                    ChunkDestination::Buffer {
+                        src_queue_family,
+                        dst_queue_family,
+                        buffer,
+                        dst_offset,
+                        src_offset,
+                        src_size,
+                        oneshot,
+                    } => {
+                        buffer_copy_maps.entry(buffer.as_raw()).or_default().push(
+                            vk::BufferCopy2 {
+                                s_type: vk::StructureType::BUFFER_COPY_2,
+                                p_next: std::ptr::null(),
+                                src_offset,
+                                dst_offset,
+                                size: src_size,
+                                _marker: std::marker::PhantomData,
+                            },
+                        );
                         let transfer_family = self.queue.get_family_index();
                         let dst_family = dst_queue_family.unwrap_or(src_queue_family);
                         // acquire ownership
@@ -306,7 +336,17 @@ impl<A: Allocator> TransferPoolInner<A> {
                             });
                         }
                     }
-                    ChunkDestination::Image { src_queue_family, dst_queue_family, image, old_layout, new_layout, dst_offset, dst_extent, src_offset, src_size } => {
+                    ChunkDestination::Image {
+                        src_queue_family,
+                        dst_queue_family,
+                        image,
+                        old_layout,
+                        new_layout,
+                        dst_offset,
+                        dst_extent,
+                        src_offset,
+                        src_size,
+                    } => {
                         let dst_queue_family: u32 = dst_queue_family.unwrap_or(src_queue_family);
                         image_acquire_barriers.push(vk::ImageMemoryBarrier2 {
                             s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
@@ -351,22 +391,24 @@ impl<A: Allocator> TransferPoolInner<A> {
                             _marker: std::marker::PhantomData,
                         });
 
-                        image_copy_maps.entry(image.as_raw()).or_default().push(vk::BufferImageCopy2 {
-                            s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
-                            p_next: std::ptr::null(),
-                            buffer_offset: src_offset,
-                            buffer_row_length: 0,
-                            buffer_image_height: 0,
-                            image_subresource: vk::ImageSubresourceLayers {
-                                aspect_mask: vk::ImageAspectFlags::COLOR,
-                                mip_level: 0,
-                                base_array_layer: 0,
-                                layer_count: 1,
+                        image_copy_maps.entry(image.as_raw()).or_default().push(
+                            vk::BufferImageCopy2 {
+                                s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
+                                p_next: std::ptr::null(),
+                                buffer_offset: src_offset,
+                                buffer_row_length: 0,
+                                buffer_image_height: 0,
+                                image_subresource: vk::ImageSubresourceLayers {
+                                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                                    mip_level: 0,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                },
+                                image_offset: dst_offset,
+                                image_extent: dst_extent,
+                                _marker: std::marker::PhantomData,
                             },
-                            image_offset: dst_offset,
-                            image_extent: dst_extent,
-                            _marker: std::marker::PhantomData,
-                        });
+                        );
 
                         unimplemented!()
                     }
@@ -376,21 +418,24 @@ impl<A: Allocator> TransferPoolInner<A> {
             // issue a single pre-copy acquire barrier batch, if any
             if !buffer_acquire_barriers.is_empty() {
                 unsafe {
-                    self.allocator.get_device().get_handle().cmd_pipeline_barrier2(
-                        *command_buffer.as_raw(),
-                        &vk::DependencyInfo {
-                            s_type: vk::StructureType::DEPENDENCY_INFO,
-                            p_next: std::ptr::null(),
-                            dependency_flags: vk::DependencyFlags::empty(),
-                            memory_barrier_count: 0,
-                            p_memory_barriers: std::ptr::null(),
-                            buffer_memory_barrier_count: buffer_acquire_barriers.len() as u32,
-                            p_buffer_memory_barriers: buffer_acquire_barriers.as_ptr(),
-                            image_memory_barrier_count: 0,
-                            p_image_memory_barriers: std::ptr::null(),
-                            _marker: std::marker::PhantomData,
-                        }
-                    );
+                    self.allocator
+                        .get_device()
+                        .get_handle()
+                        .cmd_pipeline_barrier2(
+                            *command_buffer.as_raw(),
+                            &vk::DependencyInfo {
+                                s_type: vk::StructureType::DEPENDENCY_INFO,
+                                p_next: std::ptr::null(),
+                                dependency_flags: vk::DependencyFlags::empty(),
+                                memory_barrier_count: 0,
+                                p_memory_barriers: std::ptr::null(),
+                                buffer_memory_barrier_count: buffer_acquire_barriers.len() as u32,
+                                p_buffer_memory_barriers: buffer_acquire_barriers.as_ptr(),
+                                image_memory_barrier_count: 0,
+                                p_image_memory_barriers: std::ptr::null(),
+                                _marker: std::marker::PhantomData,
+                            },
+                        );
                 }
             }
 
@@ -407,7 +452,7 @@ impl<A: Allocator> TransferPoolInner<A> {
                             region_count: copies.len() as u32,
                             p_regions: copies.as_ptr(),
                             _marker: std::marker::PhantomData,
-                        }
+                        },
                     );
                 }
             }
@@ -415,33 +460,42 @@ impl<A: Allocator> TransferPoolInner<A> {
             // Issue a single post-copy release barrier batch, if any
             if !buffer_release_barriers.is_empty() {
                 unsafe {
-                    self.allocator.get_device().get_handle().cmd_pipeline_barrier2(
-                        *command_buffer.as_raw(),
-                        &vk::DependencyInfo {
-                            s_type: vk::StructureType::DEPENDENCY_INFO,
-                            p_next: std::ptr::null(),
-                            dependency_flags: vk::DependencyFlags::empty(),
-                            memory_barrier_count: 0,
-                            p_memory_barriers: std::ptr::null(),
-                            buffer_memory_barrier_count: buffer_release_barriers.len() as u32,
-                            p_buffer_memory_barriers: buffer_release_barriers.as_ptr(),
-                            image_memory_barrier_count: 0,
-                            p_image_memory_barriers: std::ptr::null(),
-                            _marker: std::marker::PhantomData,
-                        }
-                    );
+                    self.allocator
+                        .get_device()
+                        .get_handle()
+                        .cmd_pipeline_barrier2(
+                            *command_buffer.as_raw(),
+                            &vk::DependencyInfo {
+                                s_type: vk::StructureType::DEPENDENCY_INFO,
+                                p_next: std::ptr::null(),
+                                dependency_flags: vk::DependencyFlags::empty(),
+                                memory_barrier_count: 0,
+                                p_memory_barriers: std::ptr::null(),
+                                buffer_memory_barrier_count: buffer_release_barriers.len() as u32,
+                                p_buffer_memory_barriers: buffer_release_barriers.as_ptr(),
+                                image_memory_barrier_count: 0,
+                                p_image_memory_barriers: std::ptr::null(),
+                                _marker: std::marker::PhantomData,
+                            },
+                        );
                 }
             }
         }
         // submit command buffer
         let command_buffer: dagal::command::CommandBufferExecutable = command_buffer.end().unwrap();
-        let fence = dagal::sync::Fence::new(self.allocator.get_device().clone(), vk::FenceCreateFlags::empty())?;
-        
+        let fence = dagal::sync::Fence::new(
+            self.allocator.get_device().clone(),
+            vk::FenceCreateFlags::empty(),
+        )?;
+
         // Extract oneshots from chunks before moving to closed
         let mut oneshots: Vec<tokio::sync::oneshot::Sender<dagal::Result<()>>> = Vec::new();
         for chunk in chunks_submit.iter_mut() {
             for destination in chunk.destinations.iter_mut() {
-                if let ChunkDestination::Buffer { oneshot: Some(_), .. } = destination {
+                if let ChunkDestination::Buffer {
+                    oneshot: Some(_), ..
+                } = destination
+                {
                     if let ChunkDestination::Buffer { oneshot, .. } = destination {
                         if let Some(tx) = oneshot.take() {
                             oneshots.push(tx);
@@ -450,7 +504,7 @@ impl<A: Allocator> TransferPoolInner<A> {
                 }
             }
         }
-        
+
         unsafe {
             let submit_info = vk::SubmitInfo2 {
                 s_type: vk::StructureType::SUBMIT_INFO_2,
@@ -478,7 +532,13 @@ impl<A: Allocator> TransferPoolInner<A> {
                 },
                 _marker: std::marker::PhantomData,
             };
-            command_buffer.submit(*self.queue.acquire_queue_async().await.unwrap(), &[submit_info], *fence.as_raw()).unwrap();
+            command_buffer
+                .submit(
+                    *self.queue.acquire_queue_async().await.unwrap(),
+                    &[submit_info],
+                    *fence.as_raw(),
+                )
+                .unwrap();
         }
 
         // Move chunks to closed list for reclaim() to process later

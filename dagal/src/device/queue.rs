@@ -76,15 +76,15 @@ impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Hash for Queue<M> {
     }
 }
 
-unsafe impl<M> Send for Queue<M> 
-where 
-    M: dagal::concurrency::Lockable<Target = vk::Queue> + Send + Sync 
-{}
+unsafe impl<M> Send for Queue<M> where
+    M: dagal::concurrency::Lockable<Target = vk::Queue> + Send + Sync
+{
+}
 
-unsafe impl<M> Sync for Queue<M> 
-where 
-    M: dagal::concurrency::Lockable<Target = vk::Queue> + Send + Sync 
-{}
+unsafe impl<M> Sync for Queue<M> where
+    M: dagal::concurrency::Lockable<Target = vk::Queue> + Send + Sync
+{
+}
 
 impl<M: dagal::concurrency::Lockable<Target = vk::Queue>> Queue<M> {
     pub fn get_index(&self) -> u32 {

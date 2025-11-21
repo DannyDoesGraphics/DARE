@@ -1,4 +1,1 @@
-
-pub struct ComputeParams {
-    
-}
+pub struct ComputeParams {}

@@ -1,9 +1,6 @@
 use std::ptr;
 use std::task::{Context, Poll};
-use std::{
-    future::Future,
-    sync::Arc,
-};
+use std::{future::Future, sync::Arc};
 use std::{
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},

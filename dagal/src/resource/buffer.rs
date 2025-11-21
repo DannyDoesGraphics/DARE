@@ -70,11 +70,11 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         allocation: ArcAllocation<A>,
         usage_flags: vk::BufferUsageFlags,
     },
-    FromOwnedCreateInfo{
+    FromOwnedCreateInfo {
         create_info: OwnedBufferCreateInfo,
         device: crate::device::LogicalDevice,
         allocator: &'a mut ArcAllocator<A>,
-    }
+    },
 }
 
 impl<A: Allocator> Destructible for Buffer<A> {
@@ -114,7 +114,11 @@ impl<A: Allocator> Buffer<A> {
     }
 
     /// Read to a mapper pointer if one exists
-    pub fn read<T: Sized>(&self, offset_bytes: vk::DeviceSize, amount: u64) -> Result<&[T], crate::DagalError> {
+    pub fn read<T: Sized>(
+        &self,
+        offset_bytes: vk::DeviceSize,
+        amount: u64,
+    ) -> Result<&[T], crate::DagalError> {
         if offset_bytes + (std::mem::size_of::<T>() as vk::DeviceSize * amount) > self.size {
             return Err(crate::DagalError::InsufficientSpace);
         }
@@ -132,7 +136,11 @@ impl<A: Allocator> Buffer<A> {
     /// Write to a mapped pointer if one exists
     ///
     /// Offset is in bytes
-    pub fn write<T: Sized>(&mut self, offset_bytes: vk::DeviceSize, data: &[T]) -> Result<(), crate::DagalError> {
+    pub fn write<T: Sized>(
+        &mut self,
+        offset_bytes: vk::DeviceSize,
+        data: &[T],
+    ) -> Result<(), crate::DagalError> {
         if offset_bytes + (size_of_val(data) as vk::DeviceSize) > self.size {
             return Err(crate::DagalError::InsufficientSpace);
         }
@@ -258,8 +266,12 @@ impl<A: Allocator> Resource for Buffer<A> {
                 }
 
                 Ok(buffer)
-            },
-            BufferCreateInfo::FromOwnedCreateInfo { create_info, device, allocator } => {
+            }
+            BufferCreateInfo::FromOwnedCreateInfo {
+                create_info,
+                device,
+                allocator,
+            } => {
                 let handle = unsafe {
                     device.get_handle().create_buffer(
                         &vk::BufferCreateInfo {
@@ -278,7 +290,8 @@ impl<A: Allocator> Resource for Buffer<A> {
                 };
                 let mem_requirements =
                     unsafe { device.get_handle().get_buffer_memory_requirements(handle) };
-                let allocation = allocator.allocate("buffer", &mem_requirements, create_info.location)?;
+                let allocation =
+                    allocator.allocate("buffer", &mem_requirements, create_info.location)?;
                 unsafe {
                     device.get_handle().bind_buffer_memory(
                         handle,
@@ -309,12 +322,14 @@ impl<A: Allocator> Resource for Buffer<A> {
                     size: create_info.size,
                     name: None,
                 };
-                if let (Some(debug_utils), Some(name)) = (device.get_debug_utils(), &create_info.name) {
+                if let (Some(debug_utils), Some(name)) =
+                    (device.get_debug_utils(), &create_info.name)
+                {
                     buffer.set_name(debug_utils, name)?;
                 }
 
                 Ok(buffer)
-            },
+            }
             _ => unimplemented!(),
         }
     }
@@ -341,7 +356,11 @@ impl<A: Allocator> AsRaw for Buffer<A> {
 
 impl<A: Allocator> Nameable for Buffer<A> {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::BUFFER;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
+    fn set_name(
+        &mut self,
+        debug_utils: &ash::ext::debug_utils::Device,
+        name: &str,
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         self.name = Some(name.to_string());
         Ok(())

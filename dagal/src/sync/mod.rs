@@ -1,8 +1,8 @@
 pub mod binary_semaphore;
-pub mod semaphore;
 /// Handles synchronization
 pub mod fence;
 mod memory_barrier;
+pub mod semaphore;
 
 pub use binary_semaphore::BinarySemaphore;
 pub use fence::Fence;

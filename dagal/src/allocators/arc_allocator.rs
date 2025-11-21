@@ -58,9 +58,7 @@ impl<A: Allocator> ArcAllocation<A> {
             .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.offset()))
-            .unwrap_or_else(|| {
-                Err(crate::DagalError::EmptyMemoryAllocation)
-            })
+            .unwrap_or_else(|| Err(crate::DagalError::EmptyMemoryAllocation))
     }
 
     pub fn memory(&self) -> Result<vk::DeviceMemory, crate::DagalError> {
@@ -69,9 +67,7 @@ impl<A: Allocator> ArcAllocation<A> {
             .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.memory()))
-            .unwrap_or_else(|| {
-                Err(crate::DagalError::EmptyMemoryAllocation)
-            })
+            .unwrap_or_else(|| Err(crate::DagalError::EmptyMemoryAllocation))
     }
 
     pub fn mapped_ptr(&self) -> Result<Option<NonNull<c_void>>, crate::DagalError> {
@@ -80,9 +76,7 @@ impl<A: Allocator> ArcAllocation<A> {
             .map_err(|_| crate::DagalError::PoisonError)?
             .as_ref()
             .map(|allocation| Ok(allocation.mapped_ptr()))
-            .unwrap_or_else(|| {
-                Err(crate::DagalError::EmptyMemoryAllocation)
-            })
+            .unwrap_or_else(|| Err(crate::DagalError::EmptyMemoryAllocation))
     }
 }
 

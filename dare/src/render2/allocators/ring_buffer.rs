@@ -1,6 +1,5 @@
 use dagal::allocators::Allocator;
 
-
 /// A standard ring buffer allocator using a single host and device visible buffer
 #[derive(Debug)]
 pub struct RingBuffer<A: Allocator, T: Sized> {
@@ -24,12 +23,12 @@ impl<A: Allocator, T> RingBuffer<A, T> {
     pub fn write(&mut self, data: &[T]) -> Result<u64, dagal::DagalError> {
         let size = std::mem::size_of_val(data) as u64;
         let buffer_size = self.buffer.get_size();
-        
+
         // Check if there's enough space (simplified check)
         if size > buffer_size {
             return Err(dagal::DagalError::InsufficientSpace);
         }
-        
+
         let end_space = buffer_size - self.write;
         if size <= end_space {
             // Can write contiguously
@@ -40,14 +39,14 @@ impl<A: Allocator, T> RingBuffer<A, T> {
             self.buffer.write(self.write, &data[0..first_part_len])?;
             self.buffer.write(0, &data[first_part_len..])?;
         }
-        
+
         self.write = (self.write + size) % buffer_size;
         Ok(self.write)
     }
 
     /// Reads `amount` of `T` from the buffer at the current read head, and returns a pointer to the read data in
     /// the buffer.
-    /// 
+    ///
     /// # Invariance
     /// Does not support reading across the ring buffer wrap-around as it would require an expensive clone operation.
     pub fn read(&mut self, amount: u64) -> Result<&[T], dagal::DagalError> {

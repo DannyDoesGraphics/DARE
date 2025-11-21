@@ -53,17 +53,23 @@ impl ImageSubresourceRange {
                 base_array_layer: 0,
                 layer_count: vk::REMAINING_ARRAY_LAYERS,
             },
-            ImageSubresourceRange::Sub { aspect_mask, mip_levels, array_layers } => vk::ImageSubresourceRange {
+            ImageSubresourceRange::Sub {
+                aspect_mask,
+                mip_levels,
+                array_layers,
+            } => vk::ImageSubresourceRange {
                 aspect_mask: *aspect_mask,
                 base_mip_level: mip_levels.start,
                 level_count: mip_levels.end - mip_levels.start,
                 base_array_layer: array_layers.start,
                 layer_count: array_layers.end - array_layers.start,
-            }
+            },
         }
     }
 
     pub fn full_color() -> Self {
-        ImageSubresourceRange::Full { aspect_mask: vk::ImageAspectFlags::COLOR }
+        ImageSubresourceRange::Full {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+        }
     }
 }

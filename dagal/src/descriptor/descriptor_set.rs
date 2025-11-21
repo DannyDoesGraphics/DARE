@@ -233,7 +233,11 @@ impl DescriptorSet {
 
 impl Nameable for DescriptorSet {
     const OBJECT_TYPE: vk::ObjectType = vk::ObjectType::DESCRIPTOR_SET;
-    fn set_name(&mut self, debug_utils: &ash::ext::debug_utils::Device, name: &str) -> Result<(), crate::DagalError> {
+    fn set_name(
+        &mut self,
+        debug_utils: &ash::ext::debug_utils::Device,
+        name: &str,
+    ) -> Result<(), crate::DagalError> {
         crate::resource::traits::name_nameable::<Self>(debug_utils, self.handle.as_raw(), name)?;
         Ok(())
     }

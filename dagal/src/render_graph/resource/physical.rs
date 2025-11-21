@@ -16,12 +16,12 @@ struct ResourceEntry {
 
 /// Stores all metadata, physical resource, and their states
 /// There are 2 types of resources: Transient and Persistent
-/// 
-/// 
+///
+///
 /// Transient resources are resources which are created and destroyed within a single frame and managed entirely by the
 /// render graph.
-/// 
-/// 
+///
+///
 /// Persistent resources are resources which persist across multiple frames and are not managed by the render graph.
 pub struct PhysicalResourceStorage {
     virtual_resource_descriptions: HashMap<VirtualResource, ResourceEntry>,

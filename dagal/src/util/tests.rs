@@ -73,11 +73,11 @@ pub fn create_vulkan(settings: TestSettings) -> TestVulkan {
     let debug_messenger =
         crate::device::DebugMessenger::new(instance.get_entry(), instance.get_instance()).unwrap();
     TestVulkan {
-    device: None,
-    debug_messenger: Some(debug_messenger),
-    physical_device: None,
-    queue_allocator: None,
-    instance,
+        device: None,
+        debug_messenger: Some(debug_messenger),
+        physical_device: None,
+        queue_allocator: None,
+        instance,
     }
 }
 
@@ -104,11 +104,11 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
 
     let queue_allocator = dagal::util::QueueAllocator::from(queues);
     TestVulkan {
-    device: Some(logical_device),
-    debug_messenger: test_vulkan.debug_messenger,
-    physical_device: Some(physical_device),
-    queue_allocator: Some(queue_allocator),
-    instance: test_vulkan.instance,
+        device: Some(logical_device),
+        debug_messenger: test_vulkan.debug_messenger,
+        physical_device: Some(physical_device),
+        queue_allocator: Some(queue_allocator),
+        instance: test_vulkan.instance,
     }
 }
 

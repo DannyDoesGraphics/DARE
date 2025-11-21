@@ -1,5 +1,2 @@
-
 /// Resources to bind per pass
-pub struct BindingsSpec {
-    
-}
+pub struct BindingsSpec {}

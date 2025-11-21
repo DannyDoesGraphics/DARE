@@ -1,20 +1,20 @@
 //! This module contains all the render passes used in the render graph.
-//! 
+//!
 //! # Builder
 //! The builder pattern is used to build precompiled passes
-//! 
+//!
 //! # Precompiled passes
 //! Precompiled passes which passes which have yet to be compiled by the render graph
-//! 
+//!
 //! # Compiled passes
 //! Passes which have been compiled entirely
 
 pub mod compute_pass;
-pub mod pass_storage;
 pub mod descriptor;
+pub mod pass_storage;
+use ash::vk;
 use derivative::Derivative;
 pub use pass_storage::*;
-use ash::vk;
 
 #[derive(Debug)]
 pub struct PassContext<A: crate::allocators::Allocator = crate::DefaultAllocator> {
@@ -28,13 +28,9 @@ pub struct PassId(pub u32);
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum PassKind {
-    Graphics {
-
-    },
-    Compute {
-        extent: super::resource::Extent3D
-    },
-    Raytracing {}
+    Graphics {},
+    Compute { extent: super::resource::Extent3D },
+    Raytracing {},
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -117,12 +113,20 @@ impl<A: crate::allocators::Allocator> PassDescription<A> {
         self
     }
 
-    pub fn read(mut self, resource: super::resource::ResourceId, access: super::resource::UseDeclaration) -> Self {
+    pub fn read(
+        mut self,
+        resource: super::resource::ResourceId,
+        access: super::resource::UseDeclaration,
+    ) -> Self {
         self.reads.push((resource, access));
         self
     }
 
-    pub fn write(mut self, resource: super::resource::ResourceId, access: super::resource::UseDeclaration) -> Self {
+    pub fn write(
+        mut self,
+        resource: super::resource::ResourceId,
+        access: super::resource::UseDeclaration,
+    ) -> Self {
         self.writes.push((resource, access));
         self
     }
