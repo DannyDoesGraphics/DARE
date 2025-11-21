@@ -1,4 +1,5 @@
 use bevy_tasks::futures_lite::StreamExt;
+use bytes::{Bytes, BytesMut};
 use derivative::Derivative;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -18,10 +19,10 @@ pub struct StrideStreamBuilder {
 }
 
 impl StrideStreamBuilder {
-    pub fn build<T: AsRef<[u8]>>(
+    pub fn build<'a, T: Into<Bytes>>(
         self,
-        stream: futures::stream::LocalBoxStream<anyhow::Result<T>>,
-    ) -> StrideStream<T> {
+        stream: futures::stream::LocalBoxStream<'a, anyhow::Result<T>>,
+    ) -> StrideStream<'a, T> {
         StrideStream {
             offset: self.offset,
             element_size: self.element_size,
@@ -31,8 +32,8 @@ impl StrideStreamBuilder {
             data_stream: stream,
             element_processed: 0,
             bytes_recv: 0,
-            processed: Vec::with_capacity(self.frame_size),
-            buffer: Vec::new(),
+            processed: BytesMut::with_capacity(self.frame_size),
+            buffer: BytesMut::new(),
         }
     }
 }
@@ -44,7 +45,7 @@ impl StrideStreamBuilder {
 /// it is cancellation safe as it keeps state
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub struct StrideStream<'a, T: AsRef<[u8]>> {
+pub struct StrideStream<'a, T: Into<Bytes>> {
     offset: usize,
     element_size: usize,
     element_stride: usize,
@@ -61,49 +62,41 @@ pub struct StrideStream<'a, T: AsRef<[u8]>> {
     bytes_recv: usize,
     /// Bytes of the processed elements
     /// waiting to the yielded out
-    processed: Vec<u8>,
+    processed: BytesMut,
     /// Bytes of elements awaiting processing
-    buffer: Vec<u8>,
+    buffer: BytesMut,
 }
-impl<'a, T: AsRef<[u8]>> Unpin for StrideStream<'a, T> {}
-impl<'a, T: AsRef<[u8]>> StrideStream<'a, T> {
+impl<'a, T: Into<Bytes>> Unpin for StrideStream<'a, T> {}
+impl<'a, T: Into<Bytes>> StrideStream<'a, T> {
     /// Processes all items from `buffer` into `processed`
     ///
     /// Deals handling stride and byte concat
     fn process_buffer(&mut self) {
         // Ret empty if buffer is empty or insufficient buffer size
         // or processed enough
-        if self.element_processed >= self.element_count || self.buffer.len() < self.element_stride {
-            return;
-        }
-        let iter = self.buffer.chunks_exact(self.element_stride);
-        let remainder: Vec<u8> = iter.remainder().to_vec();
-        for stride_chunk in iter {
+        while self.element_processed < self.element_count
+            && self.buffer.len() >= self.element_stride
+        {
+            let chunk = self.buffer.split_to(self.element_stride);
             self.processed
-                .extend_from_slice(&stride_chunk[0..self.element_size]);
+                .extend_from_slice(&chunk[..self.element_size]);
             self.element_processed += 1;
-            // stop if we processed more than expected
-            if self.element_processed >= self.element_count {
-                break;
-            }
         }
-        // Discard any remaining bytes back to be used later or discarded
-        self.buffer = remainder;
     }
 
     /// Prepares the buffer to be yielded
-    fn get_yielded_data(&mut self) -> Option<anyhow::Result<Vec<u8>>> {
+    fn get_yielded_data(&mut self) -> Option<anyhow::Result<Bytes>> {
         if self.processed.is_empty() {
             None
         } else {
             let end = self.frame_size.min(self.processed.len());
-            Some(Ok(self.processed.drain(0..end).collect::<Vec<u8>>()))
+            Some(Ok(self.processed.split_to(end).freeze()))
         }
     }
 }
 
-impl<'a, T: AsRef<[u8]>> futures::Stream for StrideStream<'a, T> {
-    type Item = anyhow::Result<Vec<u8>>;
+impl<'a, T: Into<Bytes>> futures::Stream for StrideStream<'a, T> {
+    type Item = anyhow::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -118,7 +111,9 @@ impl<'a, T: AsRef<[u8]>> futures::Stream for StrideStream<'a, T> {
                             Poll::Ready(Some(buf))
                         } else if !this.processed.is_empty() {
                             // dump remaining out
-                            Poll::Ready(Some(Ok(this.processed.clone())))
+                            let remaining =
+                                this.processed.split_to(this.processed.len()).freeze();
+                            Poll::Ready(Some(Ok(remaining)))
                         } else {
                             Poll::Ready(None)
                         }
@@ -127,18 +122,24 @@ impl<'a, T: AsRef<[u8]>> futures::Stream for StrideStream<'a, T> {
                         // Data can be added
                         match data {
                             Ok(data) => {
+                                let data: Bytes = data.into();
+                                let data_len = data.len();
                                 // check offset and ret early
-                                if this.bytes_recv + data.as_ref().len() < this.offset {
-                                    this.bytes_recv += data.as_ref().len();
+                                if this.bytes_recv + data_len < this.offset {
+                                    this.bytes_recv += data_len;
                                     cx.waker().wake_by_ref();
                                     return Poll::Pending;
                                 }
                                 // Add new data and process it
-                                this.buffer.extend_from_slice(
-                                    &data.as_ref()
-                                        [this.offset.checked_sub(this.bytes_recv).unwrap_or(0)..],
-                                );
-                                this.bytes_recv += data.as_ref().len();
+                                let start = this
+                                    .offset
+                                    .saturating_sub(this.bytes_recv)
+                                    .min(data_len);
+                                if start < data_len {
+                                    this.buffer
+                                        .extend_from_slice(&data.as_ref()[start..]);
+                                }
+                                this.bytes_recv += data_len;
                                 this.process_buffer();
                                 if this.processed.len() >= this.frame_size
                                     || this.element_processed >= this.element_count
@@ -167,7 +168,7 @@ impl<'a, T: AsRef<[u8]>> futures::Stream for StrideStream<'a, T> {
     }
 }
 
-unsafe impl<'a, T: AsRef<[u8]>> Send for StrideStream<'a, T> {}
+unsafe impl<'a, T: Into<Bytes>> Send for StrideStream<'a, T> {}
 
 #[cfg(test)]
 mod tests {
@@ -176,7 +177,6 @@ mod tests {
     use futures::executor::LocalPool;
     use futures::stream::{self, StreamExt};
     use futures::task::LocalSpawnExt;
-    use std::rc::Rc;
 
     #[test]
     fn test_stride_stream_basic() {
@@ -191,8 +191,10 @@ mod tests {
         let data: Vec<u8> = (0..16).collect();
 
         // Create a vector of data chunks
-        let data_chunks: Vec<Result<Vec<u8>>> =
-            data.chunks(4).map(|chunk| Ok(chunk.to_vec())).collect();
+        let data_chunks: Vec<Result<Bytes>> = data
+            .chunks(4)
+            .map(|chunk| Ok(Bytes::copy_from_slice(chunk)))
+            .collect();
 
         // Create a stream from the data chunks
         let data_stream = stream::iter(data_chunks).boxed_local();
@@ -219,7 +221,9 @@ mod tests {
             })
             .unwrap();
 
-        let output_chunks: Vec<Vec<u8>> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Vec<u8>> =
+            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
 
         // Expected output
         let expected_output = vec![vec![0, 1, 4, 5], vec![8, 9]];
@@ -240,8 +244,10 @@ mod tests {
         let data: Vec<u8> = (0..16).collect();
 
         // Create a vector of data chunks
-        let data_chunks: Vec<anyhow::Result<Vec<u8>>> =
-            data.chunks(4).map(|chunk| Ok(chunk.to_vec())).collect();
+        let data_chunks: Vec<anyhow::Result<Bytes>> = data
+            .chunks(4)
+            .map(|chunk| Ok(Bytes::copy_from_slice(chunk)))
+            .collect();
 
         // Create a stream from the data chunks
         let data_stream = stream::iter(data_chunks).boxed_local();
@@ -268,7 +274,9 @@ mod tests {
             })
             .unwrap();
 
-        let output_chunks: Vec<Vec<u8>> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Vec<u8>> =
+            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
 
         // Expected output
         let expected_output = vec![vec![2, 3, 6, 7], vec![10, 11]];
@@ -289,8 +297,10 @@ mod tests {
         let data: Vec<u8> = (0..16).collect();
 
         // Create a vector of data chunks
-        let data_chunks: Vec<anyhow::Result<Vec<u8>>> =
-            data.chunks(4).map(|chunk| Ok(chunk.to_vec())).collect();
+        let data_chunks: Vec<anyhow::Result<Bytes>> = data
+            .chunks(4)
+            .map(|chunk| Ok(Bytes::copy_from_slice(chunk)))
+            .collect();
 
         // Create a stream from the data chunks
         let data_stream = stream::iter(data_chunks).boxed_local();
@@ -317,7 +327,9 @@ mod tests {
             })
             .unwrap();
 
-        let output_chunks: Vec<Vec<u8>> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Bytes> = pool.run_until(receiver.collect());
+        let output_chunks: Vec<Vec<u8>> =
+            output_chunks.into_iter().map(|bytes| bytes.to_vec()).collect();
 
         // Expected output
         let expected_output = vec![vec![0, 1, 2, 3, 4, 5, 6, 7], vec![8, 9, 10, 11]];

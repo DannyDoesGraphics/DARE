@@ -1,4 +1,5 @@
 use crate::prelude as dare;
+use bytes::Bytes;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::util::format::get_size_from_vk_format;
@@ -16,7 +17,7 @@ pub fn gpu_buffer_stream<'a, T, A>(
     source_stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
 ) -> impl Stream<Item = Option<(dagal::resource::Buffer<A>, dagal::resource::Buffer<A>)>> + 'a + Send
 where
-    T: AsRef<[u8]> + Send + 'a,
+    T: Into<Bytes> + Send + 'a,
     A: Allocator + 'static,
 {
     assert!(staging_buffer.get_size() <= transfer_pool.gpu_staging_size());
@@ -26,10 +27,7 @@ where
         .filter_map(|res| async move {
             match res {
                 Ok(n) => Some(n),
-                Err(e) => {
-                    panic!("Error found in GPU stream: {e}");
-                    None
-                }
+                Err(e) => panic!("Error found in GPU stream: {e}"),
             }
         })
         .boxed();
@@ -118,7 +116,7 @@ pub fn gpu_texture_stream<'a, T, A>(
     source_stream: impl Stream<Item = anyhow::Result<T>> + 'a + Send,
 ) -> impl Stream<Item = Option<(dagal::resource::Buffer<A>, dagal::resource::Image<A>)>> + 'a + Send
 where
-    T: AsRef<[u8]> + Send + 'a,
+    T: Into<Bytes> + Send + 'a,
     A: Allocator + 'static,
 {
     // precompute sizes

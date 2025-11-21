@@ -1,27 +1,28 @@
 use bytemuck::{NoUninit, Pod};
+use bytes::{Bytes, BytesMut};
 use futures::stream::BoxStream;
 use futures::stream::StreamExt;
 use num_traits::{Bounded, FromPrimitive, ToPrimitive};
 use std::marker::PhantomData;
+use std::mem::size_of;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 pub struct CastStream<
     'a,
-    T: AsRef<[u8]>,
+    T: Into<Bytes>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
     Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
 > {
     stream: super::framer::Framer<'a, T>,
     source_dimension: usize,
     dest_dimension: usize,
-    buffer: Vec<u8>,
     _phantom: PhantomData<(Source, Destination)>,
 }
 
 impl<
     'a,
-    T: AsRef<[u8]>,
+    T: Into<Bytes>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
     Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
 > Unpin for CastStream<'a, T, Source, Destination>
@@ -30,7 +31,7 @@ impl<
 
 impl<
     'a,
-    T: AsRef<[u8]>,
+    T: Into<Bytes>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Pod,
     Destination: ToPrimitive + Default + Unpin + NoUninit + Pod + FromPrimitive,
 > CastStream<'a, T, Source, Destination>
@@ -47,7 +48,6 @@ impl<
             stream: super::framer::Framer::new(stream, frame_size),
             source_dimension: source_dim,
             dest_dimension: dest_dim,
-            buffer: Vec::with_capacity(frame_size),
             _phantom: PhantomData,
         }
     }
@@ -55,12 +55,12 @@ impl<
 
 impl<
     'a,
-    T: AsRef<[u8]>,
+    T: Into<Bytes>,
     Source: ToPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
     Destination: ToPrimitive + FromPrimitive + Default + Unpin + NoUninit + Bounded + Pod,
 > futures::Stream for CastStream<'a, T, Source, Destination>
 {
-    type Item = Vec<u8>;
+    type Item = Bytes;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -69,9 +69,19 @@ impl<
             Poll::Ready(data) => match data {
                 None => Poll::Ready(None),
                 Some(data) => {
-                    let source_data: &[Source] = bytemuck::cast_slice(&data);
-                    let mut data: Vec<u8> = Vec::with_capacity(this.dest_dimension);
-                    for sources in source_data.chunks(this.source_dimension).into_iter() {
+                    let source_data: &[Source] = bytemuck::cast_slice(data.as_ref());
+                    let chunk_groups = if this.source_dimension == 0 {
+                        0
+                    } else {
+                        (source_data.len() + this.source_dimension - 1) / this.source_dimension
+                    };
+                    let mut data_out = BytesMut::with_capacity(
+                        chunk_groups
+                            * this.dest_dimension
+                            * size_of::<Destination>(),
+                    );
+                    let chunk_size = this.source_dimension.max(1);
+                    for sources in source_data.chunks(chunk_size) {
                         let sources: Vec<Source> = {
                             let mut sources: Vec<Source> = sources.to_vec();
                             sources.resize(this.dest_dimension, Source::zeroed());
@@ -105,11 +115,9 @@ impl<
                             })
                             .collect::<Vec<Destination>>();
 
-                        let mut destinations_bytes: Vec<u8> =
-                            bytemuck::cast_slice(&destinations).to_vec();
-                        data.append(&mut destinations_bytes);
+                        data_out.extend_from_slice(bytemuck::cast_slice(&destinations));
                     }
-                    Poll::Ready(Some(data))
+                    Poll::Ready(Some(data_out.freeze()))
                 }
             },
             Poll::Pending => {
@@ -124,16 +132,17 @@ impl<
 mod tests {
     use super::*;
     use bytemuck::{Pod, cast_slice};
+    use bytes::Bytes;
     use futures::StreamExt;
     use futures::stream;
     use num_traits::{Bounded, FromPrimitive, ToPrimitive};
 
-    fn setup_stream<T: Pod>(data: Vec<T>) -> BoxStream<'static, Vec<u8>> {
+    fn setup_stream<T: Pod>(data: Vec<T>) -> BoxStream<'static, Bytes> {
         let byte_data: Vec<u8> = data
             .into_iter()
             .flat_map(|val| cast_slice(&[val]).to_vec())
             .collect();
-        stream::iter(vec![byte_data]).boxed()
+        stream::iter(vec![Bytes::from(byte_data)]).boxed()
     }
 
     // Helper function to test conversions from a source type to a destination type with dimensional differences
@@ -156,11 +165,11 @@ mod tests {
         // Set up the stream with casted byte data
         let stream = setup_stream(source_data.clone());
 
-        let mut cast_stream: CastStream<_, Source, Destination> =
+        let cast_stream: CastStream<_, Source, Destination> =
             CastStream::new(stream, 64, source_dimension, dest_dimension);
 
         // Collect results from CastStream
-        let result = cast_stream.collect::<Vec<Vec<u8>>>().await;
+        let result = cast_stream.collect::<Vec<Bytes>>().await;
 
         // Ensure we received data and validate the conversion
         assert!(!result.is_empty());
@@ -168,7 +177,7 @@ mod tests {
         // Process each result and validate the casting logic with dimensions in mind
         for chunk in result {
             // Interpret the chunk as a slice of Destination items
-            let dest_data: &[Destination] = cast_slice(&chunk);
+            let dest_data: &[Destination] = cast_slice(chunk.as_ref());
 
             for (i, dest_val) in dest_data.iter().enumerate() {
                 // Determine the chunk in source_data we are processing based on dimensions

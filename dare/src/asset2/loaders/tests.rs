@@ -2,6 +2,7 @@
 mod tests {
     use crate::asset2::loaders::StrideStreamBuilder;
     use anyhow::Result;
+    use bytes::Bytes;
     use futures::stream::{self, StreamExt};
     use rand::RngCore;
 
@@ -17,9 +18,9 @@ mod tests {
 
         // Our data stream will yield the data in chunks
         let data_stream = stream::iter(vec![
-            Ok(&input_data[0..2]),
-            Ok(&input_data[2..4]),
-            Ok(&input_data[4..6]),
+            Ok(Bytes::copy_from_slice(&input_data[0..2])),
+            Ok(Bytes::copy_from_slice(&input_data[2..4])),
+            Ok(Bytes::copy_from_slice(&input_data[4..6])),
         ])
         .boxed_local();
 
@@ -40,6 +41,7 @@ mod tests {
         // Expected data is the same as input data
         let expected_frames = vec![vec![1, 2, 3, 4], vec![5, 6]];
 
+        let outputs: Vec<Vec<u8>> = outputs.into_iter().map(|b| b.to_vec()).collect();
         assert_eq!(outputs, expected_frames);
     }
 
@@ -57,9 +59,9 @@ mod tests {
 
         // Create data stream
         let data_stream = stream::iter(vec![
-            Ok(&input_data[0..3]), // [1,2,3]
-            Ok(&input_data[3..6]), // [4,5,6]
-            Ok(&input_data[6..8]), // [7,8]
+            Ok(Bytes::copy_from_slice(&input_data[0..3])), // [1,2,3]
+            Ok(Bytes::copy_from_slice(&input_data[3..6])), // [4,5,6]
+            Ok(Bytes::copy_from_slice(&input_data[6..8])), // [7,8]
         ])
         .boxed_local();
 
@@ -80,6 +82,7 @@ mod tests {
         // Expected processed elements: [1,2], [4,5]
         let expected_frames = vec![vec![1, 2, 4, 5]];
 
+        let outputs: Vec<Vec<u8>> = outputs.into_iter().map(|b| b.to_vec()).collect();
         assert_eq!(outputs, expected_frames);
     }
 
@@ -93,8 +96,11 @@ mod tests {
 
         let input_data: Vec<u8> = vec![1, 2, 3, 4, 5]; // Not enough data
 
-        let data_stream =
-            stream::iter(vec![Ok(&input_data[0..2]), Ok(&input_data[2..5])]).boxed_local();
+        let data_stream = stream::iter(vec![
+            Ok(Bytes::copy_from_slice(&input_data[0..2])),
+            Ok(Bytes::copy_from_slice(&input_data[2..5])),
+        ])
+        .boxed_local();
 
         let mut stride_stream = StrideStreamBuilder {
             offset: 0,
@@ -113,6 +119,7 @@ mod tests {
         // Expected outputs might be incomplete
         let expected_frames = vec![vec![1, 2]];
 
+        let outputs: Vec<Vec<u8>> = outputs.into_iter().map(|b| b.to_vec()).collect();
         assert_eq!(outputs, expected_frames);
     }
 
@@ -126,7 +133,8 @@ mod tests {
 
         let input_data: Vec<u8> = vec![10, 20, 30, 40, 50];
 
-        let data_stream = stream::iter(vec![Ok(&input_data[0..5])]).boxed_local();
+        let data_stream = stream::iter(vec![Ok(Bytes::copy_from_slice(&input_data[0..5]))])
+            .boxed_local();
 
         let mut stride_stream = StrideStreamBuilder {
             offset: 0,
@@ -145,6 +153,7 @@ mod tests {
         // Expected outputs are chunks of frame_size
         let expected_frames = vec![vec![10, 20], vec![30, 40], vec![50]];
 
+        let outputs: Vec<Vec<u8>> = outputs.into_iter().map(|b| b.to_vec()).collect();
         assert_eq!(outputs, expected_frames);
     }
 
@@ -160,9 +169,9 @@ mod tests {
 
         // [[1,2], [err], [3,4,5,6]]
         let data_stream = stream::iter(vec![
-            Ok(&input_data[0..2]),
+            Ok(Bytes::copy_from_slice(&input_data[0..2])),
             Err(anyhow::anyhow!("Test error")),
-            Ok(&input_data[2..6]),
+            Ok(Bytes::copy_from_slice(&input_data[2..6])),
         ])
         .boxed_local();
 
@@ -190,6 +199,11 @@ mod tests {
         ];
 
         // Compare outputs with expected frames
+        let outputs: Vec<anyhow::Result<Vec<u8>>> = outputs
+            .into_iter()
+            .map(|res| res.map(|bytes| bytes.to_vec()))
+            .collect();
+
         assert_eq!(outputs.len(), expected_frames.len());
         for (output, expected) in outputs.iter().zip(expected_frames.iter()) {
             match (output, expected) {
@@ -212,7 +226,7 @@ mod tests {
         let total_data_size = element_stride * element_count;
 
         // Generate random data
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut input_data = Vec::with_capacity(total_data_size);
 
         for _ in 0..element_count {
@@ -227,9 +241,9 @@ mod tests {
 
         // Simulate streaming the data in chunks
         let chunk_size = 8192; // Size of chunks to simulate streaming data
-        let chunks: Vec<Result<&[u8]>> = input_data
+        let chunks: Vec<Result<Bytes>> = input_data
             .chunks(chunk_size)
-            .map(|chunk| Ok(chunk))
+            .map(|chunk| Ok(Bytes::copy_from_slice(chunk)))
             .collect();
 
         // Create a data stream from the chunks
@@ -249,7 +263,7 @@ mod tests {
         let mut outputs = Vec::new();
         while let Some(result) = stride_stream.next().await {
             match result {
-                Ok(data) => outputs.extend_from_slice(&data),
+                Ok(data) => outputs.extend_from_slice(data.as_ref()),
                 Err(e) => panic!("Error occurred during streaming: {}", e),
             }
         }

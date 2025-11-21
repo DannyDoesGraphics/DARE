@@ -1,6 +1,7 @@
 use crate::render2::util::WrappingMode::MirrorClampToEdge;
 use dagal::ash::vk;
 use futures::stream::BoxStream;
+use bytes::*;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct Format {
@@ -82,11 +83,11 @@ impl From<gltf::json::accessor::ComponentType> for ElementFormat {
 }
 
 pub fn handle_cast_stream(
-    stream: BoxStream<Vec<u8>>,
+    stream: BoxStream<Bytes>,
     source_format: Format,
     target_format: Format,
     in_chunk_size: usize,
-) -> BoxStream<Vec<u8>> {
+) -> BoxStream<Bytes> {
     // Helper macro for calling CastStream with appropriate types
     use futures::stream::StreamExt;
     macro_rules! cast_stream {

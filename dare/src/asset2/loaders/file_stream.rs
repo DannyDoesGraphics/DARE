@@ -3,11 +3,14 @@ use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncSeekExt};
+use bytes::*;
 
+/// A file stream that reads data from a file 
+/// 
+/// Primarily provides a stream that skips n bytes and reads until m bytes have been read
 #[derive(Debug)]
 pub struct FileStream<'a> {
     file: tokio::fs::File,
-    offset: usize,
     frame_size: usize,
     length: usize,
     bytes_read: usize,
@@ -25,7 +28,6 @@ impl<'a> FileStream<'a> {
         file.seek(std::io::SeekFrom::Start(offset as u64)).await?;
         Ok(Self {
             file,
-            offset,
             frame_size,
             length,
             bytes_read: 0,
@@ -44,7 +46,6 @@ impl<'a> FileStream<'a> {
         file.seek(std::io::SeekFrom::Start(offset as u64)).await?;
         Ok(Self {
             file,
-            offset,
             frame_size,
             length,
             bytes_read: 0,
@@ -68,12 +69,12 @@ impl<'a> DerefMut for FileStream<'a> {
 }
 
 impl<'a> futures::Stream for FileStream<'a> {
-    type Item = Result<Vec<u8>, std::io::Error>;
+    type Item = Result<Bytes, std::io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
-        let remaining = this.length.checked_sub(this.bytes_read).unwrap_or(0);
+        let remaining = this.length.saturating_sub(this.bytes_read);
         let mut buffer = vec![0; this.frame_size];
         let mut read_buf = tokio::io::ReadBuf::new(&mut buffer);
         match Pin::new(&mut this.file).poll_read(cx, &mut read_buf) {
@@ -85,7 +86,7 @@ impl<'a> futures::Stream for FileStream<'a> {
                     let vec = filled_data[0..remaining.min(filled_data.len())].to_vec();
                     this.bytes_read += vec.len();
                     //println!("loading file: {:?}", filled_data);
-                    Poll::Ready(Some(Ok(vec)))
+                    Poll::Ready(Some(Ok(Bytes::from(vec))))
                 }
             }
             Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),

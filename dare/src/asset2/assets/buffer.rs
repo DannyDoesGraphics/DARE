@@ -6,7 +6,7 @@ use bytemuck::Pod;
 use derivative::Derivative;
 use futures::stream::BoxStream;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use std::sync::Arc;
+use bytes::*;
 
 pub struct Buffer {}
 impl asset::Asset for Buffer {
@@ -48,7 +48,7 @@ impl Unpin for BufferMetaData {}
 impl Eq for BufferMetaData {}
 
 impl MetaDataStreamable for BufferMetaData {
-    type Chunk = Vec<u8>;
+    type Chunk = Bytes;
     type StreamInfo<'a> = BufferStreamInfo;
 
     async fn stream<'a>(
@@ -109,10 +109,11 @@ impl MetaDataStreamable for BufferMetaData {
                 tracing::warn!(
                     "Asset data stored in memory. This is extremely bad and will quickly consume a lot of memory in the system."
                 );
-                let memory: Arc<[u8]> = memory[self.offset..(self.offset + self.length)]
-                    .to_owned()
-                    .into();
-                let stream = futures::stream::once(async move { anyhow::Ok(memory) }).boxed();
+                let memory_slice = memory[self.offset..(self.offset + self.length)].to_vec();
+                let stream = futures::stream::once(async move {
+                    anyhow::Ok(Bytes::from(memory_slice))
+                })
+                .boxed();
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
                 let stream =
                     handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
@@ -134,8 +135,8 @@ impl asset::loaders::MetaDataLoad for BufferMetaData {
         let mut stream = self.stream(load_info).await?;
         let mut data: Vec<u8> = Vec::with_capacity(self.format.size() * self.element_count);
         while let Some(incoming) = stream.next().await {
-            let mut incoming = incoming?;
-            data.append(&mut incoming);
+            let incoming = incoming?;
+            data.extend_from_slice(incoming.as_ref());
         }
         let length = data.len();
         Ok(BufferAsset {

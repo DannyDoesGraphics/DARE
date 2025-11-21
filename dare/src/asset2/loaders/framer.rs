@@ -1,3 +1,4 @@
+use bytes::{Bytes, BytesMut};
 use futures::stream::StreamExt;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -5,40 +6,40 @@ use std::task::{Context, Poll};
 /// A framer's entire job is to guarantee stream yields are within [`Self::frame_size`] or less
 ///
 /// This is cancellation safe so long as the input stream is as well
-pub struct Framer<'a, T: AsRef<[u8]>> {
+pub struct Framer<'a, T: Into<Bytes>> {
     stream: futures::stream::BoxStream<'a, T>,
     frame_size: usize,
-    buffer: Vec<u8>,
+    buffer: BytesMut,
 }
-impl<'a, T: AsRef<[u8]>> Unpin for Framer<'a, T> {}
-impl<'a, T: AsRef<[u8]>> Framer<'a, T> {
+impl<'a, T: Into<Bytes>> Unpin for Framer<'a, T> {}
+impl<'a, T: Into<Bytes>> Framer<'a, T> {
     pub fn new(stream: futures::stream::BoxStream<'a, T>, frame_size: usize) -> Self {
         Self {
             stream,
             frame_size,
-            buffer: Vec::with_capacity(frame_size),
+            buffer: BytesMut::with_capacity(frame_size.max(1)),
         }
     }
 
-    fn get_next_frame(&mut self, accept_all: bool) -> Option<Vec<u8>> {
-        let d = if self.buffer.len() >= self.frame_size {
-            Some(self.buffer.drain(0..self.frame_size).collect::<Vec<u8>>())
-        } else if accept_all && self.buffer.len() <= self.frame_size {
-            Some(
-                self.buffer
-                    .drain(0..self.frame_size.min(self.buffer.len()))
-                    .collect::<Vec<u8>>(),
-            )
-        } else {
-            None
-        };
-        d.as_ref().map(|v| assert!(self.frame_size >= v.len()));
-        d
+    fn get_next_frame(&mut self, accept_all: bool) -> Option<Bytes> {
+        if self.frame_size == 0 {
+            return None;
+        }
+
+        if self.buffer.len() >= self.frame_size {
+            return Some(self.buffer.split_to(self.frame_size).freeze());
+        }
+
+        if accept_all && !self.buffer.is_empty() {
+            return Some(self.buffer.split().freeze());
+        }
+
+        None
     }
 }
 
-impl<'a, T: AsRef<[u8]>> futures::stream::Stream for Framer<'a, T> {
-    type Item = Vec<u8>;
+impl<'a, T: Into<Bytes>> futures::stream::Stream for Framer<'a, T> {
+    type Item = Bytes;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -49,7 +50,7 @@ impl<'a, T: AsRef<[u8]>> futures::stream::Stream for Framer<'a, T> {
         }
         match this.stream.poll_next_unpin(cx) {
             Poll::Pending => match this.get_next_frame(false) {
-                Some(frame) => Poll::Ready(Some(frame.to_vec())),
+                Some(frame) => Poll::Ready(Some(frame)),
                 None => {
                     // keep polling for more
                     cx.waker().wake_by_ref();
@@ -58,8 +59,8 @@ impl<'a, T: AsRef<[u8]>> futures::stream::Stream for Framer<'a, T> {
             },
             Poll::Ready(data) => match data {
                 Some(data) => {
-                    let mut data: Vec<u8> = data.as_ref().to_vec();
-                    this.buffer.append(&mut data);
+                    let data: Bytes = data.into();
+                    this.buffer.extend_from_slice(data.as_ref());
                     match this.get_next_frame(false) {
                         None => {
                             cx.waker().wake_by_ref();
@@ -86,10 +87,11 @@ impl<'a, T: AsRef<[u8]>> futures::stream::Stream for Framer<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytes::Bytes;
     use futures::executor::block_on;
     use futures::{StreamExt, stream};
     use std::pin::Pin;
-    use std::task::{Context, Poll, Waker};
+    use std::task::{Context, Poll};
 
     #[test]
     fn test_single_large_chunk() {
@@ -99,7 +101,7 @@ mod tests {
         let frame_size = 10;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -121,7 +123,7 @@ mod tests {
         let frame_size = 5;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -134,6 +136,7 @@ mod tests {
         // Third frame: 2 bytes of 3s
 
         assert_eq!(frames.len(), 3);
+        let frames: Vec<Vec<u8>> = frames.into_iter().map(|f| f.to_vec()).collect();
         assert_eq!(
             frames[0],
             vec![1u8; 3]
@@ -159,7 +162,7 @@ mod tests {
         let frame_size = 5;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -168,6 +171,7 @@ mod tests {
 
         // Should have frames of exact size
         assert_eq!(frames.len(), 3);
+        let frames: Vec<Vec<u8>> = frames.into_iter().map(|f| f.to_vec()).collect();
         assert_eq!(frames[0], vec![1u8; 5]);
         assert_eq!(frames[1], vec![2u8; 5]);
         assert_eq!(frames[2], vec![3u8; 5]);
@@ -180,7 +184,7 @@ mod tests {
         let frame_size = 5;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -232,7 +236,7 @@ mod tests {
             type Item = T;
 
             fn poll_next(
-                mut self: Pin<&mut Self>,
+                self: Pin<&mut Self>,
                 cx: &mut Context<'_>,
             ) -> Poll<Option<Self::Item>> {
                 let this = self.get_mut();
@@ -252,7 +256,7 @@ mod tests {
         let frame_size = 5;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -261,6 +265,7 @@ mod tests {
 
         // Should have two frames of size 5
         assert_eq!(frames.len(), 2);
+        let frames: Vec<Vec<u8>> = frames.into_iter().map(|f| f.to_vec()).collect();
         assert_eq!(frames[0], vec![1u8; 5]);
         assert_eq!(frames[1], vec![1u8; 5]);
     }
@@ -273,7 +278,7 @@ mod tests {
         let frame_size = 20;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames = Vec::new();
+        let mut frames: Vec<Bytes> = Vec::new();
         block_on(async {
             while let Some(frame) = framer.next().await {
                 frames.push(frame);
@@ -295,15 +300,10 @@ mod tests {
         let frame_size = 0;
         let mut framer = Framer::new(boxed_stream, frame_size);
 
-        let mut frames: Vec<u8> = Vec::new();
         block_on(async {
             if let Some(_frame) = framer.next().await {
-                // Should not reach here
-                assert!(false, "Frame size zero should not produce frames");
+                panic!("Frame size zero should not produce frames");
             }
         });
-
-        // Should have no frames
-        assert_eq!(frames.len(), 0);
     }
 }
