@@ -26,7 +26,6 @@ pub mod server;
 pub mod traits;
 pub use traits::*;
 pub mod resources;
-pub mod streams;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ResourceLocation {

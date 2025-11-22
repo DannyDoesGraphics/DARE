@@ -13,7 +13,9 @@ use tokio::io::AsyncSeekExt;
 use tokio_util::io::ReaderStream;
 
 use super::super::traits;
-use crate::{physical_resource::ResourceMetadata, prelude as dare};
+use crate::{
+    asset2::loaders::StrideStreamBuilder, physical_resource::ResourceMetadata, prelude as dare,
+};
 
 #[derive(Derivative, PartialEq, Eq, Clone, Debug)]
 #[derivative(Hash)]
@@ -87,17 +89,15 @@ impl traits::ResourceMetadata for BufferMetadata {
             }
             _ => unimplemented!(),
         };
-        let max_elements: usize = (stream_info.chunk_size / self.format.size()).min(1);
-
         // Create strided stream that handles offset/stride logic internally
-        let strided_stream = super::super::streams::StridedStream::new(
-            asset_stream,
-            0,
-            self.format.size(),
-            self.stride.unwrap_or(self.format.size()),
-            self.element_count,
-            max_elements,
-        );
+        let stream_builder = StrideStreamBuilder {
+            offset: 0,
+            element_size: self.format.size(),
+            element_stride: self.stride.unwrap_or(self.format.size()),
+            element_count: self.element_count,
+            frame_size: stream_info.chunk_size,
+        };
+        let strided_stream = stream_builder.build(asset_stream).boxed_local();
 
         // Use scan to accumulate byte offset across chunks
         let stream_with_offsets = strided_stream.scan(0usize, |byte_offset, chunk| {
