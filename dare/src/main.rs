@@ -10,7 +10,6 @@ mod physical_resource;
 mod physics;
 mod prelude;
 mod render;
-mod render2;
 mod util;
 mod window;
 
