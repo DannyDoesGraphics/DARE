@@ -44,6 +44,25 @@ impl SurfaceQueried {
     pub fn get_present_modes(&self) -> &[vk::PresentModeKHR] {
         self.present_modes.as_ref()
     }
+
+    pub fn refresh(&mut self, physical_device: vk::PhysicalDevice) -> crate::Result<()> {
+        self.capabilities = unsafe {
+            self.inner
+                .ext
+                .get_physical_device_surface_capabilities(physical_device, self.inner.handle)?
+        };
+        self.present_modes = unsafe {
+            self.inner
+                .ext
+                .get_physical_device_surface_present_modes(physical_device, self.inner.handle)?
+        };
+        self.formats = unsafe {
+            self.inner
+                .ext
+                .get_physical_device_surface_formats(physical_device, self.inner.handle)?
+        };
+        Ok(())
+    }
 }
 
 #[derive(Derivative)]
@@ -71,7 +90,7 @@ impl Surface {
     /// test_app.attach_function(|window: &winit::window::Window | {
     ///     let test_vulkan = dagal::util::tests::create_vulkan_and_device(
     ///         TestSettings::from_rdh(window.display_handle().unwrap().as_raw())
-    /// 	);
+    ///     );
     ///     // Construct a surface
     ///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
     ///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
@@ -81,15 +100,21 @@ impl Surface {
     ///     drop(surface);
     /// }).run();
     /// ```
-    pub fn new<T>(entry: &ash::Entry, instance: &ash::Instance, window: &T) -> Result<Self>
+    pub fn new<T>(entry: &ash::Entry, instance: &ash::Instance, window: &T) -> crate::Result<Self>
     where
         T: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         Self::new_with_handles(
             entry,
             instance,
-            window.display_handle()?.as_raw(),
-            window.window_handle()?.as_raw(),
+            window
+                .display_handle()
+                .map_err(|_| crate::DagalError::InvalidWindowHandles)?
+                .as_raw(),
+            window
+                .window_handle()
+                .map_err(|_| crate::DagalError::InvalidWindowHandles)?
+                .as_raw(),
         )
     }
 
@@ -99,7 +124,7 @@ impl Surface {
         instance: &ash::Instance,
         display_handle: RawDisplayHandle,
         window_handle: RawWindowHandle,
-    ) -> Result<Self> {
+    ) -> crate::Result<Self> {
         let ext = ash::khr::surface::Instance::new(entry, instance);
         let handle = unsafe {
             ash_window::create_surface(entry, instance, display_handle, window_handle, None)?
@@ -112,7 +137,10 @@ impl Surface {
     }
 
     /// Determine the [`vk::SurfaceCapabilitiesKHR`] and [`vk::SurfaceFormatKHR`] and [`vk::PresentModeKHR`]
-    pub fn query_details(self, physical_device: vk::PhysicalDevice) -> Result<SurfaceQueried> {
+    pub fn query_details(
+        self,
+        physical_device: vk::PhysicalDevice,
+    ) -> crate::Result<SurfaceQueried> {
         let capabilities = unsafe {
             self.ext
                 .get_physical_device_surface_capabilities(physical_device, self.handle)?

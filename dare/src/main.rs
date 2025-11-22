@@ -1,4 +1,3 @@
-use dagal::ash::vk;
 use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
 
@@ -10,6 +9,7 @@ mod physical_resource;
 mod physics;
 mod prelude;
 mod render;
+mod render2;
 mod util;
 mod window;
 
@@ -35,18 +35,14 @@ fn main() {
         .build()
         .unwrap();
     let asset_server = asset::server::AssetServer::default();
-    let (surface_link_send, surface_link_recv) = util::entity_linker::ComponentsLinker::default();
-    let (transform_link_send, transform_link_recv) =
+    let (surface_link_send, _surface_link_recv) = util::entity_linker::ComponentsLinker::default();
+    let (transform_link_send, _transform_link_recv) =
         util::entity_linker::ComponentsLinker::default();
-    let (bb_link_send, bb_link_recv) = util::entity_linker::ComponentsLinker::default();
-    let (texture_link_send, texture_link_recv) = util::entity_linker::ComponentsLinker::default();
-    let (name_link_send, name_link_recv) = util::entity_linker::ComponentsLinker::default();
-    let (rs_send, rs_recv) = tokio::sync::mpsc::unbounded_channel();
+    let (bb_link_send, _bb_link_recv) = util::entity_linker::ComponentsLinker::default();
+    let (texture_link_send, _texture_link_recv) = util::entity_linker::ComponentsLinker::default();
+    let (name_link_send, _name_link_recv) = util::entity_linker::ComponentsLinker::default();
     let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
-    let (input_send, input_recv) = util::event::event_send::<window::input::Input>();
-    let (window_send, window_recv) = tokio::sync::oneshot::channel::<window::WindowHandles>();
-    // cross tokio-main thread communication
-    let render_client = render::server::RenderClient::new(rs_send, input_send);
+    let (input_send, _input_recv) = util::event::event_send::<window::input::Input>();
     let engine_client = engine::server::EngineClient::new(es_sent);
 
     let _engine_server = engine::server::EngineServer::new(
@@ -60,34 +56,7 @@ fn main() {
         &name_link_send,
     )
     .unwrap();
-    runtime.spawn(async move {
-        // await, then spawn the render server
-        let raw_handles = window_recv.await.unwrap();
-        let render_server = render::server::RenderServer::new(
-            tokio::runtime::Handle::current(),
-            asset_server.clone(),
-            rs_recv,
-            input_recv,
-            render::contexts::ContextsCreateInfo {
-                raw_handles,
-                configuration: render::contexts::ContextsConfiguration {
-                    target_frames_in_flight: 3,
-                    target_extent: vk::Extent2D {
-                        width: 800,
-                        height: 600,
-                    },
-                },
-            },
-            surface_link_recv,
-            texture_link_recv,
-            transform_link_recv,
-            bb_link_recv,
-            name_link_recv,
-        )
-        .await;
-    });
-
-    let mut app = app::App::new(render_client, engine_client, window_send).unwrap();
+    let mut app = app::App::new(engine_client, input_send).unwrap();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run_app(&mut app).unwrap();

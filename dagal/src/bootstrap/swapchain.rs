@@ -204,7 +204,7 @@ impl<'a> SwapchainBuilder<'a> {
         self,
         instance: &ash::Instance,
         device: crate::device::LogicalDevice,
-    ) -> Result<crate::wsi::Swapchain> {
+    ) -> crate::Result<crate::wsi::Swapchain> {
         let queue_family_indices: Vec<u32> = self.family_indices.iter().copied().collect();
         let surface_capabilities = self.surface_queried.get_capabilities();
 

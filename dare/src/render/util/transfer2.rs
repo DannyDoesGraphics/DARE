@@ -77,7 +77,7 @@ pub enum TransferRequest {
         src_size: u64,
         data: Box<[u8]>,
         oneshot: Option<tokio::sync::oneshot::Sender<dagal::Result<()>>>,
-    }
+    },
 }
 
 impl TransferRequest {
@@ -284,7 +284,14 @@ impl<A: Allocator> TransferPoolInner<A> {
             let chunk: &mut Chunk<A> = &mut self.chunks_active[chunk_ix];
             let write_offset = chunk.head;
             match request {
-                TransferRequest::Buffer { data, buffer, src_size, dst_offset, dst_queue_family, oneshot } => {
+                TransferRequest::Buffer {
+                    data,
+                    buffer,
+                    src_size,
+                    dst_offset,
+                    dst_queue_family,
+                    oneshot,
+                } => {
                     chunk.buffer.write(write_offset, &data)?;
                     chunk.destinations.push(ChunkDestination::Buffer {
                         src_queue_family: self.queue.get_family_index(),
@@ -335,8 +342,7 @@ impl<A: Allocator> TransferPoolInner<A> {
         let command_buffer: dagal::command::CommandBufferRecording = command_buffer
             .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
             .unwrap();
-        let mut pending_oneshots: Vec<tokio::sync::oneshot::Sender<dagal::Result<()>>> =
-            Vec::new();
+        let mut pending_oneshots: Vec<tokio::sync::oneshot::Sender<dagal::Result<()>>> = Vec::new();
         for chunk in chunks_submit.iter_mut() {
             // Record copy commands for each chunk
             chunk.max_ticket = self.next_ticket;

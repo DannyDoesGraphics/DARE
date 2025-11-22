@@ -15,7 +15,7 @@ impl BinarySemaphore {
     pub fn new(
         device: crate::device::LogicalDevice,
         flags: vk::SemaphoreCreateFlags,
-    ) -> Result<Self> {
+    ) -> crate::Result<Self> {
         let handle = unsafe {
             device.get_handle().create_semaphore(
                 &vk::SemaphoreCreateInfo {

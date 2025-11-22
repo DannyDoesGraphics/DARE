@@ -34,7 +34,7 @@ impl Swapchain {
         instance: &ash::Instance,
         device: crate::device::LogicalDevice,
         swapchain_ci: &vk::SwapchainCreateInfoKHR,
-    ) -> Result<Self> {
+    ) -> crate::Result<Self> {
         let ext = ash::khr::swapchain::Device::new(instance, device.get_handle());
         let handle = unsafe { ext.create_swapchain(swapchain_ci, None)? };
 
@@ -61,7 +61,7 @@ impl Swapchain {
         &self.ext
     }
 
-    pub fn get_images<A: Allocator>(&self) -> Result<Vec<crate::resource::Image<A>>> {
+    pub fn get_images<A: Allocator>(&self) -> crate::Result<Vec<crate::resource::Image<A>>> {
         Ok(unsafe { self.ext.get_swapchain_images(self.handle)? }
             .into_iter()
             .enumerate()
@@ -125,7 +125,7 @@ impl Swapchain {
         timeout: u64,
         semaphore: Option<&crate::sync::BinarySemaphore>,
         fence: Option<&crate::sync::Fence>,
-    ) -> Result<u32> {
+    ) -> crate::Result<u32> {
         unsafe {
             Ok(self
                 .ext

@@ -6,7 +6,7 @@ use crate::render::prelude::util::TransferPool;
 use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
-use dare::asset as asset;
+use dare::asset;
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use std::marker::PhantomData;

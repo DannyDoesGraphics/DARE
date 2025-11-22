@@ -1,22 +1,21 @@
 use crate::engine;
 use crate::prelude as dare;
-use crate::prelude::render::RenderServerRequest;
-use crate::render::prelude as render;
+use crate::render2::{self, RenderServerPacket};
 use anyhow::Result;
-use dagal::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use dagal::allocators::GPUAllocatorImpl;
+use dagal::ash::vk;
+use dagal::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;
-use dagal::wsi::WindowDimensions;
-use futures::FutureExt;
 use std::sync::Arc;
 
 /// This app only exists to get the first window
 pub struct App {
-    window_send: Option<tokio::sync::oneshot::Sender<dare::window::WindowHandles>>,
     window: Option<Arc<window::Window>>,
     engine_client: engine::server::engine_server::EngineClient,
-    render_client: render::server::RenderClient,
+    render_server: Option<render2::RenderServer>,
+    input_sender: dare::util::event::EventSender<dare::window::input::Input>,
     last_position: Option<glam::Vec2>,
     last_dt: std::time::Instant,
 }
@@ -34,38 +33,19 @@ impl winit::application::ApplicationHandler for App {
                     .unwrap(),
             );
             self.window = Some(window.clone());
-            self.window_send.take().map(|send| {
-                send.send(dare::window::WindowHandles {
-                    raw_window_handle: Arc::new(window.raw_window_handle().unwrap()),
-                    raw_display_handle: Arc::new(window.raw_display_handle().unwrap()),
-                })
-            });
-            self.render_client
-                .send_blocking(RenderServerRequest::SurfaceUpdate {
-                    dimensions: Some((
-                        self.window.as_ref().unwrap().width(),
-                        self.window.as_ref().unwrap().height(),
-                    )),
-                    raw_handles: None,
-                })
-                .unwrap();
+            self.ensure_render_server();
         } else {
-            self.render_client
-                .send_blocking(RenderServerRequest::SurfaceUpdate {
-                    dimensions: Some((
-                        self.window.as_ref().unwrap().width(),
-                        self.window.as_ref().unwrap().height(),
-                    )),
-                    raw_handles: None,
-                })
-                .unwrap();
+            self.ensure_render_server();
+            if let Some(window) = &self.window {
+                self.send_recreate(window);
+            }
         }
     }
 
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: WindowId,
+        _window_id: WindowId,
         event: winit::event::WindowEvent,
     ) {
         use winit::event::WindowEvent;
@@ -82,10 +62,6 @@ impl winit::application::ApplicationHandler for App {
                     let current_t = std::time::Instant::now();
                     let last_dt = self.last_dt;
 
-                    self.render_client
-                        .send_blocking(RenderServerRequest::RenderStart)
-                        .unwrap();
-
                     // Update the window title if needed
                     if let Some(window) = window_clone {
                         window.set_title(&format!(
@@ -99,27 +75,13 @@ impl winit::application::ApplicationHandler for App {
                 }
             }
             WindowEvent::CloseRequested => {
-                // Spawn instead of blocking the current thread
-                unsafe {
-                    // SAFETY: do not care if this fails
-                    self.render_client
-                        .send_blocking(RenderServerRequest::Stop)
-                        .unwrap_err_unchecked();
-                }
+                self.render_server.take();
                 event_loop.exit();
             }
             WindowEvent::Resized(_) => {
                 if let Some(window) = self.window.as_ref() {
                     if window.inner_size().width != 0 && window.inner_size().height != 0 {
-                        self.render_client
-                            .send_blocking(RenderServerRequest::SurfaceUpdate {
-                                dimensions: Some((
-                                    window.inner_size().width,
-                                    window.inner_size().height,
-                                )),
-                                raw_handles: None,
-                            })
-                            .unwrap();
+                        self.send_resize(window);
                     }
                 }
             }
@@ -134,10 +96,9 @@ impl winit::application::ApplicationHandler for App {
                         .flatten();
                     self.last_position = Some(position);
                     if let Some(dp) = dp {
-                        self.render_client
-                            .input_send()
-                            .send(dare::window::input::Input::MouseDelta(dp))
-                            .unwrap();
+                        let _ = self
+                            .input_sender
+                            .send(dare::window::input::Input::MouseDelta(dp));
                     }
                 }
             }
@@ -145,26 +106,24 @@ impl winit::application::ApplicationHandler for App {
                 self.last_position = None;
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                self.render_client
-                    .input_send()
-                    .send(dare::window::input::Input::KeyEvent(event))
-                    .unwrap();
+                let _ = self
+                    .input_sender
+                    .send(dare::window::input::Input::KeyEvent(event));
             }
             WindowEvent::MouseInput {
-                device_id,
+                device_id: _,
                 state,
                 button,
             } => {
-                self.render_client
-                    .input_send()
-                    .send(dare::window::input::Input::MouseButton { button, state })
-                    .unwrap();
+                let _ = self
+                    .input_sender
+                    .send(dare::window::input::Input::MouseButton { button, state });
             }
             _ => {}
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
         if let Err(_) = self.engine_client.tick() {
             //eprintln!("Engine tick error: {}", e);
         }
@@ -176,17 +135,80 @@ impl winit::application::ApplicationHandler for App {
 
 impl App {
     pub fn new(
-        render_client: render::server::RenderClient,
         engine_client: engine::server::EngineClient,
-        window_send: tokio::sync::oneshot::Sender<dare::window::WindowHandles>,
+        input_sender: dare::util::event::EventSender<dare::window::input::Input>,
     ) -> Result<Self> {
         Ok(Self {
-            window_send: Some(window_send),
             window: None,
             engine_client,
-            render_client,
+            render_server: None,
+            input_sender,
             last_position: None,
             last_dt: std::time::Instant::now(),
         })
+    }
+}
+
+impl App {
+    fn ensure_render_server(&mut self) {
+        if self.render_server.is_some() {
+            return;
+        }
+        let window = match &self.window {
+            Some(window) => window,
+            None => return,
+        };
+        let extent = Self::window_extent(window.as_ref());
+        let handles = Self::window_handles(window.as_ref());
+        self.render_server = Some(render2::RenderServer::new::<GPUAllocatorImpl>(
+            extent, handles,
+        ));
+    }
+
+    fn window_extent(window: &window::Window) -> vk::Extent2D {
+        vk::Extent2D {
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+        }
+    }
+
+    fn window_handles(window: &window::Window) -> dare::window::WindowHandles {
+        let window_handle = window
+            .window_handle()
+            .expect("window handle unavailable")
+            .as_raw()
+            .clone();
+        let display_handle = window
+            .display_handle()
+            .expect("display handle unavailable")
+            .as_raw()
+            .clone();
+        dare::window::WindowHandles {
+            raw_window_handle: Arc::new(window_handle),
+            raw_display_handle: Arc::new(display_handle),
+        }
+    }
+
+    fn send_resize(&self, window: &window::Window) {
+        if let Some(server) = &self.render_server {
+            let extent = Self::window_extent(window);
+            if let Err(err) = server
+                .packet_sender
+                .send(RenderServerPacket::Resize(extent))
+            {
+                tracing::warn!(?extent, ?err, "Failed to send resize packet");
+            }
+        }
+    }
+
+    fn send_recreate(&self, window: &window::Window) {
+        if let Some(server) = &self.render_server {
+            let size = Self::window_extent(window);
+            let handles = Self::window_handles(window);
+            let packet = RenderServerPacket::Recreate { size, handles };
+            if let Err(err) = server.packet_sender.send(packet) {
+                tracing::warn!(?size, ?err, "Failed to send recreate packet");
+            }
+        }
     }
 }

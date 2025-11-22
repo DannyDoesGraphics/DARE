@@ -60,6 +60,9 @@ pub enum DagalError {
     #[error("Allocation error")]
     AllocationError,
 
+    #[error("Invalid window handles")]
+    InvalidWindowHandles,
+
     #[error(transparent)]
     VkError(#[from] vk::Result),
 
