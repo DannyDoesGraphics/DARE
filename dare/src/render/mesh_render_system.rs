@@ -1,5 +1,5 @@
-use crate::asset2::assets::BufferStreamInfo;
-use crate::asset2::prelude::AssetHandle;
+use crate::asset::assets::BufferStreamInfo;
+use crate::asset::prelude::AssetHandle;
 use crate::prelude as dare;
 use crate::render::c::CPushConstant;
 use crate::render::physical_resource;
@@ -52,7 +52,7 @@ pub fn build_instancing_data(
     textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
-    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset::assets::SamplerAsset>,
     buffers: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,
@@ -212,7 +212,7 @@ pub fn build_instancing_data(
             }
 
             let mut buffer_resolve =
-                |virtual_resource: &AssetHandle<dare::asset2::assets::Buffer>| {
+                |virtual_resource: &AssetHandle<dare::asset::assets::Buffer>| {
                     // Optimized: Try direct resolution first
                     if let Some(_buffer) = buffers.resolve_asset(virtual_resource) {
                         // Get the virtual resource handle for tracking
@@ -368,7 +368,7 @@ pub async fn mesh_render(
     mut textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
     >,
-    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+    samplers: &mut physical_resource::PhysicalResourceStorage<dare::asset::assets::SamplerAsset>,
     mut buffers: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderBuffer<GPUAllocatorImpl>,
     >,

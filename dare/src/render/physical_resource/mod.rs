@@ -1,5 +1,5 @@
-use crate::asset2::prelude::AssetHandle;
-use crate::asset2::traits::Asset;
+use crate::asset::prelude::AssetHandle;
+use crate::asset::traits::Asset;
 use bevy_ecs::prelude::*;
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
@@ -22,9 +22,9 @@ pub mod surface_soa;
 /// Handles render components
 pub mod traits;
 
-use crate::asset2::loaders::MetaDataLoad;
-use crate::asset2::prelude as asset;
-use crate::asset2::server::AssetServer;
+use crate::asset::loaders::MetaDataLoad;
+use crate::asset::prelude as asset;
+use crate::asset::server::AssetServer;
 pub use handle::*;
 pub use render_buffer::*;
 pub use render_image::*;

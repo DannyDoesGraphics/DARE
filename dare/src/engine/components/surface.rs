@@ -6,11 +6,11 @@ use std::cmp::Ordering;
 pub struct SurfaceBuilder {
     pub vertex_count: usize,
     pub index_count: usize,
-    pub index_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub vertex_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub index_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub vertex_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub normal_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub tangent_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub uv_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
 }
 
 impl SurfaceBuilder {
@@ -31,11 +31,11 @@ impl SurfaceBuilder {
 pub struct Surface {
     pub vertex_count: usize,
     pub index_count: usize,
-    pub index_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
-    pub vertex_buffer: dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
-    pub normal_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub tangent_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
-    pub uv_buffer: Option<dare::asset2::AssetHandle<dare::asset2::assets::Buffer>>,
+    pub index_buffer: dare::asset::AssetHandle<dare::asset::assets::Buffer>,
+    pub vertex_buffer: dare::asset::AssetHandle<dare::asset::assets::Buffer>,
+    pub normal_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub tangent_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
+    pub uv_buffer: Option<dare::asset::AssetHandle<dare::asset::assets::Buffer>>,
 }
 
 impl PartialOrd for Surface {

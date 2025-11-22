@@ -38,7 +38,7 @@ where
         .gpu_staging_size()
         .min(transfer_pool.cpu_staging_size()) as usize;
     let framer =
-        dare::asset2::loaders::framer::Framer::new(filtered_stream, hardware_partition_size);
+        dare::asset::loaders::framer::Framer::new(filtered_stream, hardware_partition_size);
 
     // create gpu stream + state and unfold (folding, but instead of a stream -> single, single -> stream)
     let state = (
@@ -133,7 +133,7 @@ where
     let max_stage_bytes = (max_stage / px_size) * px_size;
 
     let filtered = source_stream.filter_map(|r| async move { r.ok() }).boxed();
-    let framer = dare::asset2::loaders::framer::Framer::new(filtered, max_stage_bytes);
+    let framer = dare::asset::loaders::framer::Framer::new(filtered, max_stage_bytes);
 
     let init = (
         framer,

@@ -5,6 +5,6 @@ use bevy_ecs::prelude::*;
 /// for said image
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Texture {
-    pub asset_handle: dare::asset2::AssetHandle<dare::asset2::assets::Image>,
+    pub asset_handle: dare::asset::AssetHandle<dare::asset::assets::Image>,
     pub sampler: dare::engine::components::Sampler,
 }

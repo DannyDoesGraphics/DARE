@@ -1,5 +1,5 @@
-use crate::asset2::loaders::MetaDataLoad;
-use crate::asset2::prelude::Asset;
+use crate::asset::loaders::MetaDataLoad;
+use crate::asset::prelude::Asset;
 use crate::prelude as dare;
 use crate::render::physical_resource::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
@@ -15,15 +15,15 @@ use std::ptr;
 pub struct RenderImage<A: Allocator + 'static> {
     pub image: dagal::resource::Image<A>,
     pub full_view: dagal::resource::ImageView,
-    pub handle: dare::asset2::AssetHandle<dare::asset2::assets::Image>,
+    pub handle: dare::asset::AssetHandle<dare::asset::assets::Image>,
 }
 
 impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
     type Loaded = RenderImage<A>;
-    type Asset = dare::asset2::assets::Image;
+    type Asset = dare::asset::assets::Image;
     type PrepareInfo = (
         A,
-        dare::asset2::AssetHandle<dare::asset2::assets::Image>,
+        dare::asset::AssetHandle<dare::asset::assets::Image>,
         dare::render::util::TransferPool<A>,
         Option<String>,
     );

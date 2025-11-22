@@ -2,7 +2,7 @@
 
 pub mod util;
 
-pub use crate::asset2::prelude as asset2;
+pub use crate::asset::prelude as asset;
 pub use crate::concurrent::prelude as concurrent;
 pub use crate::engine::prelude as engine;
 pub use crate::physics::prelude as physics;

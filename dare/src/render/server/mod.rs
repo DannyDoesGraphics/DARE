@@ -18,7 +18,7 @@ pub struct RenderServer {
 impl RenderServer {
     pub async fn new(
         runtime: tokio::runtime::Handle,
-        asset_server: dare::asset2::server::AssetServer,
+        asset_server: dare::asset::server::AssetServer,
         mut packet_recv: tokio::sync::mpsc::UnboundedReceiver<RenderServerPacket>,
         input_recv: EventReceiver<dare::window::input::Input>,
         ci: ContextsCreateInfo,
@@ -73,7 +73,7 @@ impl RenderServer {
                 world.insert_resource(render::components::camera::Camera::default());
                 // physical resource storage
                 world.insert_resource(physical_resource::PhysicalResourceStorage::<
-                    dare::asset2::assets::SamplerAsset,
+                    dare::asset::assets::SamplerAsset,
                 >::new(asset_server.clone()));
                 world.insert_resource(super::systems::delta_time::DeltaTime::default());
                 let mut schedule = Schedule::default();

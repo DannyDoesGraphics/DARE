@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::module_inception)]
 mod tests {
-    use crate::asset2::loaders::StrideStreamBuilder;
+    use crate::asset::loaders::StrideStreamBuilder;
     use anyhow::Result;
     use bytes::Bytes;
     use futures::stream::{self, StreamExt};

@@ -14,7 +14,7 @@ use tokio_util::io::ReaderStream;
 
 use super::super::traits;
 use crate::{
-    asset2::loaders::StrideStreamBuilder, physical_resource::ResourceMetadata, prelude as dare,
+    asset::loaders::StrideStreamBuilder, physical_resource::ResourceMetadata, prelude as dare,
 };
 
 #[derive(Derivative, PartialEq, Eq, Clone, Debug)]

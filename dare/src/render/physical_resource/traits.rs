@@ -1,5 +1,5 @@
 use crate::prelude as dare;
-use dare::asset2 as asset;
+use dare::asset;
 use futures::future::BoxFuture;
 
 pub trait MetaDataRenderAsset: 'static {

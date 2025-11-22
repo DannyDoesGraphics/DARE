@@ -30,7 +30,7 @@ impl EngineServer {
     pub fn new(
         runtime: tokio::runtime::Handle,
         server_recv: std::sync::mpsc::Receiver<()>,
-        asset_server: dare::asset2::server::AssetServer,
+        asset_server: dare::asset::server::AssetServer,
         surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
         texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
         transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,

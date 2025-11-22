@@ -1,5 +1,5 @@
 use super::super::prelude as asset;
-use crate::asset2::loaders::MetaDataStreamable;
+use crate::asset::loaders::MetaDataStreamable;
 use crate::prelude as dare;
 use crate::render::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
@@ -68,7 +68,7 @@ impl MetaDataStreamable for BufferMetaData {
         };
         match &self.location {
             asset::MetaDataLocation::FilePath(path) => {
-                let stream = dare::asset2::loaders::FileStream::from_path(
+                let stream = dare::asset::loaders::FileStream::from_path(
                     path,
                     self.offset,
                     chunk_size,
@@ -83,7 +83,7 @@ impl MetaDataStreamable for BufferMetaData {
                     .boxed();
                 let stream =
                     handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
-                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                let stream = dare::asset::loaders::framer::Framer::new(stream, chunk_size)
                     .boxed()
                     .map(|v| anyhow::Ok(v))
                     .boxed();
@@ -99,7 +99,7 @@ impl MetaDataStreamable for BufferMetaData {
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
                 let stream =
                     handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
-                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                let stream = dare::asset::loaders::framer::Framer::new(stream, chunk_size)
                     .boxed()
                     .map(|v| anyhow::Ok(v))
                     .boxed();
@@ -116,7 +116,7 @@ impl MetaDataStreamable for BufferMetaData {
                 let stream = stream_builder.build(stream).map(|v| v.unwrap()).boxed();
                 let stream =
                     handle_cast_stream(stream, self.stored_format, self.format, chunk_size).boxed();
-                let stream = dare::asset2::loaders::framer::Framer::new(stream, chunk_size)
+                let stream = dare::asset::loaders::framer::Framer::new(stream, chunk_size)
                     .boxed()
                     .map(|v| anyhow::Ok(v))
                     .boxed();

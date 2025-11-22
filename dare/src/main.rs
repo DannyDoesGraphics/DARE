@@ -3,7 +3,7 @@ use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
 
 mod app;
-mod asset2;
+mod asset;
 mod concurrent;
 mod engine;
 mod physical_resource;
@@ -34,7 +34,7 @@ fn main() {
         .enable_all()
         .build()
         .unwrap();
-    let asset_server = asset2::server::AssetServer::default();
+    let asset_server = asset::server::AssetServer::default();
     let (surface_link_send, surface_link_recv) = util::entity_linker::ComponentsLinker::default();
     let (transform_link_send, transform_link_recv) =
         util::entity_linker::ComponentsLinker::default();

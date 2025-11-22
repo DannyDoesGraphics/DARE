@@ -1,5 +1,5 @@
 use super::super::prelude as asset;
-use crate::asset2::metadata_location::MetaDataLocation;
+use crate::asset::metadata_location::MetaDataLocation;
 use derivative::Derivative;
 use image::EncodableLayout;
 

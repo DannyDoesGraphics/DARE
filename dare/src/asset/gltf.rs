@@ -2,7 +2,7 @@ use crate::prelude as dare;
 use crate::prelude::engine;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
-use dare::asset2 as asset;
+use dare::asset;
 use gltf;
 use gltf::texture::{MagFilter, MinFilter};
 use std::collections::VecDeque;
@@ -43,7 +43,7 @@ impl GLTFLoader {
 
     pub fn load(
         commands: &mut becs::Commands,
-        asset_server: &dare::asset2::server::AssetServer,
+        asset_server: &dare::asset::server::AssetServer,
         path: std::path::PathBuf,
     ) -> Result<()> {
         let gltf: gltf::Gltf = gltf::Gltf::open(path.clone())?;
@@ -92,7 +92,7 @@ impl GLTFLoader {
                 })
             })
             .collect::<Vec<Result<asset::assets::BufferMetaData>>>();
-        let accessors_metadata: Vec<dare::asset2::assets::BufferMetaData> = gltf
+        let accessors_metadata: Vec<dare::asset::assets::BufferMetaData> = gltf
             .accessors()
             .map(|accessor| {
                 if accessor.sparse().is_some() {
@@ -110,7 +110,7 @@ impl GLTFLoader {
                             dare::render::util::ElementFormat::from(accessor.data_type()),
                             accessor.dimensions().multiplicity(),
                         );
-                        //asset_server.entry::<dare::asset2::assets::Buffer>(buffer_metadata.clone())
+                        //asset_server.entry::<dare::asset::assets::Buffer>(buffer_metadata.clone())
                         buffer_metadata
                     } else {
                         panic!("No metadata found at {}", view.buffer().index())
@@ -205,7 +205,7 @@ impl GLTFLoader {
                 let location = match texture.source().source() {
                     gltf::image::Source::Uri { uri, .. } => {
                         let parent = path.parent().unwrap();
-                        dare::asset2::MetaDataLocation::FilePath(parent.join(uri))
+                        dare::asset::MetaDataLocation::FilePath(parent.join(uri))
                     }
                     _ => unimplemented!(),
                 };
@@ -221,17 +221,17 @@ impl GLTFLoader {
                         texture.sampler().mag_filter().unwrap_or(MagFilter::Nearest),
                     ),
                 };
-                let texture = dare::asset2::assets::ImageMetaData {
+                let texture = dare::asset::assets::ImageMetaData {
                     location,
                     name: texture
                         .name()
                         .map(|n| n.to_string())
                         .unwrap_or(format!("Texture {}", texture.index()).to_string()),
                 };
-                let asset_handle: dare::asset2::AssetHandle<dare::asset2::assets::Image> =
+                let asset_handle: dare::asset::AssetHandle<dare::asset::assets::Image> =
                     asset_server.entry(texture);
                 if asset_server.get_state(&asset_handle.clone().into_untyped_handle())
-                    == Some(crate::asset2::asset_state::AssetState::Unloaded)
+                    == Some(crate::asset::asset_state::AssetState::Unloaded)
                 {
                     if let Err(e) =
                         asset_server.transition_loading(&asset_handle.clone().into_untyped_handle())
@@ -301,7 +301,7 @@ impl GLTFLoader {
                                     // # of indices
                                     surface_builder.index_count = accessor.count();
                                     let handle: Option<
-                                        dare::asset2::AssetHandle<dare::asset2::assets::Buffer>,
+                                        dare::asset::AssetHandle<dare::asset::assets::Buffer>,
                                     > = accessors_metadata.get(accessor.index()).cloned().map(
                                         |mut m| {
                                             m.format = dare::render::util::Format::new(
@@ -310,7 +310,7 @@ impl GLTFLoader {
                                             );
                                             m.name.push_str(&format!("Index buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                             let handle = asset_server.entry(m.clone());
-                                            if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                            if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset::asset_state::AssetState::Unloaded) {
                                                 if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
                                                     tracing::warn!("Failed to load: {e}");
                                                 }
@@ -335,8 +335,8 @@ impl GLTFLoader {
                                     match semantic {
                                         Positions => {
                                             let handle: Option<
-                                                dare::asset2::AssetHandle<
-                                                    dare::asset2::assets::Buffer,
+                                                dare::asset::AssetHandle<
+                                                    dare::asset::assets::Buffer,
                                                 >,
                                             > = accessors_metadata
                                                 .get(accessor.index())
@@ -349,7 +349,7 @@ impl GLTFLoader {
                                                     m.name.push_str(&format!("Vertex buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                                     accessor.name().map(|name| m.name.push_str(name));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset::asset_state::AssetState::Unloaded) {
                                                         if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
                                                             tracing::warn!("Failed to load: {e}");
                                                         }
@@ -380,8 +380,8 @@ impl GLTFLoader {
                                         }
                                         Normals => {
                                             let handle: Option<
-                                                dare::asset2::AssetHandle<
-                                                    dare::asset2::assets::Buffer,
+                                                dare::asset::AssetHandle<
+                                                    dare::asset::assets::Buffer,
                                                 >,
                                             > = accessors_metadata
                                                 .get(accessor.index())
@@ -395,7 +395,7 @@ impl GLTFLoader {
 
                                                     accessor.name().map(|name| m.name.push_str(name));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset::asset_state::AssetState::Unloaded) {
                                                         if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
                                                             tracing::warn!("Failed to load: {e}");
                                                         }
@@ -406,8 +406,8 @@ impl GLTFLoader {
                                         }
                                         Tangents => {
                                             let handle: Option<
-                                                dare::asset2::AssetHandle<
-                                                    dare::asset2::assets::Buffer,
+                                                dare::asset::AssetHandle<
+                                                    dare::asset::assets::Buffer,
                                                 >,
                                             > = accessors_metadata
                                                 .get(accessor.index())
@@ -419,7 +419,7 @@ impl GLTFLoader {
                                                     );
                                                     m.name.push_str(&format!("Tangent buffer {} for surface {}", accessor.index(), mesh.name().unwrap_or(&mesh.index().to_string()) ));
                                                     let handle = asset_server.entry(m.clone());
-                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset2::asset_state::AssetState::Unloaded) {
+                                                    if asset_server.get_state(&handle.clone().into_untyped_handle()) == Some(crate::asset::asset_state::AssetState::Unloaded) {
                                                         if let Err(e) = asset_server.transition_loading(&handle.clone().into_untyped_handle()) {
                                                             tracing::warn!("Failed to load: {e}");
                                                         }

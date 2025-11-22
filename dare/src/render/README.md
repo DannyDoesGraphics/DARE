@@ -9,7 +9,7 @@ The render world and engine world are both ECS systems, however, operate in 2 en
 
 ## Metadata
 ---
-- See: [`src/asset2/mod.rs`]
+- See: [`src/asset/mod.rs`]
 - Responsible for containing information about any asset (buffer, texture, sampler, etc.)
 - Metadata is stored seperately in storage and are stored behind opaque handles
 - Is meant for multi-threaded concurrent access until concurrent data structures such as dashmap to allow for concurrent queries into the asset map
@@ -31,7 +31,7 @@ The render world and engine world are both ECS systems, however, operate in 2 en
 
 ## Uploading
 ---
-- Uploading to the GPU is simple, assets primarily rely on the [`src/asset2/loaders/traits.rs`] to provide us uploadable versions of our assets
+- Uploading to the GPU is simple, assets primarily rely on the [`src/asset/loaders/traits.rs`] to provide us uploadable versions of our assets
 
 ## TODO
 ---

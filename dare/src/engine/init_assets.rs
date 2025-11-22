@@ -4,10 +4,10 @@ use bevy_ecs::prelude as becs;
 pub fn init_assets(
     mut commands: becs::Commands,
     rt: becs::Res<dare::concurrent::BevyTokioRunTime>,
-    asset_server: becs::Res<dare::asset2::server::AssetServer>,
+    asset_server: becs::Res<dare::asset::server::AssetServer>,
 ) {
     rt.runtime.block_on(async move {
-        crate::asset2::gltf::GLTFLoader::load(
+        crate::asset::gltf::GLTFLoader::load(
             &mut commands,
             &asset_server,
             std::path::PathBuf::from(

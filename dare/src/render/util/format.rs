@@ -92,7 +92,7 @@ pub fn handle_cast_stream(
     use futures::stream::StreamExt;
     macro_rules! cast_stream {
         ($stream:expr, $src:ty, $dst:ty) => {
-            crate::prelude::asset2::loaders::CastStream::<_, $src, $dst>::new(
+            crate::prelude::asset::loaders::CastStream::<_, $src, $dst>::new(
                 $stream,
                 in_chunk_size,
                 source_format.dimension(),

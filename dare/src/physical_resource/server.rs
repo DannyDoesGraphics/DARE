@@ -18,7 +18,7 @@ pub enum ResourceState {
 
 /// Per resource state
 #[derive(Debug)]
-pub struct ResourceEntry<T: crate::asset2::traits::Asset> {
+pub struct ResourceEntry<T: crate::asset::traits::Asset> {
     /// Metadata associated with the virtual resource
     pub(super) metadata: T::Metadata,
     pub(super) state: Option<T::Loaded>,

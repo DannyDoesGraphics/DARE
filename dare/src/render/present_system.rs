@@ -41,7 +41,7 @@ pub fn present_system_begin(
         >,
     >,
     mut samplers: becs::ResMut<
-        physical_resource::PhysicalResourceStorage<dare::asset2::assets::SamplerAsset>,
+        physical_resource::PhysicalResourceStorage<dare::asset::assets::SamplerAsset>,
     >,
     mut buffers: becs::ResMut<
         '_,
