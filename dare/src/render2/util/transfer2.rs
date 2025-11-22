@@ -223,7 +223,7 @@ impl<A: Allocator> TransferPoolInner<A> {
 
     /// Move closed -> free chunks if their device work is done
     /// Also handles LRU eviction of unused chunks
-    fn reclaim(&mut self) -> dagal::Result<()> {
+    pub fn reclaim(&mut self) -> dagal::Result<()> {
         // Try to reclaim closed chunks
         let value: u64 = self.semaphore.current_value()?;
         // iterate all closed chunks and move to free if done
@@ -646,6 +646,7 @@ impl<A: Allocator> TransferPoolInner<A> {
         });
 
         self.next_ticket += 1;
+        self.reclaim()?;
         Ok(())
     }
 
