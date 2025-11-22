@@ -60,13 +60,14 @@ impl ImageSubresourceRange {
             } => vk::ImageSubresourceRange {
                 aspect_mask: *aspect_mask,
                 base_mip_level: mip_levels.start,
-                level_count: mip_levels.end - mip_levels.start,
+                level_count: mip_levels.end.checked_sub(mip_levels.start).expect("Invalid mip level range. End must be greater than start"),
                 base_array_layer: array_layers.start,
-                layer_count: array_layers.end - array_layers.start,
+                layer_count: array_layers.end.checked_sub(array_layers.start).expect("Invalid array layer range. End must be greater than start"),
             },
         }
     }
 
+    /// Creates a full subresource range for color aspect.
     pub fn full_color() -> Self {
         ImageSubresourceRange::Full {
             aspect_mask: vk::ImageAspectFlags::COLOR,
