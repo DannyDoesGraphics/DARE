@@ -1,4 +1,4 @@
-use crate::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use crate::allocators::{Allocator, GPUAllocatorImpl};
 use crate::bootstrap::app_info::AppSettings;
 use crate::traits::AsRaw;
 use ash::vk;
@@ -37,7 +37,7 @@ impl ContextInit for WindowlessContext {
         crate::core::Instance,
         crate::device::PhysicalDevice,
         crate::device::LogicalDevice,
-        ArcAllocator<A>,
+        A,
     );
 
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
@@ -65,7 +65,7 @@ impl ContextInit for WindowedContext {
         crate::device::PhysicalDevice,
         Option<crate::wsi::Surface>,
         crate::device::LogicalDevice,
-        ArcAllocator<A>,
+        A,
     );
 
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
@@ -221,7 +221,7 @@ impl ContextInit for WindowedContext {
             })?;
 
         // Make an allocator
-        let allocator = ArcAllocator::new(GPUAllocatorImpl::new(
+        let allocator = GPUAllocatorImpl::new(
             unsafe {
                 AllocatorCreateDesc {
                     instance: instance.get_instance().clone(),
@@ -233,7 +233,7 @@ impl ContextInit for WindowedContext {
                 }
             },
             logical_device.clone(),
-        )?);
+        )?;
 
         Ok((
             instance,

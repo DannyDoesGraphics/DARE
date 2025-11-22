@@ -22,7 +22,7 @@ impl<A: Allocator + 'static> MetaDataRenderAsset for RenderImage<A> {
     type Loaded = RenderImage<A>;
     type Asset = dare::asset2::assets::Image;
     type PrepareInfo = (
-        dagal::allocators::ArcAllocator<A>,
+        A,
         dare::asset2::AssetHandle<dare::asset2::assets::Image>,
         dare::render::util::TransferPool<A>,
         Option<String>,

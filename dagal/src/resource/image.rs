@@ -1,7 +1,7 @@
 use std::hash::Hasher;
 use std::ptr;
 
-use crate::allocators::{Allocator, ArcAllocation, ArcAllocator, GPUAllocatorImpl};
+use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
@@ -23,7 +23,9 @@ pub struct Image<A: Allocator> {
     image_type: vk::ImageType,
     device: crate::device::LogicalDevice,
     #[derivative(Debug = "ignore")]
-    allocation: Option<ArcAllocation<A>>,
+    allocation: Option<A::Allocation>,
+    #[derivative(Debug = "ignore")]
+    allocator: Option<A>,
     image_managed: bool,
 }
 unsafe impl<A: Allocator> Send for Image<A> {}
@@ -83,14 +85,14 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image that has allocated memory
     NewAllocated {
         device: crate::device::LogicalDevice,
-        allocator: &'a mut ArcAllocator<A>,
+        allocator: &'a mut A,
         location: crate::allocators::MemoryLocation,
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
     FromOwnedCreateInfo {
         device: crate::device::LogicalDevice,
-        allocator: &'a mut ArcAllocator<A>,
+        allocator: &'a mut A,
         create_info: OwnedImageCreateInfo,
         name: Option<&'a str>,
     },
@@ -334,7 +336,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// use dagal::util::tests::TestSettings;
     /// use dagal::gpu_allocator;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    /// let mut allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
     ///     instance: test_vulkan.instance.get_instance().clone(),
     ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
     ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
@@ -342,7 +344,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///     buffer_device_address: false,
     ///     allocation_sizes: Default::default(),
     ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
-    /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
     /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     image_ci: vk::ImageCreateInfo {
@@ -382,7 +383,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// use dagal::util::tests::TestSettings;
     /// use dagal::gpu_allocator;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    /// let mut allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
     ///     instance: test_vulkan.instance.get_instance().clone(),
     ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
     ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
@@ -390,7 +391,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///     buffer_device_address: false,
     ///     allocation_sizes: Default::default(),
     ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
-    /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
     /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::FromOwnedCreateInfo {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     create_info: dagal::resource::OwnedImageCreateInfo {
@@ -424,7 +424,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
         match create_info {
             ImageCreateInfo::FromVkNotManaged {
                 device,
-                layout,
+                layout: _layout,
                 image,
                 usage_flags,
                 image_type,
@@ -442,6 +442,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     usage_flags,
                     image_type,
                     allocation: None,
+                    allocator: None,
                     image_managed: false,
                     concurrent_queue_families: None,
                 };
@@ -466,6 +467,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     image_type: image_ci.image_type,
                     device,
                     allocation: None,
+                    allocator: None,
                     image_managed: true,
                     concurrent_queue_families: if image_ci.sharing_mode
                         == vk::SharingMode::CONCURRENT
@@ -514,11 +516,12 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                 unsafe {
                     image.device.get_handle().bind_image_memory(
                         image.handle,
-                        allocation.memory()?,
-                        allocation.offset()?,
+                        allocation.memory(),
+                        allocation.offset(),
                     )?
                 }
                 image.allocation = Some(allocation);
+                image.allocator = Some(allocator.clone());
                 Ok(image)
             }
             ImageCreateInfo::FromOwnedCreateInfo {
@@ -561,8 +564,8 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     )?;
                     device.get_handle().bind_image_memory(
                         handle,
-                        allocation.memory()?,
-                        allocation.offset()?,
+                        allocation.memory(),
+                        allocation.offset(),
                     )?;
                     allocation
                 };
@@ -576,6 +579,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                     image_type: create_info.image_type,
                     device,
                     allocation: Some(allocation),
+                    allocator: Some(allocator.clone()),
                     image_managed: true,
                     concurrent_queue_families: if create_info.sharing_mode
                         == vk::SharingMode::CONCURRENT
@@ -630,9 +634,10 @@ impl<A: Allocator> Destructible for Image<A> {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Destroying VkImage {:p}", self.handle);
 
-        if let Some(mut allocation) = self.allocation.take() {
-            allocation.destroy();
-            drop(allocation);
+        if let Some(allocation) = self.allocation.take() {
+            if let Some(allocator) = self.allocator.as_mut() {
+                let _ = allocator.free(allocation);
+            }
         }
         if self.image_managed {
             unsafe {

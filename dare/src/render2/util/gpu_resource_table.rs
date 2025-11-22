@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use anyhow::Result;
 /// Bevy
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{Allocator, ArcAllocator};
+use dagal::allocators::Allocator;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dagal::traits::AsRaw;
@@ -38,10 +38,7 @@ const SAMPLED_IMAGE_BINDING_INDEX: u32 = 1;
 const SAMPLER_BINDING_INDEX: u32 = 0;
 
 impl<A: Allocator> GPUResourceTable<A> {
-    pub fn new(
-        device: dagal::device::LogicalDevice,
-        allocator: &mut ArcAllocator<A>,
-    ) -> Result<Self> {
+    pub fn new(device: dagal::device::LogicalDevice, allocator: &mut A) -> Result<Self> {
         let pool_sizes = vec![
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::SAMPLER)

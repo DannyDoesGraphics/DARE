@@ -1,5 +1,5 @@
 use crate::prelude as dare;
-use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
+use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::command::command_buffer::CmdBuffer;
 use dagal::resource::BufferCreateInfo;
@@ -61,7 +61,7 @@ pub struct GrowableBuffer<A: Allocator + 'static> {
     handle: Option<Arc<dagal::resource::Buffer<A>>>,
     device: dagal::device::LogicalDevice,
     name: Option<String>,
-    allocator: ArcAllocator<A>,
+    allocator: A,
     /// Current allocated size
     capacity: vk::DeviceSize,
     /// Used size (logical size)

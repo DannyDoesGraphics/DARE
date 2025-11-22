@@ -1,4 +1,4 @@
-use dagal::allocators::{ArcAllocator, GPUAllocatorImpl};
+use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 
@@ -13,7 +13,7 @@ impl SurfacesContext {
     pub fn new(
         frame_in_flight: u32,
         device: &dagal::device::LogicalDevice,
-        allocator: &mut ArcAllocator<GPUAllocatorImpl>,
+        allocator: &mut GPUAllocatorImpl,
     ) -> Result<Self, dagal::DagalError> {
         let surface_buffers = (0..frame_in_flight)
             .map(|index| {

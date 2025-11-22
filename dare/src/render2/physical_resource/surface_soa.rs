@@ -1,4 +1,4 @@
-use dagal::allocators::{Allocator, ArcAllocator};
+use dagal::allocators::Allocator;
 
 use super::super::util::persistent_buffer::PersistentBuffer;
 use crate::{engine::components::Surface, prelude::render::util::GrowableBuffer};
@@ -17,10 +17,7 @@ pub struct SurfaceSOA<A: Allocator> {
 }
 
 impl<A: Allocator> SurfaceSOA<A> {
-    pub fn new(
-        mut allocator: ArcAllocator<A>,
-        device: dagal::device::LogicalDevice,
-    ) -> anyhow::Result<Self> {
+    pub fn new(mut allocator: A, device: dagal::device::LogicalDevice) -> anyhow::Result<Self> {
         let usage_flags: vk::BufferUsageFlags = vk::BufferUsageFlags::STORAGE_BUFFER
             | vk::BufferUsageFlags::TRANSFER_DST
             | vk::BufferUsageFlags::TRANSFER_SRC

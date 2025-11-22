@@ -16,7 +16,7 @@ impl Allocator for TestAllocator {
     type Allocation = TestAllocation;
 
     fn allocate(
-        &mut self,
+        &self,
         name: &str,
         requirements: &MemoryRequirements,
         ty: MemoryLocation,
@@ -24,7 +24,7 @@ impl Allocator for TestAllocator {
         unimplemented!()
     }
 
-    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
+    fn free(&self, _allocation: Self::Allocation) -> Result<(), crate::DagalError> {
         unimplemented!()
     }
 

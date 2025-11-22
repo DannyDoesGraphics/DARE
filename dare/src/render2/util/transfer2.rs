@@ -1,12 +1,7 @@
 use std::{collections::HashMap, hash::Hash};
 
 use dagal::ash::vk;
-use dagal::{
-    allocators::{Allocator, ArcAllocator},
-    ash::vk::Handle,
-    resource::traits::Resource,
-    traits::AsRaw,
-};
+use dagal::{allocators::Allocator, ash::vk::Handle, resource::traits::Resource, traits::AsRaw};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct UploadSlice {
@@ -90,7 +85,7 @@ pub struct TransferPoolInner<A: Allocator> {
 
     queue: dagal::device::Queue,
     command_pool: dagal::command::CommandPool,
-    allocator: ArcAllocator<A>,
+    allocator: A,
 
     semaphore: dagal::sync::Semaphore,
     next_ticket: u64,
@@ -113,7 +108,7 @@ impl<A: Allocator> TransferPoolInner<A> {
     pub fn new(
         device: dagal::device::LogicalDevice,
         queue: dagal::device::Queue,
-        allocator: ArcAllocator<A>,
+        allocator: A,
         max_belt_size: u64,
         lru_cache: u64,
     ) -> dagal::Result<Self> {

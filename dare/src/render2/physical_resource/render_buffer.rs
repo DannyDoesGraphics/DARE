@@ -3,7 +3,7 @@ use crate::prelude as dare;
 use crate::render2::physical_resource::gpu_buffer_stream;
 use crate::render2::physical_resource::traits::MetaDataRenderAsset;
 use crate::render2::prelude::util::TransferPool;
-use dagal::allocators::{Allocator, ArcAllocator, MemoryLocation};
+use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;
 use dagal::resource::traits::Resource;
 use dare::asset2 as asset;
@@ -16,7 +16,7 @@ pub struct RenderBuffer<A: Allocator + 'static> {
 }
 
 pub struct BufferPrepareInfo<A: Allocator + 'static> {
-    pub allocator: ArcAllocator<A>,
+    pub allocator: A,
     pub handle: asset::AssetHandle<asset::assets::Buffer>,
     pub transfer_pool: TransferPool<A>,
     pub usage_flags: vk::BufferUsageFlags,

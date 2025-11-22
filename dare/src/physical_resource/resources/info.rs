@@ -15,7 +15,7 @@ pub struct GPUStreamInfo {
     #[derivative(PartialEq = "ignore")]
     pub transfer: crate::render2::util::transfer::TransferPool<GPUAllocatorImpl>,
     #[derivative(PartialEq = "ignore")]
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub allocator: GPUAllocatorImpl,
     #[derivative(PartialEq = "ignore")]
     pub buffer:
         std::sync::Arc<tokio::sync::Mutex<Option<dagal::resource::Buffer<GPUAllocatorImpl>>>>,

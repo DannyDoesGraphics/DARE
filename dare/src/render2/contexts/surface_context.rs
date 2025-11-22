@@ -13,7 +13,7 @@ pub struct SurfaceContext {
     pub image_extent: vk::Extent2D,
     pub frames: Box<[super::super::frame::Frame]>,
 
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub allocator: GPUAllocatorImpl,
     pub swapchain: dagal::wsi::Swapchain,
     pub surface: dagal::wsi::SurfaceQueried,
 
@@ -23,7 +23,7 @@ pub struct SurfaceContext {
 pub struct SurfaceContextUpdateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub physical_device: &'a dagal::device::PhysicalDevice,
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub allocator: GPUAllocatorImpl,
     pub raw_handles: crate::window::WindowHandles,
     pub dimensions: Option<(u32, u32)>,
 
@@ -35,7 +35,7 @@ pub struct InnerSurfaceContextCreateInfo<'a> {
     pub instance: &'a dagal::core::Instance,
     pub surface: Option<dagal::wsi::Surface>,
     pub physical_device: &'a dagal::device::PhysicalDevice,
-    pub allocator: dagal::allocators::ArcAllocator<GPUAllocatorImpl>,
+    pub allocator: GPUAllocatorImpl,
     pub present_queue: dagal::device::Queue,
     pub raw_handles: crate::window::WindowHandles,
     pub extent: (u32, u32),

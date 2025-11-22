@@ -8,7 +8,7 @@ use dagal::command::CommandBufferState;
 use dagal::device::queue::QueueGuardExt;
 use dagal::traits::AsRaw;
 use dagal::{
-    allocators::GPUAllocatorImpl,
+    allocators::{Allocator, GPUAllocatorImpl},
     ash::khr::surface,
     command::command_buffer::{self, CmdBuffer},
 };

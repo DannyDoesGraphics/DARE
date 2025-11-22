@@ -62,7 +62,7 @@ impl Allocator for GPUAllocatorImpl {
     type Allocation = GPUAllocatorAllocation;
 
     fn allocate(
-        &mut self,
+        &self,
         name: &str,
         requirements: &MemoryRequirements,
         ty: super::MemoryLocation,
@@ -97,7 +97,7 @@ impl Allocator for GPUAllocatorImpl {
         })
     }
 
-    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
+    fn free(&self, allocation: Self::Allocation) -> Result<(), crate::DagalError> {
         self.free_impl(allocation)
             .map_err(|_| crate::DagalError::AllocationError)
     }

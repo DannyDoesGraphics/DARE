@@ -8,7 +8,6 @@ use std::ptr::NonNull;
 use anyhow::Result;
 use ash::vk;
 
-pub use arc_allocator::{ArcAllocation, ArcAllocator};
 #[cfg(feature = "gpu-allocator")]
 pub use gpu_allocator_impl::*;
 pub use memory_type::*;
@@ -16,7 +15,6 @@ pub use memory_type::*;
 #[cfg(feature = "gpu-allocator")]
 pub mod gpu_allocator_impl;
 
-pub mod arc_allocator;
 pub mod memory_type;
 pub mod test_allocator;
 
@@ -26,14 +24,14 @@ pub trait Allocator: Debug + Clone + Send + Sync + Unpin + 'static {
 
     /// Create a new allocation
     fn allocate(
-        &mut self,
+        &self,
         name: &str,
         requirements: &vk::MemoryRequirements,
         ty: MemoryLocation,
     ) -> Result<Self::Allocation, crate::DagalError>;
 
     /// Free an allocation
-    fn free(&mut self, allocation: Self::Allocation) -> Result<(), crate::DagalError>;
+    fn free(&self, allocation: Self::Allocation) -> Result<(), crate::DagalError>;
 
     /// Get device reference
     fn get_device(&self) -> &crate::device::LogicalDevice;

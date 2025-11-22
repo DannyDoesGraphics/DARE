@@ -6,7 +6,7 @@ use crate::prelude as dare;
 use crate::render2::physical_resource;
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
-use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl};
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
 use std::hash::{Hash, Hasher};
 
 bitflags! {
@@ -134,7 +134,6 @@ pub struct CMaterial {
 }
 impl CMaterial {
     pub fn from_material<A: Allocator>(
-        arc_allocator: ArcAllocator<A>,
         transfer_pool: dare::render::util::TransferPool<A>,
         textures: &mut physical_resource::PhysicalResourceStorage<
             physical_resource::RenderImage<A>,

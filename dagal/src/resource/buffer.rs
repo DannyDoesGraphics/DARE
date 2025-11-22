@@ -7,7 +7,7 @@ use std::hash::Hasher;
 use std::ptr::NonNull;
 use std::{mem, ptr};
 
-use crate::allocators::{Allocator, ArcAllocation, ArcAllocator};
+use crate::allocators::{Allocation, Allocator};
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 
@@ -17,7 +17,9 @@ pub struct Buffer<A: Allocator> {
     handle: vk::Buffer,
     device: crate::device::LogicalDevice,
     #[derivative(Debug = "ignore")]
-    allocation: Option<ArcAllocation<A>>,
+    allocation: Option<A::Allocation>,
+    #[derivative(Debug = "ignore")]
+    allocator: Option<A>,
     address: vk::DeviceAddress,
     size: vk::DeviceSize,
     name: Option<String>,
@@ -54,26 +56,16 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
     NewEmptyBuffer {
         device: crate::device::LogicalDevice,
         name: Option<String>,
-        allocator: &'a mut ArcAllocator<A>,
+        allocator: &'a mut A,
         /// Size in bytes
         size: vk::DeviceSize,
         memory_type: crate::allocators::MemoryLocation,
         usage_flags: vk::BufferUsageFlags,
     },
-    /// Create a buffer with an existing memory allocation
-    NewBufferWithAllocation {
-        device: crate::device::LogicalDevice,
-        name: Option<String>,
-        allocator: &'a mut ArcAllocator<A>,
-        /// Size in bytes
-        size: vk::DeviceSize,
-        allocation: ArcAllocation<A>,
-        usage_flags: vk::BufferUsageFlags,
-    },
     FromOwnedCreateInfo {
         create_info: OwnedBufferCreateInfo,
         device: crate::device::LogicalDevice,
-        allocator: &'a mut ArcAllocator<A>,
+        allocator: &'a mut A,
     },
 }
 
@@ -84,8 +76,10 @@ impl<A: Allocator> Destructible for Buffer<A> {
             tracing::trace!("Destroying VkBuffer {:p}", self.handle);
 
             self.device.get_handle().destroy_buffer(self.handle, None);
-            if let Some(mut allocation) = self.allocation.take() {
-                allocation.destroy();
+            if let Some(allocation) = self.allocation.take() {
+                if let Some(allocator) = self.allocator.as_mut() {
+                    let _ = allocator.free(allocation);
+                }
             }
         }
     }
@@ -107,10 +101,9 @@ impl<A: Allocator> Buffer<A> {
 
     /// Acquire a mapped pointer to the buffer allocation
     pub fn mapped_ptr(&self) -> Option<NonNull<c_void>> {
-        match self.allocation.as_ref() {
-            None => None,
-            Some(allocation) => allocation.mapped_ptr().unwrap(),
-        }
+        self.allocation
+            .as_ref()
+            .and_then(|allocation| allocation.mapped_ptr())
     }
 
     /// Read to a mapper pointer if one exists
@@ -233,8 +226,8 @@ impl<A: Allocator> Resource for Buffer<A> {
                 unsafe {
                     device.get_handle().bind_buffer_memory(
                         handle,
-                        allocation.memory()?,
-                        allocation.offset()?,
+                        allocation.memory(),
+                        allocation.offset(),
                     )?
                 }
                 let mut address = vk::DeviceAddress::default();
@@ -256,6 +249,7 @@ impl<A: Allocator> Resource for Buffer<A> {
                     handle,
                     device: device.clone(),
                     allocation: Some(allocation),
+                    allocator: Some(allocator.clone()),
                     address,
                     size,
                     name: name.clone(),
@@ -295,8 +289,8 @@ impl<A: Allocator> Resource for Buffer<A> {
                 unsafe {
                     device.get_handle().bind_buffer_memory(
                         handle,
-                        allocation.memory()?,
-                        allocation.offset()?,
+                        allocation.memory(),
+                        allocation.offset(),
                     )?
                 }
                 let mut address = vk::DeviceAddress::default();
@@ -318,6 +312,7 @@ impl<A: Allocator> Resource for Buffer<A> {
                     handle,
                     device: device.clone(),
                     allocation: Some(allocation),
+                    allocator: Some(allocator.clone()),
                     address,
                     size: create_info.size,
                     name: None,
@@ -330,7 +325,6 @@ impl<A: Allocator> Resource for Buffer<A> {
 
                 Ok(buffer)
             }
-            _ => unimplemented!(),
         }
     }
     fn get_device(&self) -> &crate::device::LogicalDevice {

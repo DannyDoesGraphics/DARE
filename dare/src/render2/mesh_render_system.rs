@@ -6,7 +6,7 @@ use crate::render2::physical_resource;
 use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
 use crate::render2::prelude::util::TransferPool;
 use bevy_ecs::prelude::*;
-use dagal::allocators::{Allocator, ArcAllocator, GPUAllocatorImpl, MemoryLocation};
+use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
 use dagal::ash::vk::Handle;
 use dagal::command::CommandBufferState;
@@ -47,7 +47,7 @@ pub fn build_instancing_data(
             &dare::engine::components::Name,
         ),
     >,
-    allocator: ArcAllocator<GPUAllocatorImpl>,
+    allocator: GPUAllocatorImpl,
     transfer_pool: TransferPool<GPUAllocatorImpl>,
     textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
@@ -283,7 +283,6 @@ pub fn build_instancing_data(
                     });
 
                     match dare::render::c::CMaterial::from_material(
-                        allocator.clone(),
                         transfer_pool.clone(),
                         textures,
                         material,

@@ -1,12 +1,12 @@
 use bevy_ecs::prelude as becs;
-use dagal::allocators::{ArcAllocator, GPUAllocatorImpl};
+use dagal::allocators::GPUAllocatorImpl;
 
 /// Context that manages core Vulkan device resources
 #[derive(Debug, becs::Resource)]
 pub struct DeviceContext {
     // Order matters for Drop! Rust drops fields in declaration order
     // We want to drop the most dependent objects first
-    pub allocator: ArcAllocator<GPUAllocatorImpl>,
+    pub allocator: GPUAllocatorImpl,
     pub device: dagal::device::LogicalDevice,
     pub physical_device: dagal::device::PhysicalDevice,
     pub debug_messenger: Option<dagal::device::DebugMessenger>,
@@ -18,7 +18,7 @@ impl DeviceContext {
         instance: dagal::core::Instance,
         physical_device: dagal::device::PhysicalDevice,
         device: dagal::device::LogicalDevice,
-        allocator: ArcAllocator<GPUAllocatorImpl>,
+        allocator: GPUAllocatorImpl,
         debug_messenger: Option<dagal::device::DebugMessenger>,
     ) -> Self {
         Self {

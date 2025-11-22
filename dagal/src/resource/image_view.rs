@@ -42,7 +42,7 @@ pub enum ImageViewCreateInfo<'a> {
     /// use dagal::util::tests::TestSettings;
     /// use dagal::gpu_allocator;
     /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
+    /// let mut allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
     ///     instance: test_vulkan.instance.get_instance().clone(),
     ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
     ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
@@ -50,7 +50,6 @@ pub enum ImageViewCreateInfo<'a> {
     ///     buffer_device_address: false,
     ///     allocation_sizes: Default::default(),
     ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
-    /// let mut allocator = dagal::allocators::ArcAllocator::new(allocator);
     /// let image: dagal::resource::Image<GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
     ///     device: test_vulkan.device.as_ref().unwrap().clone(),
     ///     image_ci: vk::ImageCreateInfo {

@@ -20,7 +20,7 @@ pub use pass_storage::*;
 pub struct PassContext<A: crate::allocators::Allocator = crate::DefaultAllocator> {
     pub command_buffer: crate::command::CommandBuffer,
     pub device: crate::device::LogicalDevice,
-    pub allocator: crate::allocators::ArcAllocator<A>,
+    pub allocator: A,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
