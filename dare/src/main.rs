@@ -1,4 +1,3 @@
-use crate::prelude::render;
 use dagal::ash::vk;
 use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
@@ -10,6 +9,7 @@ mod engine;
 mod physical_resource;
 mod physics;
 mod prelude;
+mod render;
 mod render2;
 mod util;
 mod window;
@@ -47,7 +47,7 @@ fn main() {
     let (input_send, input_recv) = util::event::event_send::<window::input::Input>();
     let (window_send, window_recv) = tokio::sync::oneshot::channel::<window::WindowHandles>();
     // cross tokio-main thread communication
-    let render_client = render2::server::RenderClient::new(rs_send, input_send);
+    let render_client = render::server::RenderClient::new(rs_send, input_send);
     let engine_client = engine::server::EngineClient::new(es_sent);
 
     let _engine_server = engine::server::EngineServer::new(

@@ -1,5 +1,5 @@
 use crate::prelude as dare;
-use crate::render2::c::CMaterial;
+use crate::render::c::CMaterial;
 use bevy_ecs::prelude as becs;
 use dagal::allocators::Allocator;
 use gltf::material::AlphaMode;

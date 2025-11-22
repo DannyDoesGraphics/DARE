@@ -1,5 +1,5 @@
 use crate::prelude as dare;
-use crate::render2::contexts::SurfaceContext;
+use crate::render::contexts::SurfaceContext;
 use anyhow::Result;
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -205,7 +205,7 @@ impl Frame {
                         image_number.as_ref().unwrap_or(&0)
                     ))),
                     allocator: &mut allocator,
-                    size: (size_of::<crate::render2::c::CMaterial>() * 64) as vk::DeviceSize,
+                    size: (size_of::<crate::render::c::CMaterial>() * 64) as vk::DeviceSize,
                     memory_type: MemoryLocation::GpuOnly,
                     usage_flags: vk::BufferUsageFlags::TRANSFER_SRC
                         | vk::BufferUsageFlags::TRANSFER_DST
@@ -214,7 +214,7 @@ impl Frame {
                 },
                 dare::render::util::GrowableBufferConfig {
                     growth_strategy: dare::render::util::GrowthStrategy::Geometric(2.0),
-                    min_size: size_of::<crate::render2::c::CMaterial>() as u64 * 64,
+                    min_size: size_of::<crate::render::c::CMaterial>() as u64 * 64,
                     alignment: 256,
                     enable_staging_pool: false,
                     ..Default::default()

@@ -1,4 +1,4 @@
-use crate::render2::util::WrappingMode::MirrorClampToEdge;
+use crate::render::util::WrappingMode::MirrorClampToEdge;
 use bytes::*;
 use dagal::ash::vk;
 use futures::stream::BoxStream;

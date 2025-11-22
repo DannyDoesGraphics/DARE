@@ -1,6 +1,6 @@
 use crate::prelude as dare;
-use crate::render2::c::CPushConstant;
-use crate::render2::contexts::{
+use crate::render::c::CPushConstant;
+use crate::render::contexts::{
     DeviceContext, GraphicsContext, InnerSurfaceContextCreateInfo, TransferContext, WindowContext,
 };
 use anyhow::Result;
@@ -161,7 +161,7 @@ pub fn create_contexts(ci: ContextsCreateInfo) -> Result<CreatedContexts> {
     let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(remaining_queues);
 
     // Create window context first (needs to borrow instance and physical_device)
-    let window_context = WindowContext::new(crate::render2::contexts::WindowContextCreateInfo {
+    let window_context = WindowContext::new(crate::render::contexts::WindowContextCreateInfo {
         present_queue: present_queue.clone(),
         surface: Some(dare::render::contexts::SurfaceContext::new(
             InnerSurfaceContextCreateInfo {

@@ -155,21 +155,21 @@ impl GLTFLoader {
                     wrapping_mode: (
                         match sampler.wrap_s() {
                             WrappingMode::ClampToEdge => {
-                                crate::render2::util::WrappingMode::ClampToEdge
+                                crate::render::util::WrappingMode::ClampToEdge
                             }
                             WrappingMode::MirroredRepeat => {
-                                crate::render2::util::WrappingMode::MirroredRepeat
+                                crate::render::util::WrappingMode::MirroredRepeat
                             }
-                            WrappingMode::Repeat => crate::render2::util::WrappingMode::Repeat,
+                            WrappingMode::Repeat => crate::render::util::WrappingMode::Repeat,
                         },
                         match sampler.wrap_t() {
                             WrappingMode::ClampToEdge => {
-                                crate::render2::util::WrappingMode::ClampToEdge
+                                crate::render::util::WrappingMode::ClampToEdge
                             }
                             WrappingMode::MirroredRepeat => {
-                                crate::render2::util::WrappingMode::MirroredRepeat
+                                crate::render::util::WrappingMode::MirroredRepeat
                             }
-                            WrappingMode::Repeat => crate::render2::util::WrappingMode::Repeat,
+                            WrappingMode::Repeat => crate::render::util::WrappingMode::Repeat,
                         },
                     ),
                     min_filter: match sampler.min_filter() {

@@ -28,8 +28,8 @@ pub fn update_frame_buffer(
     >,
     mut surface_removed: becs::RemovedComponents<dare::engine::components::Surface>,
     // Frame resource
-    mut window_context: becs::ResMut<'_, crate::render2::contexts::WindowContext>,
-    transfer_context: becs::Res<'_, crate::render2::contexts::TransferContext>,
+    mut window_context: becs::ResMut<'_, crate::render::contexts::WindowContext>,
+    transfer_context: becs::Res<'_, crate::render::contexts::TransferContext>,
     // resources
     mut buffers: becs::ResMut<
         '_,

@@ -1,7 +1,7 @@
 use super::super::prelude as asset;
 use crate::asset2::loaders::MetaDataStreamable;
 use crate::prelude as dare;
-use crate::render2::util::{ElementFormat, handle_cast_stream};
+use crate::render::util::{ElementFormat, handle_cast_stream};
 use bytemuck::Pod;
 use bytes::*;
 use derivative::Derivative;

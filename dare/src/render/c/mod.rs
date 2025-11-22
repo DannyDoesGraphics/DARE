@@ -3,7 +3,7 @@ pub mod indirect_buffers;
 pub use indirect_buffers::*;
 
 use crate::prelude as dare;
-use crate::render2::physical_resource;
+use crate::render::physical_resource;
 use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
 use dagal::allocators::{Allocator, GPUAllocatorImpl};

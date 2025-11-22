@@ -1,10 +1,10 @@
 use crate::asset2::assets::BufferStreamInfo;
 use crate::asset2::prelude::AssetHandle;
 use crate::prelude as dare;
-use crate::render2::c::CPushConstant;
-use crate::render2::physical_resource;
-use crate::render2::physical_resource::{BufferPrepareInfo, VirtualResource};
-use crate::render2::prelude::util::TransferPool;
+use crate::render::c::CPushConstant;
+use crate::render::physical_resource;
+use crate::render::physical_resource::{BufferPrepareInfo, VirtualResource};
+use crate::render::prelude::util::TransferPool;
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, GPUAllocatorImpl, MemoryLocation};
 use dagal::ash::vk;
@@ -348,9 +348,9 @@ pub fn build_instancing_data(
 
 pub async fn mesh_render(
     frame_number: usize,
-    device_context: &crate::render2::contexts::DeviceContext,
-    graphics_context: &crate::render2::contexts::GraphicsContext,
-    transfer_context: &crate::render2::contexts::TransferContext,
+    device_context: &crate::render::contexts::DeviceContext,
+    graphics_context: &crate::render::contexts::GraphicsContext,
+    transfer_context: &crate::render::contexts::TransferContext,
     camera: &dare::render::components::camera::Camera,
     frame: &mut super::frame::Frame,
     surfaces: Query<

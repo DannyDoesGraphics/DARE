@@ -1,7 +1,7 @@
 use crate::asset2::loaders::MetaDataLoad;
 use crate::asset2::prelude::Asset;
 use crate::prelude as dare;
-use crate::render2::physical_resource::traits::MetaDataRenderAsset;
+use crate::render::physical_resource::traits::MetaDataRenderAsset;
 use bevy_ecs::prelude::*;
 use dagal::allocators::{Allocator, MemoryLocation};
 use dagal::ash::vk;

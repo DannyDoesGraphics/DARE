@@ -1,7 +1,7 @@
 use crate::engine;
 use crate::prelude as dare;
 use crate::prelude::render::RenderServerRequest;
-use crate::render2::prelude as render;
+use crate::render::prelude as render;
 use anyhow::Result;
 use dagal::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use dagal::winit;

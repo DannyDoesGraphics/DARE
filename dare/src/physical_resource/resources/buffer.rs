@@ -185,7 +185,7 @@ impl traits::GPUUploadable for BufferMetadata {
                         if let Some(dst_buf) = dst_buffer_guard.take() {
                             let (staging_returned, dst_returned) = transfer
                                 .buffer_to_buffer_transfer(
-                                    crate::render2::util::transfer::TransferBufferToBuffer {
+                                    crate::render::util::transfer::TransferBufferToBuffer {
                                         src_buffer: staging_buffer,
                                         dst_buffer: dst_buf,
                                         src_offset: 0,

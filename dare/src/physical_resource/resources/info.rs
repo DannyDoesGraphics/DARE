@@ -13,7 +13,7 @@ pub struct StreamInfo {
 pub struct GPUStreamInfo {
     pub stream_info: StreamInfo,
     #[derivative(PartialEq = "ignore")]
-    pub transfer: crate::render2::util::transfer::TransferPool<GPUAllocatorImpl>,
+    pub transfer: crate::render::util::transfer::TransferPool<GPUAllocatorImpl>,
     #[derivative(PartialEq = "ignore")]
     pub allocator: GPUAllocatorImpl,
     #[derivative(PartialEq = "ignore")]

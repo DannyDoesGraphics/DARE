@@ -1,10 +1,10 @@
 pub mod send_types;
 
 use crate::prelude as dare;
-use crate::render2::contexts::{ContextsCreateInfo, create_contexts};
-use crate::render2::physical_resource;
-use crate::render2::prelude as render;
-use crate::render2::server::send_types::RenderServerPacket;
+use crate::render::contexts::{ContextsCreateInfo, create_contexts};
+use crate::render::physical_resource;
+use crate::render::prelude as render;
+use crate::render::server::send_types::RenderServerPacket;
 use crate::util::event::EventReceiver;
 use anyhow::Result;
 use bevy_ecs::prelude::*;

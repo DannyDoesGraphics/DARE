@@ -1,6 +1,6 @@
 use crate::prelude as dare;
 use crate::prelude::render;
-use crate::render2::physical_resource;
+use crate::render::physical_resource;
 use bevy_ecs::prelude as becs;
 use bevy_ecs::prelude::Query;
 use dagal::ash::vk;
@@ -17,10 +17,10 @@ use std::ptr;
 /// Grabs the final present image and draws it
 pub fn present_system_begin(
     mut frame_counter: becs::ResMut<'_, super::frame_number::FrameCounter>,
-    device_context: becs::Res<'_, crate::render2::contexts::DeviceContext>,
-    graphics_context: becs::Res<'_, crate::render2::contexts::GraphicsContext>,
-    transfer_context: becs::Res<'_, crate::render2::contexts::TransferContext>,
-    mut window_context: becs::ResMut<'_, crate::render2::contexts::WindowContext>,
+    device_context: becs::Res<'_, crate::render::contexts::DeviceContext>,
+    graphics_context: becs::Res<'_, crate::render::contexts::GraphicsContext>,
+    transfer_context: becs::Res<'_, crate::render::contexts::TransferContext>,
+    mut window_context: becs::ResMut<'_, crate::render::contexts::WindowContext>,
     rt: becs::Res<'_, dare::concurrent::BevyTokioRunTime>,
     surfaces: Query<
         '_,
@@ -183,7 +183,7 @@ pub fn present_system_begin(
 pub async fn present_system_end(
     frame_number: usize,
     present_queue: &dagal::device::Queue,
-    surface_context: &mut crate::render2::contexts::SurfaceContext,
+    surface_context: &mut crate::render::contexts::SurfaceContext,
     swapchain_image_index: u32,
     _textures: &mut physical_resource::PhysicalResourceStorage<
         physical_resource::RenderImage<GPUAllocatorImpl>,
