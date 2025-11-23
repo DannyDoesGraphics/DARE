@@ -6,7 +6,7 @@ use dagal::{allocators::Allocator, ash::vk, resource::traits::Resource, traits::
 /// A rendering context for window-based rendering
 #[derive(Debug, bevy_ecs::resource::Resource)]
 pub struct SwapchainContext<A: Allocator> {
-    frames: Vec<crate::render2::frame::Frame<A>>,
+    frames: Vec<crate::render2::frame::SwapchainFrame<A>>,
     pub swapchain: dagal::wsi::Swapchain,
     pub extent: vk::Extent2D,
     surface: dagal::wsi::SurfaceQueried,
@@ -52,7 +52,7 @@ impl<A: Allocator> SwapchainContext<A> {
     ) -> dagal::Result<Self> {
         let capabilities = surface.get_capabilities();
         let image_extent = Self::select_extent(&capabilities, extent);
-        let image_count = Self::select_image_count(&capabilities, 3);
+        let image_count = Self::select_image_count(&capabilities, u32::MAX);
         let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface)
             .min_image_count(Some(image_count))
             .request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
@@ -77,15 +77,11 @@ impl<A: Allocator> SwapchainContext<A> {
         self.frames.len()
     }
 
-    pub fn frame_mut(&mut self, index: usize) -> Option<&mut crate::render2::frame::Frame<A>> {
+    pub fn frame_mut(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut crate::render2::frame::SwapchainFrame<A>> {
         self.frames.get_mut(index)
-    }
-
-    pub fn ensure_frames(&mut self) -> dagal::Result<()> {
-        if self.frames.is_empty() {
-            self.rebuild_frames()?;
-        }
-        Ok(())
     }
 
     pub fn swapchain_handle(&self) -> &vk::SwapchainKHR {
@@ -105,10 +101,23 @@ impl<A: Allocator> SwapchainContext<A> {
     pub fn resize(
         &mut self,
         extent: vk::Extent2D,
+        present_context: &super::PresentContext,
         core_context: &super::CoreContext,
     ) -> dagal::Result<()> {
         if extent.width == 0 || extent.height == 0 {
             return Ok(());
+        }
+        unsafe {
+            let fences: Vec<vk::Fence> = present_context
+                .frames
+                .iter()
+                .map(|f| *f.render_fence.as_raw())
+                .collect::<Vec<vk::Fence>>();
+            core_context
+                .device
+                .get_handle()
+                .wait_for_fences(&fences, true, u64::MAX)
+                .unwrap();
         }
         self.surface
             .refresh(*core_context.physical_device.get_handle())?;
@@ -155,6 +164,7 @@ impl<A: Allocator> SwapchainContext<A> {
         &mut self,
         extent: vk::Extent2D,
         handles: WindowHandles,
+        present_context: &super::PresentContext,
         core_context: &super::CoreContext,
     ) -> dagal::Result<()> {
         let surface: dagal::wsi::SurfaceQueried = dagal::wsi::Surface::new_with_handles(
@@ -165,7 +175,7 @@ impl<A: Allocator> SwapchainContext<A> {
         )?
         .query_details(*core_context.physical_device.get_handle())?;
         self.surface = surface;
-        self.resize(extent, core_context)?;
+        self.resize(extent, present_context, core_context)?;
 
         Ok(())
     }
@@ -173,7 +183,8 @@ impl<A: Allocator> SwapchainContext<A> {
     /// Clear out old swapchain images and create new ones
     fn rebuild_frames(&mut self) -> dagal::Result<()> {
         let images: Vec<dagal::resource::Image<A>> = self.swapchain.get_images::<A>()?;
-        let mut frames: Vec<crate::render2::frame::Frame<A>> = Vec::with_capacity(images.len());
+        let mut frames: Vec<crate::render2::frame::SwapchainFrame<A>> =
+            Vec::with_capacity(images.len());
         for (index, image) in images.into_iter().enumerate() {
             let image_view = dagal::resource::ImageView::new(
                 dagal::resource::ImageViewCreateInfo::FromCreateInfo {
@@ -203,15 +214,7 @@ impl<A: Allocator> SwapchainContext<A> {
                     name: Some(format!("present_image_{index}")),
                 },
             )?;
-            let semaphore = dagal::sync::BinarySemaphore::new(
-                image.get_device().clone(),
-                vk::SemaphoreCreateFlags::empty(),
-            )?;
-            frames.push(crate::render2::frame::Frame {
-                image,
-                image_view,
-                semaphore,
-            });
+            frames.push(crate::render2::frame::SwapchainFrame { image, image_view });
         }
         self.frames = frames;
         Ok(())

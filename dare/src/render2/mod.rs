@@ -48,7 +48,7 @@ impl RenderServer {
             let swapchain_context: contexts::SwapchainContext<A> =
                 contexts::SwapchainContext::<A>::new(surface, extent, &core_context).unwrap();
             let present_context: contexts::PresentContext =
-                contexts::PresentContext::new(&core_context).unwrap();
+                contexts::PresentContext::new(&core_context, 3).unwrap(); // 3 frames in flight
             world.insert_resource(core_context);
             world.insert_resource(swapchain_context);
             world.insert_resource(present_context);
@@ -67,9 +67,12 @@ impl RenderServer {
                         RenderServerPacket::Resize(extent) => {
                             world.resource_scope(
                                 |world, mut swapchain_context: Mut<contexts::SwapchainContext<A>>| {
+                                    let present_context =
+                                        world.get_resource::<contexts::PresentContext>().unwrap();
                                     let core_context =
                                         world.get_resource::<contexts::CoreContext>().unwrap();
-                                    if let Err(err) = swapchain_context.resize(extent, core_context)
+                                    if let Err(err) =
+                                        swapchain_context.resize(extent, present_context, core_context)
                                     {
                                         tracing::error!(?err, ?extent, "Swapchain resize failed");
                                     }
@@ -79,11 +82,16 @@ impl RenderServer {
                         RenderServerPacket::Recreate { size, handles } => {
                             world.resource_scope(
                                 |world, mut swapchain_context: Mut<contexts::SwapchainContext<A>>| {
+                                    let present_context =
+                                        world.get_resource::<contexts::PresentContext>().unwrap();
                                     let core_context =
                                         world.get_resource::<contexts::CoreContext>().unwrap();
-                                    if let Err(err) =
-                                        swapchain_context.recreate(size, handles.clone(), core_context)
-                                    {
+                                    if let Err(err) = swapchain_context.recreate(
+                                        size,
+                                        handles.clone(),
+                                        present_context,
+                                        core_context,
+                                    ) {
                                         tracing::error!(?err, ?size, "Swapchain recreate failed");
                                     }
                                 },

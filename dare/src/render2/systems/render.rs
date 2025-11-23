@@ -22,10 +22,7 @@ pub fn render_system<A: Allocator + 'static>(
     mut timer: ResMut<Timer>,
 ) {
     tokio::runtime::Handle::current().block_on(async move {
-        if let Err(err) = swapchain_context.ensure_frames() {
-            tracing::warn!(?err, "Swapchain frames unavailable");
-            return;
-        }
+        // sanity checking
         if swapchain_context.image_count() == 0
             || swapchain_context.extent.width == 0
             || swapchain_context.extent.height == 0
@@ -34,19 +31,13 @@ pub fn render_system<A: Allocator + 'static>(
         }
         let now = Instant::now();
         timer.last_recorded = Some(now);
-        const SPEED: f32 = 0.125;
-        let start = *START_TIME.get_or_init(|| now);
-        let elapsed = now.duration_since(start).as_secs_f32();
-        let mix = 0.5 + 0.5 * (elapsed * SPEED * TAU).sin();
-        let clear_color = [mix / 2.0, 0.0, 0.0, 1.0];
 
-        if let Err(err) = present_context.in_flight_fence.wait(u64::MAX) {
-            tracing::error!(?err, "Failed to wait for in-flight fence");
-            return;
-        }
+        let frame_index: u64 = present_context.frame_index;
+        let frame = &mut present_context.frames[frame_index as usize];
+        frame.render_fence.wait(u64::MAX).unwrap();
         let image_index = match swapchain_context.swapchain.next_image_index(
             u64::MAX,
-            Some(&present_context.image_available_semaphore),
+            Some(&frame.swapchain_semaphore),
             None,
         ) {
             Ok(index) => index,
@@ -59,55 +50,31 @@ pub fn render_system<A: Allocator + 'static>(
                 return;
             }
         };
-        if (image_index as usize) >= swapchain_context.image_count() {
-            tracing::warn!(image_index, "Swapchain reported invalid image index");
-            return;
-        }
+        // only reset after we are sure work will be submitted
+        frame.render_fence.reset().unwrap();
+        let command_buffer = frame.command_pool.allocate(1).unwrap().pop().unwrap();
+        let recording = command_buffer
+            .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+            .unwrap();
 
-        let command_buffer = match present_context.command_buffer.take() {
-            Some(buffer) => buffer,
-            None => match present_context
-                .command_pool
-                .allocate(1)
-                .ok()
-                .and_then(|mut buffers| buffers.pop())
-            {
-                Some(buffer) => buffer,
-                None => {
-                    tracing::error!("Failed to allocate command buffer for presentation");
-                    return;
-                }
-            },
-        };
-
-        let recording = match command_buffer.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT) {
-            Ok(recording) => recording,
-            Err(invalid) => match invalid.reset(None) {
-                Ok(buffer) => {
-                    present_context.command_buffer = Some(buffer);
-                    return;
-                }
-                Err(err) => {
-                    tracing::error!(?err, "Failed to reset present command buffer");
-                    return;
-                }
-            },
-        };
-
-        let frame = swapchain_context
+        let swapchain_image = swapchain_context
             .frame_mut(image_index as usize)
             .expect("swapchain image missing");
-
-        frame.image.transition(
+        swapchain_image.image.transition(
             &recording,
             &core_context.present_queue,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
         unsafe {
+            const SPEED: f32 = 0.125;
+            let start = *START_TIME.get_or_init(|| now);
+            let elapsed = now.duration_since(start).as_secs_f32();
+            let mix = 0.5 + 0.5 * (elapsed * SPEED * TAU).sin();
+            let clear_color = [mix / 2.0, 0.0, 0.0, 1.0];
             recording.get_device().get_handle().cmd_clear_color_image(
                 *recording.as_raw(),
-                *frame.image.as_raw(),
+                *swapchain_image.image.as_raw(),
                 vk::ImageLayout::GENERAL,
                 &vk::ClearColorValue {
                     float32: clear_color,
@@ -117,37 +84,26 @@ pub fn render_system<A: Allocator + 'static>(
                 )],
             );
         }
-        frame.image.transition(
+        swapchain_image.image.transition(
             &recording,
             &core_context.present_queue,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
         );
 
-        let executable = match recording.end() {
-            Ok(executable) => executable,
-            Err(err) => {
-                tracing::error!(?err, "Failed to end present command buffer");
-                present_context.command_buffer = None;
-                return;
-            }
-        };
+        let executable = recording.end().unwrap();
 
         let submit_info = executable.submit_info();
-        let wait_info = [present_context
-            .image_available_semaphore
+        let wait_info = [frame
+            .swapchain_semaphore
             .submit_info(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)];
-        let signal_info = [present_context
-            .render_finished_semaphore
-            .submit_info(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)];
-        let submit_batch =
-            CommandBufferExecutable::submit_info_sync(&[submit_info], &wait_info, &signal_info);
-
-        if let Err(err) = present_context.in_flight_fence.reset() {
-            tracing::error!(?err, "Failed to reset in-flight fence");
-            present_context.command_buffer = None;
-            return;
-        }
+        let submit_batch = CommandBufferExecutable::submit_info_sync(
+            &[submit_info],
+            &wait_info,
+            &[frame
+                .render_semaphore
+                .submit_info(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)],
+        );
 
         let queue_guard = core_context
             .present_queue
@@ -155,24 +111,17 @@ pub fn render_system<A: Allocator + 'static>(
             .await
             .unwrap();
         let queue_handle = *queue_guard;
-        let fence_handle = unsafe { *present_context.in_flight_fence.as_raw() };
-        let command_buffer = match executable.submit(queue_handle, &[submit_batch], fence_handle) {
-            Ok(buffer) => buffer,
-            Err(invalid) => match invalid.reset(None) {
-                Ok(buffer) => buffer,
-                Err(err) => {
-                    tracing::error!(?err, "Failed to reset command buffer after submit error");
-                    present_context.command_buffer = None;
-                    return;
-                }
-            },
-        };
+        let _command_buffer = executable
+            .submit(queue_handle, &[submit_batch], unsafe {
+                *frame.render_fence.as_raw()
+            })
+            .unwrap();
 
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
             p_next: ptr::null(),
             wait_semaphore_count: 1,
-            p_wait_semaphores: unsafe { present_context.render_finished_semaphore.as_raw() },
+            p_wait_semaphores: unsafe { frame.render_semaphore.as_raw() },
             swapchain_count: 1,
             p_swapchains: swapchain_context.swapchain_handle(),
             p_image_indices: &image_index,
@@ -188,8 +137,8 @@ pub fn render_system<A: Allocator + 'static>(
         }
         .map(|_| ());
         drop(queue_guard);
-        present_context.command_buffer = Some(command_buffer);
-
+        present_context.frame_index =
+            (present_context.frame_index + 1) % (present_context.frames.len() as u64);
         match present_result {
             Ok(()) => {}
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {}
