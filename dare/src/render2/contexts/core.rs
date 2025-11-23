@@ -149,13 +149,8 @@ impl CoreContext {
 
         // Use remaining queues for the allocator (dedicated queues removed)
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(remaining_queues);
-        let surface = dagal::wsi::Surface::new_with_handles(
-            instance.get_entry(),
-            instance.get_instance(),
-            *handles.raw_display_handle,
-            *handles.raw_window_handle,
-        )?
-        .query_details(physical_device.handle())?;
+        let surface = surface.unwrap() 
+            .query_details(physical_device.handle())?;
 
         Ok((
             Self {
