@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod allocators;
 pub mod c;
 pub mod components;
