@@ -3,7 +3,7 @@ members = [
     "dagal",
     "dare",
     "macros",
-    "containers",
+    "containers", "asset_manager",
 ]
 
 resolver = "2"

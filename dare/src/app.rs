@@ -160,9 +160,7 @@ impl App {
         };
         let extent = Self::window_extent(window.as_ref());
         let handles = Self::window_handles(window.as_ref());
-        self.render_server = Some(render2::RenderServer::new::<GPUAllocatorImpl>(
-            extent, handles,
-        ));
+        self.render_server = Some(render2::RenderServer::new(extent, handles));
     }
 
     fn window_extent(window: &window::Window) -> vk::Extent2D {

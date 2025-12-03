@@ -3,6 +3,8 @@ use std::{
     ptr,
 };
 
+use dagal::allocators::{Allocator, GPUAllocatorImpl};
+
 use crate::window::WindowHandles;
 
 /// Contains core rendering context information
@@ -10,6 +12,7 @@ use crate::window::WindowHandles;
 pub struct CoreContext {
     pub present_queue: dagal::device::Queue,
     pub queue_allocator: dagal::util::queue_allocator::QueueAllocator,
+    pub allocator: GPUAllocatorImpl,
     pub device: dagal::device::LogicalDevice,
     pub physical_device: dagal::device::PhysicalDevice,
     pub instance: dagal::core::Instance,
@@ -69,6 +72,8 @@ impl CoreContext {
                             shader_storage_image_array_non_uniform_indexing: vk::TRUE,
                             runtime_descriptor_array: vk::TRUE,
                             scalar_block_layout: vk::TRUE,
+                            timeline_semaphore: vk::TRUE,
+                            descriptor_binding_storage_buffer_update_after_bind: vk::TRUE,
                             ..Default::default()
                         },
                         features_3: vk::PhysicalDeviceVulkan13Features {
@@ -149,14 +154,14 @@ impl CoreContext {
 
         // Use remaining queues for the allocator (dedicated queues removed)
         let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(remaining_queues);
-        let surface = surface.unwrap() 
-            .query_details(physical_device.handle())?;
+        let surface = surface.unwrap().query_details(physical_device.handle())?;
 
         Ok((
             Self {
                 instance,
                 physical_device,
                 device,
+                allocator,
                 present_queue,
                 queue_allocator,
             },
