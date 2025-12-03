@@ -70,7 +70,7 @@ impl GLTFLoader {
                             path.push(std::path::PathBuf::from(uri));
                             asset::MetaDataLocation::FilePath(path)
                         } else {
-                            unimplemented!()
+                            unimplemented!("We do not support data URIs yet");
                         }
                     }
                 };
@@ -96,7 +96,7 @@ impl GLTFLoader {
             .accessors()
             .map(|accessor| {
                 if accessor.sparse().is_some() {
-                    return panic!("Does not support sparse data");
+                    unimplemented!("Does not support sparse data");
                 } else if let Some(view) = accessor.view() {
                     if let Ok(buffer_metadata) =
                         buffer_metadatas.get(view.buffer().index()).unwrap()
