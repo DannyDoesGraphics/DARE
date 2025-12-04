@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Describes all formats supported by geometry assets
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Format {
