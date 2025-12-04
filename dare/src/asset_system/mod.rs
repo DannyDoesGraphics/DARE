@@ -123,5 +123,25 @@ impl AssetManager {
                     })
                 })
                 .collect();
+        gltf.meshes()
+            .map(|mesh| {
+                mesh.primitives()
+                    .map(|primitive| MeshAsset {
+                        index_buffer: accessors[primitive
+                            .indices()
+                            .expect("All surfaces must have indices")
+                            .index()],
+                        vertex_buffer: accessors[primitive
+                            .attributes()
+                            .find(|(semantic, _)| semantic == gltf::Semantic::Positions)
+                            .expect("All surfaces must have positions")
+                            .1
+                            .index()],
+                        uv_buffers: HashMap::new(),
+                    })
+                    .collect::<Vec<MeshAsset>>()
+            })
+            .flatten()
+            .collect::<Vec<MeshAsset>>();
     }
 }
