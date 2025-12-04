@@ -17,9 +17,9 @@ impl Allocator for TestAllocator {
 
     fn allocate(
         &self,
-        name: &str,
-        requirements: &MemoryRequirements,
-        ty: MemoryLocation,
+        _name: &str,
+        _requirements: &MemoryRequirements,
+        _ty: MemoryLocation,
     ) -> Result<Self::Allocation, crate::DagalError> {
         unimplemented!()
     }
