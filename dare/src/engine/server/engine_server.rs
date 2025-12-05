@@ -1,9 +1,8 @@
-use std::sync::mpsc::RecvError;
-
 use crate::prelude as dare;
 use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
+use tokio::sync::oneshot::error::TryRecvError;
 
 #[derive(Debug, Clone)]
 pub struct EngineClient {
@@ -22,49 +21,30 @@ impl EngineClient {
 
 #[derive(Debug)]
 pub struct EngineServer {
-    drop_signal: tokio_util::sync::CancellationToken,
+    drop_sender: Option<tokio::sync::oneshot::Sender<()>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl EngineServer {
     pub fn new(
-        runtime: tokio::runtime::Handle,
         server_recv: std::sync::mpsc::Receiver<()>,
-        asset_server: dare::asset::server::AssetServer,
-        surface_link_send: &ComponentsLinkerSender<dare::engine::components::Surface>,
-        texture_link_send: &ComponentsLinkerSender<dare::engine::components::Material>,
-        transform_link_send: &ComponentsLinkerSender<dare::physics::components::Transform>,
-        bb_link_send: &ComponentsLinkerSender<dare::render::components::BoundingBox>,
-        name_link_send: &ComponentsLinkerSender<dare::engine::components::Name>,
     ) -> Result<Self> {
-        let rt = dare::concurrent::BevyTokioRunTime::new(runtime);
-
         let mut world = becs::World::new();
-        world.insert_resource(rt.clone());
-        world.insert_resource(asset_server);
+        world.insert_resource(crate::asset_system::AssetManager::new());
 
         let mut init_schedule = becs::Schedule::default();
         init_schedule.add_systems(super::super::init_assets::init_assets);
-        surface_link_send.attach_to_world(&mut init_schedule);
-        transform_link_send.attach_to_world(&mut init_schedule);
-        bb_link_send.attach_to_world(&mut init_schedule);
-        texture_link_send.attach_to_world(&mut init_schedule);
-        name_link_send.attach_to_world(&mut init_schedule);
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();
-        surface_link_send.attach_to_world(&mut scheduler);
-        transform_link_send.attach_to_world(&mut scheduler);
-        bb_link_send.attach_to_world(&mut scheduler);
-        texture_link_send.attach_to_world(&mut scheduler);
-        name_link_send.attach_to_world(&mut scheduler);
+        scheduler.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
 
-        let cancellation = tokio_util::sync::CancellationToken::new();
-        let cancel = cancellation.clone();
+        let (drop_sender, mut drop_receiver) = tokio::sync::oneshot::channel();
         let thread = std::thread::spawn(move || {
             loop {
-                if cancel.is_cancelled() {
-                    break;
+                match drop_receiver.try_recv() {
+                    Ok(_) | Err(TryRecvError::Closed) => break,
+                    Err(TryRecvError::Empty) => {}
                 }
                 match server_recv.recv() {
                     Err(_) => {
@@ -81,7 +61,7 @@ impl EngineServer {
 
         Ok(Self {
             thread: Some(thread),
-            drop_signal: cancellation,
+            drop_sender: Some(drop_sender),
         })
     }
 }
@@ -89,9 +69,11 @@ impl EngineServer {
 impl Drop for EngineServer {
     fn drop(&mut self) {
         tracing::trace!("Dropping engine manager");
-        self.drop_signal.cancel();
+        if let Some(drop_sender) = self.drop_sender.take() {
+            let _ = drop_sender.send(());
+        }
         if let Some(t) = self.thread.take() {
-            t.join().unwrap();
+            let _ = t.join();
         }
     }
 }

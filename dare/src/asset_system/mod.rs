@@ -22,18 +22,23 @@
 //! - The asset system supports streaming of assets via chunked loaded (256kb chunks by default)
 //! -
 
+#![allow(dead_code)]
+
 pub mod format;
 pub mod geometry;
 pub mod handle;
 pub mod mesh;
 pub mod stream;
+use dagal::sync::fence;
 pub use format::*;
 pub use geometry::*;
 pub use handle::*;
 pub use mesh::*;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use super::prelude::physics;
+use bevy_ecs::prelude::*;
 
 /// Describes where the data is located
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -47,7 +52,7 @@ pub enum DataLocation {
 pub struct LRUCache {}
 
 /// Asset manager is responsible for handling the high-level asset operations
-#[derive(Debug)]
+#[derive(Debug, Resource)]
 pub struct AssetManager {
     pub geometry_store: dare_containers::slot_map::SlotMap<Geometry, GeometryHandle>,
     pub mesh_store: dare_containers::slot_map::SlotMap<MeshAsset, MeshHandle>,
@@ -123,25 +128,69 @@ impl AssetManager {
                     })
                 })
                 .collect();
-        gltf.meshes()
-            .map(|mesh| {
+        // transformations are nested, we need to bfs unwrap them
+        let meshes_with_transformations: Vec<(gltf::Mesh, glam::Mat4)> = {
+            let mut out: Vec<(gltf::Mesh, glam::Mat4)> = Vec::new();
+            let mut queue: VecDeque<(gltf::Node, glam::Mat4)> = gltf
+                .document
+                .default_scene()
+                .expect("No default scene set")
+                .nodes()
+                .map(|node| {
+                    let t = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+                    (node, t)
+                })
+                .collect();
+            while let Some((node, transform)) = queue.pop_front() {
+                for child in node.children() {
+                    let t = glam::Mat4::from_cols_array_2d(&child.transform().matrix());
+                    queue.push_back((child, transform * t));
+                }
+                if let Some(mesh) = node.mesh() {
+                    out.push((mesh, transform));
+                }
+            }
+            out
+        };
+
+        let meshes = gltf.meshes()
+            .flat_map(|mesh| {
                 mesh.primitives()
-                    .map(|primitive| MeshAsset {
-                        index_buffer: accessors[primitive
-                            .indices()
-                            .expect("All surfaces must have indices")
-                            .index()],
-                        vertex_buffer: accessors[primitive
-                            .attributes()
-                            .find(|(semantic, _)| semantic == gltf::Semantic::Positions)
-                            .expect("All surfaces must have positions")
-                            .1
-                            .index()],
-                        uv_buffers: HashMap::new(),
+                    .map(|primitive| {
+                        let mut uv_buffers: HashMap<u32, GeometryHandle> = HashMap::new();
+                        let mut vertex_buffer: Option<GeometryHandle> = None;
+                        let mut normal_buffer: Option<GeometryHandle> = None;
+                        for (semantic, accessor) in primitive.attributes() {
+                            match semantic {
+                                gltf::Semantic::Positions => {
+                                    assert!(vertex_buffer.replace(accessors[accessor.index()]).is_none(), "Vertex buffer already exists");
+                                }
+                                gltf::Semantic::Normals => {
+                                    assert!(normal_buffer.replace(accessors[accessor.index()]).is_none(), "Normal buffer already exists");
+                                }
+                                gltf::Semantic::TexCoords(index) => {
+                                    assert!(uv_buffers.insert(index, accessors[accessor.index()]).is_none(), "UV buffer already exists");
+                                }
+                                _ => {}
+                            }
+                        }
+                        self.mesh_store.insert(MeshAsset {
+                            index_buffer: accessors[primitive.indices().unwrap().index()],
+                            vertex_buffer: vertex_buffer.unwrap(),
+                            normal_buffer: normal_buffer.unwrap(),
+                            uv_buffers,
+                        })
                     })
-                    .collect::<Vec<MeshAsset>>()
+                    .collect::<Vec<MeshHandle>>()
             })
-            .flatten()
-            .collect::<Vec<MeshAsset>>();
+            .collect::<Vec<MeshHandle>>();
+        tracing::info!("Geometries loaded: {}", accessors.len());
+        tracing::info!("Meshes loaded: {}", meshes.len());
+        
+        for (mesh, transform) in meshes_with_transformations {
+            let transform = physics::components::Transform::from(transform);
+            let mesh = meshes[mesh.index()];
+            commands.spawn((mesh, transform));
+        }
     }
 }
