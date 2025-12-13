@@ -5,16 +5,15 @@ edition = "2021"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-anyhow = "1.0.86"
-thiserror = "2.0.12"
-dashmap = { version = "6.0.1" }
+anyhow = "1.0.100"
+thiserror = "2.0.17"
+dashmap = { version = "6.1.0" }
 derivative = "2.2.0"
-flashmap = "0.1.0"
-tokio = "1.40.0"
-crossbeam-channel = "0.5.13"
+tokio = "1.48.0"
+crossbeam-channel = "0.5.15"
 
 [dev-dependencies]
-criterion = { version = "0.6.0", features = ["html_reports"]}
+criterion = { version = "0.8.1", features = ["html_reports"]}
 
 [[bench]]
 name = "slot_map"

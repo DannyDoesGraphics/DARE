@@ -459,17 +459,21 @@ impl GLTFLoader {
                         surface,
                         material: engine::components::Material {
                             albedo_factor: glam::Vec4::ONE,
-                            albedo_texture: primitive.material().pbr_metallic_roughness().base_color_texture().map(|texture| {
-                                 textures[texture.texture().index()].clone()
-                            }),
+                            albedo_texture: primitive
+                                .material()
+                                .pbr_metallic_roughness()
+                                .base_color_texture()
+                                .map(|texture| textures[texture.texture().index()].clone()),
                             alpha_mode: primitive.material().alpha_mode(),
                         },
-                        bounding_box: bounding_box.unwrap_or(dare::render::components::bounding_box::BoundingBox::new(
-                            glam::Vec3::from(primitive.bounding_box().min),
-                            glam::Vec3::from(primitive.bounding_box().max),
-                        )),
+                        bounding_box: bounding_box.unwrap_or(
+                            dare::render::components::bounding_box::BoundingBox::new(
+                                glam::Vec3::from(primitive.bounding_box().min),
+                                glam::Vec3::from(primitive.bounding_box().max),
+                            ),
+                        ),
                         name: engine::components::Name(primitive_name),
-                        transform: dare::physics::components::Transform {
+                        transform: dare_physics::Transform {
                             scale,
                             rotation,
                             translation,

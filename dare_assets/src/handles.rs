@@ -1,16 +1,12 @@
 use bevy_ecs::prelude::*;
 
-/// A handle to a mesh asset
-///
-/// The handle is a 64-bit value where the lower 32 bits represent the asset ID
-/// and the upper 32 bits represent the generation of the asset.
+/// A handle to a mesh asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub struct MeshHandle {
     id: u64,
 }
 
 impl dare_containers::slot::Slot for MeshHandle {
-    /// Get the unique identifier for this handle (bottom 32 bits)
     fn id(&self) -> u64 {
         self.id & 0xFFFFFFFF
     }
@@ -51,13 +47,13 @@ impl dare_containers::slot::SlotWithGeneration for MeshHandle {
     }
 }
 
+/// A handle to a geometry asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub struct GeometryHandle {
     id: u64,
 }
 
 impl dare_containers::slot::Slot for GeometryHandle {
-    /// Get the unique identifier for this handle (bottom 32 bits)
     fn id(&self) -> u64 {
         self.id & 0xFFFFFFFF
     }

@@ -1,11 +1,10 @@
-use crate::prelude as dare;
 use bevy_ecs::prelude::*;
 
 pub fn init_assets(
     mut commands: Commands,
     //rt: becs::Res<dare::concurrent::BevyTokioRunTime>,
     //asset_server: becs::Res<dare::asset::server::AssetServer>,
-    mut asset_system: ResMut<crate::asset_system::AssetManager>
+    mut asset_system: ResMut<dare_assets::AssetManager>,
 ) {
     /*
     rt.runtime.block_on(async move {
@@ -35,9 +34,6 @@ pub fn init_assets(
     */
     asset_system.load_gltf(
         &mut commands,
-        &std::path::PathBuf::from(
-            "C:/Users/Danny/Documents/bistro/5_2/bistro_5_2.gltf"
-        )
+        &std::path::PathBuf::from("C:/Users/Danny/Documents/bistro/5_2/bistro_5_2.gltf"),
     );
-    
 }

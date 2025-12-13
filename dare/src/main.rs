@@ -3,11 +3,9 @@ use tracing_subscriber::FmtSubscriber;
 
 mod app;
 mod asset;
-mod asset_system;
 mod concurrent;
 mod engine;
 mod physical_resource;
-mod physics;
 mod prelude;
 mod render;
 mod render2;

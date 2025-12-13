@@ -1,5 +1,3 @@
-use crate::prelude as dare;
-use crate::util::entity_linker::ComponentsLinkerSender;
 use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use tokio::sync::oneshot::error::TryRecvError;
@@ -26,11 +24,9 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new(
-        server_recv: std::sync::mpsc::Receiver<()>,
-    ) -> Result<Self> {
+    pub fn new(server_recv: std::sync::mpsc::Receiver<()>) -> Result<Self> {
         let mut world = becs::World::new();
-        world.insert_resource(crate::asset_system::AssetManager::new());
+        world.insert_resource(dare_assets::AssetManager::new());
 
         let mut init_schedule = becs::Schedule::default();
         init_schedule.add_systems(super::super::init_assets::init_assets);

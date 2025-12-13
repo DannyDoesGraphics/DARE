@@ -6,7 +6,9 @@ pub struct Transform {
     pub rotation: glam::Quat,
     pub translation: glam::Vec3,
 }
+
 impl Eq for Transform {}
+
 impl Default for Transform {
     fn default() -> Self {
         Self {
@@ -18,8 +20,6 @@ impl Default for Transform {
 }
 
 impl Transform {
-    
-    /// Quickly get the scale, rotation, and translation matrix
     pub fn get_transform_matrix(&self) -> glam::Mat4 {
         glam::Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
     }
