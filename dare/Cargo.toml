@@ -23,6 +23,8 @@ reqwest = { version = "0.12.25", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 dare_assets = { path = "../dare_assets" }
 dare_physics = { path = "../dare_physics" }
+dare_render = { path = "../dare_render" }
+dare_window = { path = "../dare_window" }
 bevy_tasks = "0.17.3"
 futures = "0.3.31"
 crossbeam-channel = "0.5.15"

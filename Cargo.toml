@@ -3,7 +3,7 @@ members = [
     "dagal",
     "dare",
     "macros",
-    "containers", "dare_assets", "dare_physics",
+    "containers", "dare_assets", "dare_physics", "dare_render", "dare_window"
 ]
 
 resolver = "2"

@@ -1,8 +1,6 @@
 use crate::engine;
-use crate::prelude as dare;
-use crate::render2::{self, RenderServerPacket};
+use dare_render::{self, RenderServerPacket};
 use anyhow::Result;
-use dagal::allocators::GPUAllocatorImpl;
 use dagal::ash::vk;
 use dagal::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use dagal::winit;
@@ -14,8 +12,8 @@ use std::sync::Arc;
 pub struct App {
     window: Option<Arc<window::Window>>,
     engine_client: engine::server::engine_server::EngineClient,
-    render_server: Option<render2::RenderServer>,
-    input_sender: dare::util::event::EventSender<dare::window::input::Input>,
+    render_server: Option<dare_render::RenderServer>,
+    input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     last_position: Option<glam::Vec2>,
     last_dt: std::time::Instant,
 }
@@ -98,7 +96,7 @@ impl winit::application::ApplicationHandler for App {
                     if let Some(dp) = dp {
                         let _ = self
                             .input_sender
-                            .send(dare::window::input::Input::MouseDelta(dp));
+                            .send(dare_window::input::Input::MouseDelta(dp));
                     }
                 }
             }
@@ -108,7 +106,7 @@ impl winit::application::ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 let _ = self
                     .input_sender
-                    .send(dare::window::input::Input::KeyEvent(event));
+                    .send(dare_window::input::Input::KeyEvent(event));
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -117,7 +115,7 @@ impl winit::application::ApplicationHandler for App {
             } => {
                 let _ = self
                     .input_sender
-                    .send(dare::window::input::Input::MouseButton { button, state });
+                    .send(dare_window::input::Input::MouseButton { button, state });
             }
             _ => {}
         }
@@ -136,7 +134,7 @@ impl winit::application::ApplicationHandler for App {
 impl App {
     pub fn new(
         engine_client: engine::server::EngineClient,
-        input_sender: dare::util::event::EventSender<dare::window::input::Input>,
+        input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     ) -> Result<Self> {
         Ok(Self {
             window: None,
@@ -160,7 +158,7 @@ impl App {
         };
         let extent = Self::window_extent(window.as_ref());
         let handles = Self::window_handles(window.as_ref());
-        self.render_server = Some(render2::RenderServer::new(extent, handles));
+        self.render_server = Some(dare_render::RenderServer::new(extent, handles));
     }
 
     fn window_extent(window: &window::Window) -> vk::Extent2D {
@@ -170,7 +168,7 @@ impl App {
         }
     }
 
-    fn window_handles(window: &window::Window) -> dare::window::WindowHandles {
+    fn window_handles(window: &window::Window) -> dare_window::WindowHandles {
         let window_handle = window
             .window_handle()
             .expect("window handle unavailable")
@@ -181,7 +179,7 @@ impl App {
             .expect("display handle unavailable")
             .as_raw()
             .clone();
-        dare::window::WindowHandles {
+        dare_window::WindowHandles {
             raw_window_handle: Arc::new(window_handle),
             raw_display_handle: Arc::new(display_handle),
         }

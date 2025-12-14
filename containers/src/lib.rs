@@ -1,4 +1,3 @@
-pub(crate) mod adt;
 pub mod erased_storage;
 pub mod error;
 pub mod free_list;

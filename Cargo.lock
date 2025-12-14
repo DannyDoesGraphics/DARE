@@ -1021,6 +1021,8 @@ dependencies = [
  "dare_assets",
  "dare_containers",
  "dare_physics",
+ "dare_render",
+ "dare_window",
  "derivative",
  "futures",
  "glam",
@@ -1067,6 +1069,31 @@ name = "dare_physics"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
+ "glam",
+]
+
+[[package]]
+name = "dare_render"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_ecs",
+ "dagal",
+ "dare_assets",
+ "dare_containers",
+ "dare_physics",
+ "dare_window",
+ "glam",
+ "gltf",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dare_window"
+version = "0.1.0"
+dependencies = [
+ "dagal",
  "glam",
 ]
 

@@ -2,15 +2,9 @@ use dagal::winit;
 use tracing_subscriber::FmtSubscriber;
 
 mod app;
-mod asset;
 mod concurrent;
 mod engine;
-mod physical_resource;
-mod prelude;
-mod render;
-mod render2;
 mod util;
-mod window;
 
 fn main() {
     tracy_client::Client::start();
@@ -29,7 +23,7 @@ fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
-    let (input_send, _input_recv) = util::event::event_send::<window::input::Input>();
+    let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
     let engine_client = engine::server::EngineClient::new(es_sent);
 
     let _engine_server = engine::server::EngineServer::new(es_recv).unwrap();
