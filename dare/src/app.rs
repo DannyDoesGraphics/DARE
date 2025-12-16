@@ -172,13 +172,11 @@ impl App {
         let window_handle = window
             .window_handle()
             .expect("window handle unavailable")
-            .as_raw()
-            .clone();
+            .as_raw();
         let display_handle = window
             .display_handle()
             .expect("display handle unavailable")
-            .as_raw()
-            .clone();
+            .as_raw();
         dare_window::WindowHandles {
             raw_window_handle: Arc::new(window_handle),
             raw_display_handle: Arc::new(display_handle),
