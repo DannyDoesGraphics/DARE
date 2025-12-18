@@ -35,7 +35,7 @@ impl CoreContext {
                     version: 0,
                     engine_name: "DARE".to_string(),
                     engine_version: 0,
-                    api_version: (1, 3, 0, 0),
+                    api_version: (1, 4, 0, 0),
                     enable_validation: true,
                     debug_utils: cfg!(debug_assertions),
                     raw_display_handle: Some(*handles.raw_display_handle),

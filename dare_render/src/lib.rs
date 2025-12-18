@@ -146,7 +146,7 @@ impl RenderServer {
                     }
                 }
                 if stop {
-                    stop = true;
+                    break;
                 }
                 schedule.run(&mut world);
             }

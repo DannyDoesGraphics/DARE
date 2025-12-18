@@ -16,3 +16,5 @@ dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
 dare_window = { path = "../dare_window" }
 dare_assets = { path = "../dare_assets" }
+tracy-client = "0.18.3"
+dare_util = { path = "../dare_util" }

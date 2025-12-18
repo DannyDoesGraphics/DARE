@@ -4,6 +4,6 @@ members = [
     "dare",
     "macros",
     "containers", "dare_assets", "dare_physics", "dare_render", "dare_window"
-]
+, "dare_util"]
 
 resolver = "2"

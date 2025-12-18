@@ -22,6 +22,7 @@ fn main() {
         .with_line_number(true)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
+    let _client = tracy_client::Client::start();
     let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
     let engine_client = engine::server::EngineClient::new(es_sent);

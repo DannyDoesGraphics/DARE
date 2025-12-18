@@ -29,8 +29,9 @@ bevy_tasks = "0.17.3"
 futures = "0.3.31"
 crossbeam-channel = "0.5.15"
 num-traits = "0.2.19"
-tracy-client = { version = "0.18.3", features = ["enable"] }
+tracy-client = { version = "0.18.3" }
 bytes = "1.11.0"
+dare_util = { path = "../dare_util" }
 #tracing-tracy = {version = "0.11.4", features = ["enable"]}
 #slang = { git = "https://github.com/ProjectKML/slang-rs.git" }
 
