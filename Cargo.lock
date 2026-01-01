@@ -1020,6 +1020,7 @@ dependencies = [
  "dagal",
  "dare_assets",
  "dare_containers",
+ "dare_engine",
  "dare_physics",
  "dare_render",
  "dare_util",
@@ -1063,6 +1064,16 @@ dependencies = [
  "derivative",
  "thiserror 2.0.17",
  "tokio",
+]
+
+[[package]]
+name = "dare_engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_ecs",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

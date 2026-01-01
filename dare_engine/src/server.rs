@@ -24,12 +24,14 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new(server_recv: std::sync::mpsc::Receiver<()>) -> Result<Self> {
+    pub fn new<F>(server_recv: std::sync::mpsc::Receiver<()>, init: F) -> Result<Self>
+    where
+        F: FnOnce(&mut becs::World, &mut becs::Schedule) + Send + 'static,
+    {
         let mut world = becs::World::new();
-        world.insert_resource(dare_assets::AssetManager::new());
-
         let mut init_schedule = becs::Schedule::default();
-        init_schedule.add_systems(super::super::init_assets::init_assets);
+
+        init(&mut world, &mut init_schedule);
         init_schedule.run(&mut world);
 
         let mut scheduler = becs::Schedule::default();

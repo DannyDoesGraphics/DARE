@@ -31,12 +31,13 @@ pub fn render_system<A: Allocator + 'static>(
         }
         let now = Instant::now();
         timer.last_recorded = Some(now);
-        let _trace_frame = tracy_client::Client::running().map(|client| client.non_continuous_frame(tracy_client::frame_name!("Frame")));
+        let _trace_frame = tracy_client::Client::running()
+            .map(|client| client.non_continuous_frame(tracy_client::frame_name!("Frame")));
         let _render_system_span = tracy_client::span!("Render System");
         _render_system_span.emit_value(swapchain_context.image_count() as u64);
         let frame_index: u64 = present_context.frame_index;
         let frame = &mut present_context.frames[frame_index as usize];
-        
+
         let _prepare_span = tracy_client::span!("Prepare Frame");
         frame.render_fence.wait(u64::MAX).unwrap();
         let image_index = match swapchain_context.swapchain.next_image_index(
@@ -148,7 +149,9 @@ pub fn render_system<A: Allocator + 'static>(
         match present_result {
             Ok(()) => {}
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
-                tracing::warn!("Swapchain out of date or suboptimal on present. Resizing imminent.");
+                tracing::warn!(
+                    "Swapchain out of date or suboptimal on present. Resizing imminent."
+                );
             }
             Err(err) => tracing::error!(?err, "queue_present failed"),
         }

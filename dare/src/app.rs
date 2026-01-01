@@ -1,17 +1,16 @@
-use crate::engine;
-use dare_render::{self, RenderServerPacket};
 use anyhow::Result;
 use dagal::ash::vk;
 use dagal::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;
+use dare_render::{self, RenderServerPacket};
 use std::sync::Arc;
 
 /// This app only exists to get the first window
 pub struct App {
     window: Option<Arc<window::Window>>,
-    engine_client: engine::server::engine_server::EngineClient,
+    engine_client: dare_engine::EngineClient,
     render_server: Option<dare_render::RenderServer>,
     input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     last_position: Option<glam::Vec2>,
@@ -133,7 +132,7 @@ impl winit::application::ApplicationHandler for App {
 
 impl App {
     pub fn new(
-        engine_client: engine::server::EngineClient,
+        engine_client: dare_engine::EngineClient,
         input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     ) -> Result<Self> {
         Ok(Self {

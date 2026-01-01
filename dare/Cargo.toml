@@ -22,6 +22,7 @@ bevy_ecs = { version = "0.17.3", features = ["default", "multi_threaded"] }
 reqwest = { version = "0.12.26", features = ["stream", "blocking"] }
 dare_containers = { path = "../containers" }
 dare_assets = { path = "../dare_assets" }
+dare_engine = { path = "../dare_engine" }
 dare_physics = { path = "../dare_physics" }
 dare_render = { path = "../dare_render" }
 dare_window = { path = "../dare_window" }

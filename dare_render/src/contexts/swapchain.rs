@@ -1,7 +1,7 @@
 use std::ptr;
 
-use dare_window::WindowHandles;
 use dagal::{allocators::Allocator, ash::vk, resource::traits::Resource, traits::AsRaw};
+use dare_window::WindowHandles;
 
 /// A rendering context for window-based rendering
 #[derive(Debug, bevy_ecs::resource::Resource)]
@@ -77,10 +77,7 @@ impl<A: Allocator> SwapchainContext<A> {
         self.frames.len()
     }
 
-    pub fn frame_mut(
-        &mut self,
-        index: usize,
-    ) -> Option<&mut crate::frame::SwapchainFrame<A>> {
+    pub fn frame_mut(&mut self, index: usize) -> Option<&mut crate::frame::SwapchainFrame<A>> {
         self.frames.get_mut(index)
     }
 
@@ -183,8 +180,7 @@ impl<A: Allocator> SwapchainContext<A> {
     /// Clear out old swapchain images and create new ones
     fn rebuild_frames(&mut self) -> dagal::Result<()> {
         let images: Vec<dagal::resource::Image<A>> = self.swapchain.get_images::<A>()?;
-        let mut frames: Vec<crate::frame::SwapchainFrame<A>> =
-            Vec::with_capacity(images.len());
+        let mut frames: Vec<crate::frame::SwapchainFrame<A>> = Vec::with_capacity(images.len());
         for (index, image) in images.into_iter().enumerate() {
             let image_view = dagal::resource::ImageView::new(
                 dagal::resource::ImageViewCreateInfo::FromCreateInfo {

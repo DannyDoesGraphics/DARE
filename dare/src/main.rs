@@ -3,7 +3,7 @@ use tracing_subscriber::FmtSubscriber;
 
 mod app;
 mod concurrent;
-mod engine;
+mod init_assets;
 mod util;
 
 fn main() {
@@ -25,9 +25,13 @@ fn main() {
     let _client = tracy_client::Client::start();
     let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
-    let engine_client = engine::server::EngineClient::new(es_sent);
+    let engine_client = dare_engine::EngineClient::new(es_sent);
 
-    let _engine_server = engine::server::EngineServer::new(es_recv).unwrap();
+    let _engine_server = dare_engine::EngineServer::new(es_recv, |world, schedule| {
+        world.insert_resource(dare_assets::AssetManager::new());
+        schedule.add_systems(init_assets::init_assets);
+    })
+    .unwrap();
     let mut app = app::App::new(engine_client, input_send).unwrap();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
