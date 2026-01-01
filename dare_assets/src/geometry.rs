@@ -25,12 +25,12 @@ impl Format {
             Format::U64 => 8,
             Format::F32 => 4,
             Format::F64 => 8,
-            Format::F32x2 => 8,
-            Format::F32x3 => 12,
-            Format::F32x4 => 16,
-            Format::F64x2 => 16,
-            Format::F64x3 => 24,
-            Format::F64x4 => 32,
+            Format::F32x2 => 4 * 2,
+            Format::F32x3 => 4 * 3,
+            Format::F32x4 => 4 * 4,
+            Format::F64x2 => 8 * 2,
+            Format::F64x3 => 8 * 3,
+            Format::F64x4 => 8 * 4,
             Format::UNKNOWN => 0,
         }
     }
