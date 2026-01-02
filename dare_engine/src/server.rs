@@ -23,8 +23,7 @@ impl EngineClient {
     }
 
     pub fn load_gltf(&self, path: std::path::PathBuf) -> Result<()> {
-        self.server_send
-            .send(EnginePacket::LoadGltf(path))?;
+        self.server_send.send(EnginePacket::LoadGltf(path))?;
         Ok(())
     }
 }
@@ -58,8 +57,23 @@ impl EngineServer {
                     Err(_) => {
                         break;
                     }
-                    Ok(_) => {
-                        scheduler.run(&mut world);
+                    Ok(packet) => {
+                        match packet {
+                            EnginePacket::Tick => {
+                                scheduler.run(&mut world);
+                            }
+                            EnginePacket::LoadGltf(path) => {
+                                let asset_manager =
+                                    world.remove_resource::<dare_assets::AssetManager>();
+                                let mut commands = world.commands();
+                                if let Some(mut asset_manager) = asset_manager {
+                                    asset_manager.load_gltf(&mut commands, &path);
+                                    world.insert_resource(asset_manager);
+                                } else {
+                                    tracing::warn!("Asset manager does not exist, cannot load gltf scene");
+                                }
+                            }
+                        };
                     }
                 }
             }
@@ -67,10 +81,13 @@ impl EngineServer {
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 
-        Ok((Self {
-            thread: Some(thread),
-            drop_sender: Some(drop_sender),
-        }, EngineClient::new(server_send)))
+        Ok((
+            Self {
+                thread: Some(thread),
+                drop_sender: Some(drop_sender),
+            },
+            EngineClient::new(server_send),
+        ))
     }
 }
 
