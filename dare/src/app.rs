@@ -14,6 +14,7 @@ pub struct App {
     render_server: Option<dare_render::RenderServer>,
     input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     last_position: Option<glam::Vec2>,
+    modifier_state: winit::keyboard::ModifiersState,
     last_dt: std::time::Instant,
 }
 
@@ -76,10 +77,10 @@ impl winit::application::ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::Resized(_) => {
-                if let Some(window) = self.window.as_ref() {
-                    if window.inner_size().width != 0 && window.inner_size().height != 0 {
-                        self.send_resize(window);
-                    }
+                if let Some(window) = self.window.as_ref()
+                && window.inner_size().width != 0
+                && window.inner_size().height != 0 {
+                    self.send_resize(window);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -102,7 +103,19 @@ impl winit::application::ApplicationHandler for App {
             WindowEvent::CursorLeft { .. } => {
                 self.last_position = None;
             }
+            WindowEvent::ModifiersChanged(modifier) => {
+                self.modifier_state = modifier.state();
+            }
             WindowEvent::KeyboardInput { event, .. } => {
+                if event.state.is_pressed() && !event.repeat && (self.modifier_state.control_key() || self.modifier_state.super_key()) && event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyO) {
+                    // open file dialog
+                    let path = rfd::FileDialog::new()
+                        .add_filter("gltf", &["gltf", "glb"])
+                        .set_title("Gltf file to load")
+                        .pick_files();
+                    println!("Selected file: {:?}", path);
+                }
+
                 let _ = self
                     .input_sender
                     .send(dare_window::input::Input::KeyEvent(event));
@@ -121,8 +134,8 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if let Err(_) = self.engine_client.tick() {
-            //eprintln!("Engine tick error: {}", e);
+        if let Err(e) = self.engine_client.tick() {
+            tracing::error!("Engine tick error: {}", e);
         }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
@@ -135,12 +148,33 @@ impl App {
         engine_client: dare_engine::EngineClient,
         input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     ) -> Result<Self> {
+        loop {
+            let paths: Option<Vec<std::path::PathBuf>> = rfd::FileDialog::new()
+                            .add_filter("gltf", &["gltf", "glb"])
+                            .set_title("Gltf file to load")
+                            .pick_files();
+            if let Some(paths) = paths {
+                let all_loaded: bool = paths.iter().all(|path| {
+                    match engine_client.load_gltf(path.clone()) {
+                        Ok(_) => true,
+                        Err(err) => {
+                            tracing::error!("Failed to load gltf file: {}", err);
+                            false
+                        }
+                    }
+                });
+                if all_loaded {
+                    break;
+                }
+            }
+        }
         Ok(Self {
             window: None,
             engine_client,
             render_server: None,
             input_sender,
             last_position: None,
+            modifier_state: winit::keyboard::ModifiersState::default(),
             last_dt: std::time::Instant::now(),
         })
     }

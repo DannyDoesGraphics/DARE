@@ -135,7 +135,7 @@ impl AssetManager {
                     .collect::<Vec<MeshHandle>>()
             })
             .collect::<Vec<MeshHandle>>();
-
+        
         tracing::info!("Geometries loaded: {}", accessors.len());
         tracing::info!("Meshes loaded: {}", meshes.len());
 

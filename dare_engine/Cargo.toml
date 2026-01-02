@@ -9,4 +9,4 @@ anyhow = "1.0.100"
 bevy_ecs = { version = "0.17.3", features = ["default", "multi_threaded"] }
 tokio = { version = "1.48.0", features = ["sync"] }
 tracing = "0.1.43"
-
+dare_assets = { path = "../dare_assets" }

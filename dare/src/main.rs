@@ -23,13 +23,8 @@ fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     let _client = tracy_client::Client::start();
-    let (es_sent, es_recv) = std::sync::mpsc::channel::<()>();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
-    let engine_client = dare_engine::EngineClient::new(es_sent);
-
-    let _engine_server = dare_engine::EngineServer::new(es_recv, |world, schedule| {
-        world.insert_resource(dare_assets::AssetManager::new());
-        schedule.add_systems(init_assets::init_assets);
+    let (_engine_server, engine_client) = dare_engine::EngineServer::new(|_world, _schedule| {
     })
     .unwrap();
     let mut app = app::App::new(engine_client, input_send).unwrap();

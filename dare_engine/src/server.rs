@@ -2,18 +2,30 @@ use anyhow::Result;
 use bevy_ecs::prelude as becs;
 use tokio::sync::oneshot::error::TryRecvError;
 
+#[derive(Debug)]
+enum EnginePacket {
+    Tick,
+    LoadGltf(std::path::PathBuf),
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineClient {
-    server_send: std::sync::mpsc::Sender<()>,
+    server_send: std::sync::mpsc::Sender<EnginePacket>,
 }
 
 impl EngineClient {
-    pub fn new(server_send: std::sync::mpsc::Sender<()>) -> Self {
+    pub fn new(server_send: std::sync::mpsc::Sender<EnginePacket>) -> Self {
         Self { server_send }
     }
 
     pub fn tick(&self) -> Result<()> {
-        Ok(self.server_send.send(())?)
+        Ok(self.server_send.send(EnginePacket::Tick)?)
+    }
+
+    pub fn load_gltf(&self, path: std::path::PathBuf) -> Result<()> {
+        self.server_send
+            .send(EnginePacket::LoadGltf(path))?;
+        Ok(())
     }
 }
 
@@ -24,16 +36,14 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new<F>(server_recv: std::sync::mpsc::Receiver<()>, init: F) -> Result<Self>
+    pub fn new<F>(init: F) -> Result<(Self, EngineClient)>
     where
         F: FnOnce(&mut becs::World, &mut becs::Schedule) + Send + 'static,
     {
+        let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
         let mut world = becs::World::new();
-        let mut init_schedule = becs::Schedule::default();
-
-        init(&mut world, &mut init_schedule);
-        init_schedule.run(&mut world);
-
+        let assets = dare_assets::AssetManager::new();
+        world.insert_resource(assets);
         let mut scheduler = becs::Schedule::default();
         scheduler.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
 
@@ -57,10 +67,10 @@ impl EngineServer {
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 
-        Ok(Self {
+        Ok((Self {
             thread: Some(thread),
             drop_sender: Some(drop_sender),
-        })
+        }, EngineClient::new(server_send)))
     }
 }
 
