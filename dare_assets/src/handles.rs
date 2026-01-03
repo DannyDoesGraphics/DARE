@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-/// A handle to a mesh asset.
+/// A handle to a [`crate::MeshAsset`]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub struct MeshHandle {
     id: u64,

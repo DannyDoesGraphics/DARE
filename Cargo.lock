@@ -1190,6 +1190,9 @@ dependencies = [
  "anyhow",
  "bevy_ecs",
  "dare_assets",
+ "dare_physics",
+ "glam",
+ "rayon",
  "tokio",
  "tracing",
 ]

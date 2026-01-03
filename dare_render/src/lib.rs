@@ -16,6 +16,8 @@ mod resource_manager;
 mod systems;
 mod timer;
 mod transfer_belt;
+pub mod components;
+pub mod extract;
 
 /// Handle to the render server thread.
 ///

@@ -19,7 +19,7 @@ impl AssetManager {
                     let buffer_view = accessor.view().expect("Accessor has no buffer view");
                     let buffer = buffer_view.buffer();
 
-                    self.geometry_store.insert(Geometry {
+                    self.create_geometry(Geometry {
                         location: match buffer.source() {
                             gltf::buffer::Source::Bin => DataLocation::Blob(blob.clone().expect(
                                 "No blob data in gltf, but accessor references binary buffer",
