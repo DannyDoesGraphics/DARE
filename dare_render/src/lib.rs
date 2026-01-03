@@ -39,7 +39,7 @@ pub enum RenderServerPacket {
     CreateGeometryDescription {
         handle: dare_assets::GeometryDescriptionHandle,
         description: dare_assets::GeometryDescription,
-        runtime: dare_assets::GeometryRuntime,
+        runtime: std::sync::Arc<dare_assets::GeometryRuntime>,
     },
     DestroyGeometryDescription {
         handle: dare_assets::GeometryDescriptionHandle,
@@ -49,7 +49,7 @@ pub enum RenderServerPacket {
 
 impl RenderServer {
     pub fn new(extent: vk::Extent2D, window_handles: WindowHandles) -> Self {
-        let (drop_sender, drop_receiver) = tokio::sync::oneshot::channel();
+        let (drop_sender, mut drop_receiver) = tokio::sync::oneshot::channel();
         let (packet_sender, packet_receiver) = std::sync::mpsc::channel::<RenderServerPacket>();
         let thread = std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
@@ -111,7 +111,7 @@ impl RenderServer {
                             world.resource_scope(
                                 |world,
                                  mut swapchain_context: Mut<
-                                    contexts::SwapchainContext<GPUAllocatorImpl>,
+                                    contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>,
                                 >| {
                                     let present_context =
                                         world.get_resource::<contexts::PresentContext>().unwrap();

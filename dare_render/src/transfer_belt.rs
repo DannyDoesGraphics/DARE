@@ -1,7 +1,7 @@
 //! An implementation of the transfer belt pattern for efficient GPU resource uploads.
 use dagal::ash::vk;
 use dagal::{allocators::Allocator, ash::vk::Handle, resource::traits::Resource, traits::AsRaw};
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 /// Each chunk has a buffer backing it, along with a head cursor for sub-allocations
 #[derive(Debug)]
