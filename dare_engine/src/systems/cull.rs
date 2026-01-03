@@ -19,5 +19,6 @@ pub fn cull(
         });
     }
     */
+    // every frame, we will simply send it
     
 }

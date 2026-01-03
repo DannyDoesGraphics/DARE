@@ -49,11 +49,11 @@ impl dare_containers::slot::SlotWithGeneration for MeshHandle {
 
 /// A handle to a geometry asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
-pub struct GeometryHandle {
+pub struct GeometryDescriptionHandle {
     id: u64,
 }
 
-impl dare_containers::slot::Slot for GeometryHandle {
+impl dare_containers::slot::Slot for GeometryDescriptionHandle {
     fn id(&self) -> u64 {
         self.id & 0xFFFFFFFF
     }
@@ -65,11 +65,11 @@ impl dare_containers::slot::Slot for GeometryHandle {
 
     fn new(id: u64) -> Self {
         assert!(id <= 0xFFFFFFFF, "ID must fit within 32 bits");
-        GeometryHandle { id }
+        GeometryDescriptionHandle { id }
     }
 }
 
-impl dare_containers::slot::SlotWithGeneration for GeometryHandle {
+impl dare_containers::slot::SlotWithGeneration for GeometryDescriptionHandle {
     fn generation(&self) -> u64 {
         self.id >> 32
     }
@@ -88,7 +88,7 @@ impl dare_containers::slot::SlotWithGeneration for GeometryHandle {
             generation <= 0xFFFFFFFF,
             "Generation must fit within 32 bits"
         );
-        GeometryHandle {
+        GeometryDescriptionHandle {
             id: (generation << 32) | (id & 0xFFFFFFFF),
         }
     }

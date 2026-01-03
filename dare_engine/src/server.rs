@@ -41,7 +41,7 @@ impl EngineServer {
     {
         let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
         let mut world = becs::World::new();
-        let assets = dare_assets::AssetManager::new();
+        let assets = dare_assets::AssetManager::new(16);
         world.insert_resource(assets);
         let mut scheduler = becs::Schedule::default();
         scheduler.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);

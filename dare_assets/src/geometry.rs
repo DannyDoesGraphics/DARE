@@ -3,6 +3,7 @@ use std::sync::Arc;
 /// Describes all formats supported by geometry assets.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Format {
+    U8,
     U16,
     U32,
     U64,
@@ -20,6 +21,7 @@ pub enum Format {
 impl Format {
     pub fn size_in_bytes(&self) -> usize {
         match self {
+            Format::U8 => 1,
             Format::U16 => 2,
             Format::U32 => 4,
             Format::U64 => 8,
@@ -46,7 +48,7 @@ pub enum DataLocation {
 
 /// A structure representing metadata to load a geometry
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Geometry {
+pub struct GeometryDescription {
     pub location: DataLocation,
     pub format: Format,
     pub offset: u64,
@@ -57,7 +59,7 @@ pub struct Geometry {
 }
 
 /// Always represents an instance of [`Geometry`], and is backed by every [`crate::GeometryHandle`] in [`crate:AssetManager`]
-/// 
+///
 /// Defines the resident state of geometries
 #[derive(Debug)]
 pub struct GeometryRuntime {
@@ -70,7 +72,7 @@ impl Default for GeometryRuntime {
     fn default() -> Self {
         Self {
             residency: std::sync::atomic::AtomicU8::from(0),
-            ttl: std::sync::atomic::AtomicU16::from(0)
+            ttl: std::sync::atomic::AtomicU16::from(0),
         }
     }
 }

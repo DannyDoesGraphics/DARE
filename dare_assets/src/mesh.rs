@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use crate::GeometryHandle;
+use crate::GeometryDescriptionHandle;
 
 /// Logical description of a mesh made up of multiple geometry slices.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MeshAsset {
-    pub vertex_buffer: GeometryHandle,
-    pub normal_buffer: GeometryHandle,
-    pub index_buffer: GeometryHandle,
-    pub uv_buffers: HashMap<u32, GeometryHandle>,
+    pub vertex_buffer: GeometryDescriptionHandle,
+    pub normal_buffer: GeometryDescriptionHandle,
+    pub index_buffer: GeometryDescriptionHandle,
+    pub uv_buffers: HashMap<u32, GeometryDescriptionHandle>,
 }
 
 impl std::hash::Hash for MeshAsset {

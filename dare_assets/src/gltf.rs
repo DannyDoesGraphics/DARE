@@ -1,4 +1,4 @@
-use crate::{AssetManager, DataLocation, Format, Geometry, GeometryHandle, MeshAsset, MeshHandle};
+use crate::{AssetManager, DataLocation, Format, GeometryDescription, GeometryDescriptionHandle, MeshAsset, MeshHandle};
 use bevy_ecs::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -9,7 +9,7 @@ impl AssetManager {
         let gltf = gltf::Gltf::open(path).expect("Failed to open gltf file");
         let blob: Option<Arc<[u8]>> = gltf.blob.as_ref().map(|b| Arc::from(b.as_slice()));
 
-        let accessors: Vec<GeometryHandle> =
+        let accessors: Vec<GeometryDescriptionHandle> =
             gltf.accessors()
                 .map(|accessor| {
                     if accessor.sparse().is_some() {
@@ -19,7 +19,7 @@ impl AssetManager {
                     let buffer_view = accessor.view().expect("Accessor has no buffer view");
                     let buffer = buffer_view.buffer();
 
-                    self.create_geometry(Geometry {
+                    self.create_geometry(GeometryDescription {
                         location: match buffer.source() {
                             gltf::buffer::Source::Bin => DataLocation::Blob(blob.clone().expect(
                                 "No blob data in gltf, but accessor references binary buffer",
@@ -38,17 +38,26 @@ impl AssetManager {
                             }
                         },
                         format: match accessor.data_type() {
-                            gltf::accessor::DataType::I8 => Format::U16,
-                            gltf::accessor::DataType::U8 => Format::U16,
-                            gltf::accessor::DataType::I16 => Format::U16,
-                            gltf::accessor::DataType::U16 => Format::U16,
-                            gltf::accessor::DataType::U32 => Format::U32,
+                            gltf::accessor::DataType::I8 => unimplemented!(),
+                            gltf::accessor::DataType::U8 => match accessor.dimensions(){
+                                gltf::accessor::Dimensions::Scalar => Format::U8,
+                                _ => unimplemented!(),
+                            },
+                            gltf::accessor::DataType::I16 => unimplemented!(),
+                            gltf::accessor::DataType::U16 => match accessor.dimensions() {
+                                gltf::accessor::Dimensions::Scalar => Format::U16,
+                                _ => unimplemented!(),
+                            },
+                            gltf::accessor::DataType::U32 => match accessor.dimensions() {
+                                gltf::accessor::Dimensions::Scalar => Format::U32,
+                                _ => unimplemented!(),
+                            },
                             gltf::accessor::DataType::F32 => match accessor.dimensions() {
                                 gltf::accessor::Dimensions::Scalar => Format::F32,
                                 gltf::accessor::Dimensions::Vec2 => Format::F32x2,
                                 gltf::accessor::Dimensions::Vec3 => Format::F32x3,
                                 gltf::accessor::Dimensions::Vec4 => Format::F32x4,
-                                gltf::accessor::Dimensions::Mat2 => Format::F32x4,
+                                gltf::accessor::Dimensions::Mat2 => unimplemented!(),
                                 _ => unimplemented!(),
                             },
                         },
@@ -91,9 +100,9 @@ impl AssetManager {
             .flat_map(|mesh| {
                 mesh.primitives()
                     .map(|primitive| {
-                        let mut uv_buffers: HashMap<u32, GeometryHandle> = HashMap::new();
-                        let mut vertex_buffer: Option<GeometryHandle> = None;
-                        let mut normal_buffer: Option<GeometryHandle> = None;
+                        let mut uv_buffers: HashMap<u32, GeometryDescriptionHandle> = HashMap::new();
+                        let mut vertex_buffer: Option<GeometryDescriptionHandle> = None;
+                        let mut normal_buffer: Option<GeometryDescriptionHandle> = None;
 
                         for (semantic, accessor) in primitive.attributes() {
                             match semantic {
