@@ -11,3 +11,5 @@ glam = "0.30.9"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
 dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
+futures-util = "0.3.31"
+bytemuck = "1.24.0"

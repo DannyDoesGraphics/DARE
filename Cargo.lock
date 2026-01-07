@@ -1163,8 +1163,10 @@ name = "dare_assets"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
+ "bytemuck",
  "dare_containers",
  "dare_physics",
+ "futures-util",
  "glam",
  "gltf",
  "tracing",
