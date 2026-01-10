@@ -197,7 +197,7 @@ where
         self.data.iter()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<(T, u64)> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, (T, u64)> {
         self.data.iter_mut()
     }
 }

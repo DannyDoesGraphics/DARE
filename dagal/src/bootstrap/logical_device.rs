@@ -124,7 +124,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
             Vec::from(queue_families),
             self.request_queues.clone(),
         )?;
-        let queue_families_used: HashSet<u32> =
+        let _queue_families_used: HashSet<u32> =
             HashSet::from_iter(queue_slotting.iter().flatten().map(|x| x.family_index));
         for queue_slot in queue_slotting.iter().flatten() {
             queue_family_counts

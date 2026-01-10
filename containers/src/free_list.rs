@@ -89,14 +89,14 @@ impl<T: 'static> Container<T> for FreeList<T> {
             )
     }
 
-    fn iter(&self) -> impl Iterator<Item = SlotUnion<T>> {
+    fn iter(&self) -> impl Iterator<Item = SlotUnion<'_, T>> {
         self.data.iter().enumerate().map(|(index, data)| SlotUnion {
             slot: DefaultSlot::new(index as u64, 0),
             data: data.as_ref(),
         })
     }
 
-    fn iter_mut(&mut self) -> impl Iterator<Item = SlotUnionMut<T>> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = SlotUnionMut<'_, T>> {
         self.data
             .iter_mut()
             .enumerate()

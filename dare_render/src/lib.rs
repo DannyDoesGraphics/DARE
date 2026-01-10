@@ -159,7 +159,7 @@ impl RenderServer {
                                 .insert(handle, description);
                             resource_map.geometry_runtimes.insert(handle, runtime);
                         }
-                        RenderServerPacket::DestroyGeometryDescription { handle } => {
+                        RenderServerPacket::DestroyGeometryDescription { handle: _ } => {
                             // TODO: unload
                         }
                         RenderServerPacket::Stop => {
@@ -180,8 +180,9 @@ impl RenderServer {
             }
             // drop all contexts here
             let present_context = world.remove_resource::<contexts::PresentContext>();
-            let swapchain_context =
-                world.remove_resource::<contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>>();
+            let swapchain_context = world
+                .remove_resource::<contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>>(
+                );
             let core_context = world.remove_resource::<contexts::CoreContext>();
             drop(world);
             drop(present_context);

@@ -40,7 +40,7 @@ impl ContextInit for WindowlessContext {
         A,
     );
 
-    fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
+    fn init(_settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         todo!()
     }
 
@@ -52,8 +52,8 @@ impl ContextInit for WindowlessContext {
             &crate::device::LogicalDevice,
         ) -> anyhow::Result<A>,
     >(
-        settings: AppSettings,
-        make_alloc: F,
+        _settings: AppSettings,
+        _make_alloc: F,
     ) -> anyhow::Result<Self::Output<A>> {
         todo!()
     }
@@ -252,8 +252,8 @@ impl ContextInit for WindowedContext {
             &crate::device::LogicalDevice,
         ) -> anyhow::Result<A>,
     >(
-        settings: AppSettings,
-        make_alloc: F,
+        _settings: AppSettings,
+        _make_alloc: F,
     ) -> anyhow::Result<Self::Output<A>> {
         todo!()
     }

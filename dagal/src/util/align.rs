@@ -3,7 +3,7 @@ use ash::vk;
 /// Deals with aligning data
 
 pub fn align(current: vk::DeviceSize, alignment: vk::DeviceSize) -> vk::DeviceSize {
-    if alignment == 0 || current % alignment == 0 {
+    if alignment == 0 || current.is_multiple_of(alignment) {
         current
     } else {
         let remainder = current % alignment;

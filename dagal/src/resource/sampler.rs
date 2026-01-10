@@ -86,12 +86,12 @@ pub enum SamplerCreateInfo<'a> {
     },
 }
 impl Hash for SamplerCreateInfo<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
         match self {
             SamplerCreateInfo::FromVk {
-                device,
-                create_info,
-                name,
+                device: _,
+                create_info: _,
+                name: _,
             } => unimplemented!(),
             SamplerCreateInfo::FromCreateInfo { .. } => {}
         }

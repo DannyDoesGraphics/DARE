@@ -1,4 +1,7 @@
-use crate::{AssetManager, DataLocation, Format, GeometryDescription, GeometryDescriptionHandle, MeshAsset, MeshHandle};
+use crate::{
+    AssetManager, DataLocation, Format, GeometryDescription, GeometryDescriptionHandle, MeshAsset,
+    MeshHandle,
+};
 use bevy_ecs::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -39,7 +42,7 @@ impl AssetManager {
                         },
                         format: match accessor.data_type() {
                             gltf::accessor::DataType::I8 => unimplemented!(),
-                            gltf::accessor::DataType::U8 => match accessor.dimensions(){
+                            gltf::accessor::DataType::U8 => match accessor.dimensions() {
                                 gltf::accessor::Dimensions::Scalar => Format::U8,
                                 _ => unimplemented!(),
                             },
@@ -100,7 +103,8 @@ impl AssetManager {
             .flat_map(|mesh| {
                 mesh.primitives()
                     .map(|primitive| {
-                        let mut uv_buffers: HashMap<u32, GeometryDescriptionHandle> = HashMap::new();
+                        let mut uv_buffers: HashMap<u32, GeometryDescriptionHandle> =
+                            HashMap::new();
                         let mut vertex_buffer: Option<GeometryDescriptionHandle> = None;
                         let mut normal_buffer: Option<GeometryDescriptionHandle> = None;
 
@@ -144,7 +148,7 @@ impl AssetManager {
                     .collect::<Vec<MeshHandle>>()
             })
             .collect::<Vec<MeshHandle>>();
-        
+
         tracing::info!("Geometries loaded: {}", accessors.len());
         tracing::info!("Meshes loaded: {}", meshes.len());
 

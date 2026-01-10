@@ -1,4 +1,3 @@
-use std::pin::Pin;
 
 use futures_util::Stream;
 use futures_util::*;
@@ -35,13 +34,13 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> ByteStreamReshaper<In
             outgoing_format: outgoing,
 
             buffered_bytes: Vec::new(),
-            end_of_stream: false
+            end_of_stream: false,
         }
     }
 
     fn take_input_elems(&mut self, elems: usize) -> Vec<u8> {
         let n = elems
-            .checked_mul(self.incoming_format.size_in_bytes() as usize)
+            .checked_mul(self.incoming_format.size_in_bytes())
             .expect("Chunk byte overflow");
         self.buffered_bytes.drain(..n).collect()
     }
@@ -59,7 +58,7 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> ByteStreamReshaper<In
             if to_remove == 0 {
                 None
             } else if let Some(buffered) = self.chunk_elements
-                    && buffered_elems > buffered as usize
+                && buffered_elems > buffered as usize
             {
                 Some(self.take_input_elems(to_remove as usize))
             } else if self.chunk_elements.is_none() {
@@ -81,10 +80,12 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
-            if self.end_of_stream && let Some(out) = self.decide_emit() {
-                return std::task::Poll::Ready(Some(out))
+            if self.end_of_stream
+                && let Some(out) = self.decide_emit()
+            {
+                return std::task::Poll::Ready(Some(out));
             } else if self.end_of_stream {
-                return std::task::Poll::Ready(None)
+                return std::task::Poll::Ready(None);
             } else {
                 match self.incoming_stream.poll_next_unpin(cx) {
                     std::task::Poll::Ready(Some(piece)) => {
@@ -113,6 +114,4 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
 }
 
 #[cfg(test)]
-mod tests {
-    
-}
+mod tests {}

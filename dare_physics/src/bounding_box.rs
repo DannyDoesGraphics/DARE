@@ -10,8 +10,8 @@ pub struct BoundingBox {
 impl BoundingBox {
     /// Correct the existing bounding box ensuring minimum bounds are minimum and maximum bounds are maximum extents
     pub fn correct(&mut self) {
-        let min = self.min.clone();
-        let max = self.max.clone();
+        let min = self.min;
+        let max = self.max;
         self.min = min.min(max);
         self.max = max.max(min);
     }

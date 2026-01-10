@@ -167,7 +167,7 @@ impl CommandBufferRecording {
     }
 
     /// Acquire a dynamic rendering context from the current [`CommandBufferRecording`]
-    pub fn dynamic_rendering(&self) -> crate::command::DynamicRenderContext {
+    pub fn dynamic_rendering(&self) -> crate::command::DynamicRenderContext<'_> {
         crate::command::DynamicRenderContext::from_vk(self)
     }
 

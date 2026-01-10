@@ -396,4 +396,3 @@ pub(crate) fn format_convert<T: AsRef<[u8]>>(
 
     out
 }
-

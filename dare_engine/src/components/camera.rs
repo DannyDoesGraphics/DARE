@@ -4,5 +4,5 @@ pub use bevy_ecs::prelude::*;
 pub struct Camera {
     pub fov: f64,
     pub yaw: f32,
-    pub pitch: f32
+    pub pitch: f32,
 }

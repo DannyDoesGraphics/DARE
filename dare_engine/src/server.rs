@@ -35,7 +35,7 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new<F>(init: F) -> Result<(Self, EngineClient)>
+    pub fn new<F>(_init: F) -> Result<(Self, EngineClient)>
     where
         F: FnOnce(&mut becs::World, &mut becs::Schedule) + Send + 'static,
     {
@@ -70,7 +70,9 @@ impl EngineServer {
                                     asset_manager.load_gltf(&mut commands, &path);
                                     world.insert_resource(asset_manager);
                                 } else {
-                                    tracing::warn!("Asset manager does not exist, cannot load gltf scene");
+                                    tracing::warn!(
+                                        "Asset manager does not exist, cannot load gltf scene"
+                                    );
                                 }
                             }
                         };

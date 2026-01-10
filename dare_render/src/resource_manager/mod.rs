@@ -14,8 +14,10 @@ pub enum ResourceCommand {
 /// Resource manager is responsible for mapping and tracking GPU resources such as textures and buffers
 #[derive(Debug, Default)]
 pub struct ResourceManager {
-    pub buffer_store: dare_containers::slot_map::SlotMap<Option<dagal::resource::Buffer<GPUAllocatorImpl>>>,
-    pub image_store: dare_containers::slot_map::SlotMap<Option<dagal::resource::Image<GPUAllocatorImpl>>>
+    pub buffer_store:
+        dare_containers::slot_map::SlotMap<Option<dagal::resource::Buffer<GPUAllocatorImpl>>>,
+    pub image_store:
+        dare_containers::slot_map::SlotMap<Option<dagal::resource::Image<GPUAllocatorImpl>>>,
 }
 
 /// ErasedStore is a hashmap that stores boxed trait objects
@@ -29,5 +31,6 @@ pub struct AssetManagerToResourceManager {
     pub resource_map: HashMap<std::any::TypeId, Box<dyn std::any::Any + Send + Sync>>,
     pub geometries: HashMap<GeometryDescriptionHandle, ResourceHandle>,
     pub geometry_descriptions: HashMap<GeometryDescriptionHandle, GeometryDescription>,
-    pub geometry_runtimes: HashMap<GeometryDescriptionHandle, std::sync::Arc<dare_assets::GeometryRuntime>>,
+    pub geometry_runtimes:
+        HashMap<GeometryDescriptionHandle, std::sync::Arc<dare_assets::GeometryRuntime>>,
 }

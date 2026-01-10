@@ -8,6 +8,12 @@ pub struct PassStorage {
     pub passes: HashMap<super::PassId, vk::Pipeline>,
 }
 
+impl Default for PassStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PassStorage {
     pub fn new() -> Self {
         Self {

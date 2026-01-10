@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ptr;
 
-use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
 

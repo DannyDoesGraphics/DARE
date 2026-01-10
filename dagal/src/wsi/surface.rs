@@ -1,5 +1,4 @@
 use crate::traits::{AsRaw, Destructible};
-use anyhow::Result;
 use ash;
 use ash::vk;
 use derivative::Derivative;

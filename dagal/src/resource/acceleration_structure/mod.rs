@@ -8,7 +8,6 @@ pub use acceleration_structure_build_geometry_info::*;
 
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
-use crate::DagalError;
 
 pub mod acceleration_structure_build_geometry_info;
 #[derive(Debug)]
@@ -39,7 +38,7 @@ impl Resource for AccelerationStructure {
         Self: Sized,
     {
         match create_info {
-            AccelerationStructureInfo::FromCI { ci, device, name } => {
+            AccelerationStructureInfo::FromCI { ci, device, name: _ } => {
                 if let Some(acceleration_structure_func) =
                     device.get_acceleration_structure().as_ref()
                 {

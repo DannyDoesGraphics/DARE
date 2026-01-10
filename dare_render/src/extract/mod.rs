@@ -1,5 +1,2 @@
-
 #[derive(Debug, PartialEq, Clone)]
-pub struct FrameInstance {
-    
-}
+pub struct FrameInstance {}

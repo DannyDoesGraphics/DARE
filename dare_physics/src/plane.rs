@@ -13,7 +13,7 @@ impl Plane {
         if length > 0.0 {
             Self {
                 normal: self.normal / length,
-                distance: self.distance * length
+                distance: self.distance * length,
             }
         } else {
             self

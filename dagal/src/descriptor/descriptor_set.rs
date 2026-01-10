@@ -22,7 +22,9 @@ impl Default for DescriptorInfo {
 
 /// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorType.html
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash)]
+#[derive(Default)]
 pub enum DescriptorType {
+    #[default]
     Sampler = 0,
     CombinedImageSampler = 1,
     SampledImage = 2,
@@ -36,11 +38,6 @@ pub enum DescriptorType {
     InputAttachment = 10,
 }
 
-impl Default for DescriptorType {
-    fn default() -> Self {
-        Self::Sampler
-    }
-}
 
 impl DescriptorType {
     pub fn to_vk(&self) -> vk::DescriptorType {

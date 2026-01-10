@@ -51,7 +51,7 @@ impl DerefMut for ComponentsMapping {
 impl<T: Component + Clone> ComponentsLinkerReceiver<T> {
     pub fn attach_to_world(&self, world: &mut World, schedule: &mut Schedule) {
         let queue = self.recv.clone();
-        if world.contains_resource::<ComponentsMapping>() {}
+        world.contains_resource::<ComponentsMapping>();
         world.insert_resource(ComponentsMapping {
             mappings: Default::default(),
         });
@@ -71,7 +71,7 @@ impl<T: Component + Clone> ComponentsLinkerReceiver<T> {
                                 Some(recv_entity) => {
                                     // Entity already exists, just insert
                                     commands
-                                        .entity(recv_entity.clone())
+                                        .entity(*recv_entity)
                                         .insert(component.clone());
                                 }
                             }

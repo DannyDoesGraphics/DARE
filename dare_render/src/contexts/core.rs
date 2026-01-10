@@ -1,7 +1,4 @@
-use std::{
-    ffi::{c_char, c_uchar},
-    ptr,
-};
+use std::ptr;
 
 use dagal::allocators::{Allocator, GPUAllocatorImpl};
 

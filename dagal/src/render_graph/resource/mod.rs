@@ -3,7 +3,6 @@ pub mod image;
 pub mod physical;
 mod virtual_resource_store;
 
-use ash::vk;
 use std::fmt::Debug;
 use std::hash::Hash;
 pub use virtual_resource_store::*;
@@ -14,11 +13,11 @@ impl ResourceId {
     pub(crate) fn new(id: u32, generation: u32) -> Self {
         Self(((id as u64) << 32) | (generation as u64))
     }
-    
+
     pub fn id(&self) -> u32 {
         (self.0 >> 32) as u32
     }
-    
+
     pub fn generation(&self) -> u32 {
         (self.0 & 0xFFFFFFFF) as u32
     }
@@ -86,11 +85,10 @@ pub enum UseDeclaration {
     },
 }
 
-
 pub trait VirtualableResource: 'static {
     type Description: 'static + Debug;
-    
+
     type Physical: 'static + Debug;
-    
+
     type PhysicalStore: 'static + Debug;
 }

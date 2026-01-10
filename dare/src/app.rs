@@ -78,8 +78,9 @@ impl winit::application::ApplicationHandler for App {
             }
             WindowEvent::Resized(_) => {
                 if let Some(window) = self.window.as_ref()
-                && window.inner_size().width != 0
-                && window.inner_size().height != 0 {
+                    && window.inner_size().width != 0
+                    && window.inner_size().height != 0
+                {
                     self.send_resize(window);
                 }
             }
@@ -90,8 +91,7 @@ impl winit::application::ApplicationHandler for App {
                     let dp: Option<glam::Vec2> = self
                         .last_position
                         .as_ref()
-                        .map(|last_position| Some(position - last_position))
-                        .flatten();
+                        .and_then(|last_position| Some(position - last_position));
                     self.last_position = Some(position);
                     if let Some(dp) = dp {
                         let _ = self
@@ -107,7 +107,12 @@ impl winit::application::ApplicationHandler for App {
                 self.modifier_state = modifier.state();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state.is_pressed() && !event.repeat && (self.modifier_state.control_key() || self.modifier_state.super_key()) && event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyO) {
+                if event.state.is_pressed()
+                    && !event.repeat
+                    && (self.modifier_state.control_key() || self.modifier_state.super_key())
+                    && event.physical_key
+                        == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyO)
+                {
                     // open file dialog
                     let path = rfd::FileDialog::new()
                         .add_filter("gltf", &["gltf", "glb"])
@@ -150,19 +155,20 @@ impl App {
     ) -> Result<Self> {
         loop {
             let paths: Option<Vec<std::path::PathBuf>> = rfd::FileDialog::new()
-                            .add_filter("gltf", &["gltf", "glb"])
-                            .set_title("Gltf file to load")
-                            .pick_files();
+                .add_filter("gltf", &["gltf", "glb"])
+                .set_title("Gltf file to load")
+                .pick_files();
             if let Some(paths) = paths {
-                let all_loaded: bool = paths.iter().all(|path| {
-                    match engine_client.load_gltf(path.clone()) {
-                        Ok(_) => true,
-                        Err(err) => {
-                            tracing::error!("Failed to load gltf file: {}", err);
-                            false
-                        }
-                    }
-                });
+                let all_loaded: bool =
+                    paths
+                        .iter()
+                        .all(|path| match engine_client.load_gltf(path.clone()) {
+                            Ok(_) => true,
+                            Err(err) => {
+                                tracing::error!("Failed to load gltf file: {}", err);
+                                false
+                            }
+                        });
                 if all_loaded {
                     break;
                 }
