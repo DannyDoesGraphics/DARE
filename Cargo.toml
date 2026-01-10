@@ -7,4 +7,4 @@ members = [
     "containers", "dare_assets", "dare_physics", "dare_render", "dare_window"
 , "dare_util"]
 
-resolver = "2"
+resolver = "3"
