@@ -7,7 +7,7 @@ struct InternalSlot {
 }
 
 /// A collection for storing [`super::VirtuableResource`] types, realizing, and handling virtualization
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VirtualResourceStorage {
     free_list: Vec<usize>,
     inner: Vec<InternalSlot>,
@@ -31,19 +31,9 @@ pub(crate) struct InnerBox {
     pub(crate) item: Box<dyn Any>,
 }
 
-impl Default for VirtualResourceStorage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl VirtualResourceStorage {
     pub fn new() -> Self {
-        Self {
-            free_list: Vec::new(),
-            inner: Vec::new(),
-            items: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn insert<T: super::VirtualableResource>(
