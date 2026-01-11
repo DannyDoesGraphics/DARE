@@ -1166,6 +1166,7 @@ dependencies = [
  "bytemuck",
  "dare_containers",
  "dare_physics",
+ "futures",
  "futures-util",
  "glam",
  "gltf",

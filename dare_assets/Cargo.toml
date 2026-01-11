@@ -13,3 +13,6 @@ dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
 futures-util = "0.3.31"
 bytemuck = "1.24.0"
+
+[dev-dependencies]
+futures = "0.3.31"
