@@ -44,6 +44,8 @@ impl AssetManager {
                             gltf::accessor::DataType::I8 => unimplemented!(),
                             gltf::accessor::DataType::U8 => match accessor.dimensions() {
                                 gltf::accessor::Dimensions::Scalar => Format::U8,
+                                gltf::accessor::Dimensions::Vec3 => Format::U8x3,
+                                gltf::accessor::Dimensions::Vec4 => Format::U8x4,
                                 _ => unimplemented!(),
                             },
                             gltf::accessor::DataType::I16 => unimplemented!(),
