@@ -54,7 +54,7 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> ByteStreamReshaper<In
                 .len()
                 .div_euclid(self.incoming_format.size_in_bytes());
             let to_remove = (buffered_elems as u64).min(self.max_elements);
-            self.max_elements.saturating_sub(to_remove);
+            self.max_elements = self.max_elements.saturating_sub(to_remove);
             if to_remove == 0 {
                 None
             } else if let Some(buffered) = self.chunk_elements
