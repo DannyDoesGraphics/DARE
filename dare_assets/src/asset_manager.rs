@@ -3,7 +3,29 @@ use std::collections::HashMap;
 
 use crate::{GeometryDescription, GeometryDescriptionHandle, MeshAsset, MeshHandle};
 
+/// Commands to send to the render side of the geometry manager
+#[derive(Message)]
+pub enum RenderAssetCommand {
+    CreateGeometry {
+        handle: GeometryDescriptionHandle,
+        description: GeometryDescription,
+        runtime: crate::GeometryRuntime,
+    },
+    DestroyGeometry {
+        handle: GeometryDescriptionHandle,
+    },
+    CreateMesh {
+        handle: MeshHandle,
+        mesh: MeshAsset,
+    },
+    DestroyMesh {
+        handle: MeshHandle,
+    },
+}
+
 /// Asset manager is responsible for handling high-level asset operations.
+///
+/// TO-DO: fix hashmap usage as it defeats the purpose of slot map O(1) look up times
 #[derive(Debug, Resource, Default)]
 pub struct AssetManager {
     ttl: u16,
@@ -13,9 +35,12 @@ pub struct AssetManager {
         HashMap<GeometryDescriptionHandle, std::sync::Arc<crate::geometry::GeometryRuntime>>,
     pub mesh_store: dare_containers::slot_map::SlotMap<MeshAsset, MeshHandle>,
 }
+unsafe impl Send for AssetManager {}
 
 impl AssetManager {
-    pub fn new(ttl: u16) -> Self {
+    pub fn new(
+        ttl: u16
+    ) -> Self {
         Self {
             ttl,
             ..Default::default()

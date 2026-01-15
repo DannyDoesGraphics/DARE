@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::{Arc, atomic::AtomicU8}};
 
 /// Describes where the underlying bytes are located.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -6,6 +6,16 @@ pub enum DataLocation {
     Url(String),
     File(std::path::PathBuf),
     Blob(Arc<[u8]>),
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[repr(u8)]
+pub enum ResidentState {
+    Empty = 0u8,
+    Loading = 1u8,
+    ResidentGPU = 2u8,
+    Unloading = 3u8,
+    Unloaded = 4u8
 }
 
 /// A structure representing metadata to load a geometry
