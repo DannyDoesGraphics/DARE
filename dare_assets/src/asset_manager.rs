@@ -38,9 +38,7 @@ pub struct AssetManager {
 unsafe impl Send for AssetManager {}
 
 impl AssetManager {
-    pub fn new(
-        ttl: u16
-    ) -> Self {
+    pub fn new(ttl: u16) -> Self {
         Self {
             ttl,
             ..Default::default()

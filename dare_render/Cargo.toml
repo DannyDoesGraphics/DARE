@@ -5,16 +5,16 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-bevy_ecs = { version = "0.17.3", features = ["default", "multi_threaded"] }
-anyhow = { version = "1.0.100"}
-tracing = "0.1.43"
-glam = "0.30.9"
-tokio = { version = "1.48.0" }
+bevy_ecs = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }
+tokio = { workspace = true }
 dagal = { path = "../dagal" }
-gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
+gltf = { workspace = true }
 dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
 dare_window = { path = "../dare_window" }
 dare_assets = { path = "../dare_assets" }
-tracy-client = "0.18.3"
+tracy-client = { workspace = true }
 dare_util = { path = "../dare_util" }

@@ -5,14 +5,14 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-bevy_ecs = { version = "0.17.3", features = ["default", "multi_threaded"] }
-tracing = "0.1.43"
-glam = "0.30.9"
-gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
+bevy_ecs = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }
+gltf = { workspace = true }
 dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
-futures-util = "0.3.31"
-bytemuck = "1.24.0"
+futures-util = { workspace = true }
+bytemuck = { workspace = true }
 
 [dev-dependencies]
-futures = "0.3.31"
+futures = { workspace = true }

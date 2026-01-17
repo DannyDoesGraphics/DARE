@@ -5,6 +5,6 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-bevy_ecs = { version = "0.17.3", features = ["default", "multi_threaded"] }
-glam = "0.30.9"
+bevy_ecs = { workspace = true }
+glam = { workspace = true }
 

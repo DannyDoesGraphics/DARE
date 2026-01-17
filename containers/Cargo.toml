@@ -5,12 +5,12 @@ edition = "2021"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-anyhow = "1.0.100"
-thiserror = "2.0.17"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 dashmap = { version = "6.1.0" }
-derivative = "2.2.0"
-tokio = "1.48.0"
-crossbeam-channel = "0.5.15"
+derivative = { workspace = true }
+tokio = { workspace = true }
+crossbeam-channel = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.8.1", features = ["html_reports"]}
