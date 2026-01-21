@@ -12,6 +12,7 @@ mod frame;
 mod resource_manager;
 mod systems;
 mod timer;
+pub mod sync_world;
 mod transfer_belt;
 
 /// Handle to the render server thread.

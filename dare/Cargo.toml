@@ -16,7 +16,6 @@ bytemuck = { workspace = true }
 bitflags = "2.10.0"
 image = "0.25.9"
 tokio = { workspace = true }
-tokio-util = { version = "0.7.17", features = ["compat", "codec"] }
 derivative = { workspace = true }
 bevy_ecs = { workspace = true }
 dare_containers = { path = "../containers" }
@@ -25,14 +24,13 @@ dare_engine = { path = "../dare_engine" }
 dare_physics = { path = "../dare_physics" }
 dare_render = { path = "../dare_render" }
 dare_window = { path = "../dare_window" }
-bevy_tasks = "0.17.3"
 futures = { workspace = true }
 crossbeam-channel = { workspace = true }
 num-traits = "0.2.19"
 tracy-client = { workspace = true }
 bytes = "1.11.0"
 dare_util = { path = "../dare_util" }
-rfd = "0.16.0"
+rfd = "0.17.2"
 #tracing-tracy = {version = "0.11.4", features = ["enable"]}
 #slang = { git = "https://github.com/ProjectKML/slang-rs.git" }
 
