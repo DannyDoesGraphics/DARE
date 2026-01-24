@@ -16,5 +16,6 @@ dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
 dare_window = { path = "../dare_window" }
 dare_assets = { path = "../dare_assets" }
+dare_ecs = { path = "../dare_ecs" }
 tracy-client = { workspace = true }
 dare_util = { path = "../dare_util" }

@@ -15,7 +15,7 @@ mod timer;
 pub mod sync_world;
 mod transfer_belt;
 
-/// Handle to the render server thread.
+/// Handle to render server thread.
 ///
 /// Runs a separate thread with its own Tokio runtime and Bevy ECS world.
 #[derive(Debug)]
@@ -25,7 +25,7 @@ pub struct RenderServer {
     pub packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
 }
 
-/// Client to communicate with the render server.
+/// Client to communicate with render server.
 #[derive(Debug, Clone)]
 pub struct RenderClient {
     pub packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
@@ -58,8 +58,8 @@ impl RenderServer {
                 .build()
                 .unwrap();
             let _guard = runtime.enter();
-            let mut world: bevy_ecs::world::World = bevy_ecs::world::World::new();
-            world.insert_resource(timer::Timer {
+            let mut app = dare_ecs::App::new();
+            app.world_mut().insert_resource(timer::Timer {
                 last_recorded: None,
             });
 
@@ -90,15 +90,16 @@ impl RenderServer {
             )
             .unwrap();
 
-            world.insert_resource(resource_manager);
-            world.insert_resource(core_context);
-            world.insert_resource(swapchain_context);
-            world.insert_resource(present_context);
-            world.insert_non_send_resource(transfer_manager);
+            app.world_mut().insert_resource(resource_manager);
+            app.world_mut().insert_resource(core_context);
+            app.world_mut().insert_resource(swapchain_context);
+            app.world_mut().insert_resource(present_context);
+            app.world_mut().insert_non_send_resource(transfer_manager);
 
-            let mut schedule = bevy_ecs::schedule::Schedule::default();
-            schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
-            schedule.add_systems(systems::render_system::<dagal::allocators::GPUAllocatorImpl>);
+            app.schedule_scope(|schedule| {
+                schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
+                schedule.add_systems(systems::render_system::<dagal::allocators::GPUAllocatorImpl>);
+            });
 
             loop {
                 match drop_receiver.try_recv() {
@@ -109,7 +110,7 @@ impl RenderServer {
                 while let Ok(packet) = packet_receiver.try_recv() {
                     match packet {
                         RenderServerPacket::Resize(extent) => {
-                            world.resource_scope(
+                            app.world_mut().resource_scope(
                                 |world,
                                  mut swapchain_context: Mut<
                                     contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>,
@@ -129,7 +130,7 @@ impl RenderServer {
                             );
                         }
                         RenderServerPacket::Recreate { size, handles } => {
-                            world.resource_scope(
+                            app.world_mut().resource_scope(
                                 |world,
                                  mut swapchain_context: Mut<
                                     contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>,
@@ -154,7 +155,7 @@ impl RenderServer {
                             description,
                             runtime,
                         } => {
-                            let mut resource_map = world.resource_mut::<crate::resource_manager::AssetManagerToResourceManager>();
+                            let mut resource_map = app.world_mut().resource_mut::<crate::resource_manager::AssetManagerToResourceManager>();
                             resource_map
                                 .geometry_descriptions
                                 .insert(handle, description);
@@ -172,20 +173,20 @@ impl RenderServer {
                 if stop {
                     break;
                 }
-                schedule.run(&mut world);
+                app.tick();
             }
 
             // shut down
-            if let Some(core_context) = world.get_resource::<contexts::CoreContext>() {
+            if let Some(core_context) = app.world().get_resource::<contexts::CoreContext>() {
                 let _ = unsafe { core_context.device.get_handle().device_wait_idle() };
             }
             // drop all contexts here
-            let present_context = world.remove_resource::<contexts::PresentContext>();
-            let swapchain_context = world
+            let present_context = app.world_mut().remove_resource::<contexts::PresentContext>();
+            let swapchain_context = app.world_mut()
                 .remove_resource::<contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>>(
                 );
-            let core_context = world.remove_resource::<contexts::CoreContext>();
-            drop(world);
+            let core_context = app.world_mut().remove_resource::<contexts::CoreContext>();
+            drop(app);
             drop(present_context);
             drop(swapchain_context);
             drop(core_context);

@@ -25,7 +25,7 @@ fn main() {
     let _client = tracy_client::Client::start();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
     let (_engine_server, engine_client) =
-        dare_engine::EngineServer::new(|_world, _schedule| {}).unwrap();
+        dare_engine::EngineServer::new(|_app| {}).unwrap();
     let mut app = app::App::new(engine_client, input_send).unwrap();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);

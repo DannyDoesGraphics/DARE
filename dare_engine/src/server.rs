@@ -1,9 +1,8 @@
 use anyhow::Result;
-use bevy_ecs::prelude as becs;
 use tokio::sync::oneshot::error::TryRecvError;
 
 #[derive(Debug)]
-enum EnginePacket {
+pub enum EnginePacket {
     Tick,
     LoadGltf(std::path::PathBuf),
 }
@@ -37,14 +36,15 @@ pub struct EngineServer {
 impl EngineServer {
     pub fn new<F>(_init: F) -> Result<(Self, EngineClient)>
     where
-        F: FnOnce(&mut becs::World, &mut becs::Schedule) + Send + 'static,
+        F: FnOnce(&mut dare_ecs::App) + Send + 'static,
     {
         let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
-        let mut world = becs::World::new();
+        let mut app = dare_ecs::App::new();
         let assets = dare_assets::AssetManager::new(16);
-        world.insert_resource(assets);
-        let mut scheduler = becs::Schedule::default();
-        scheduler.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
+        app.world_mut().insert_resource(assets);
+        app.schedule_scope(|schedule| {
+            schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
+        });
 
         let (drop_sender, mut drop_receiver) = tokio::sync::oneshot::channel();
         let thread = std::thread::spawn(move || {
@@ -60,15 +60,15 @@ impl EngineServer {
                     Ok(packet) => {
                         match packet {
                             EnginePacket::Tick => {
-                                scheduler.run(&mut world);
+                                app.tick();
                             }
                             EnginePacket::LoadGltf(path) => {
                                 let asset_manager =
-                                    world.remove_resource::<dare_assets::AssetManager>();
-                                let mut commands = world.commands();
+                                    app.world_mut().remove_resource::<dare_assets::AssetManager>();
+                                let mut commands = app.world_mut().commands();
                                 if let Some(mut asset_manager) = asset_manager {
                                     asset_manager.load_gltf(&mut commands, &path);
-                                    world.insert_resource(asset_manager);
+                                    app.world_mut().insert_resource(asset_manager);
                                 } else {
                                     tracing::warn!(
                                         "Asset manager does not exist, cannot load gltf scene"
@@ -79,7 +79,7 @@ impl EngineServer {
                     }
                 }
             }
-            drop(world);
+            drop(app);
             tracing::trace!("ENGINE SERVER STOPPED");
         });
 

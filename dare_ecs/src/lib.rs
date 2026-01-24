@@ -33,21 +33,12 @@ impl App {
             )
                 .chain(),
         );
-
-        fn update_system(world: &mut World) {
-            world.clear_trackers();
-        }
         assert!(
             world
                 .get_resource_or_init::<Schedules>()
                 .insert(schedule)
                 .is_none()
         );
-
-        let mut schedules = world.get_resource_mut::<Schedules>().unwrap();
-        let schedule = schedules.get_mut(InternalSchedule).unwrap();
-        schedule.add_systems(update_system.in_set(AppStage::Last));
-
         Self { world }
     }
 
@@ -82,5 +73,6 @@ impl App {
     /// Tick the app
     pub fn tick(&mut self) {
         self.world.run_schedule(InternalSchedule);
+        self.world.clear_trackers();
     }
 }

@@ -11,5 +11,6 @@ tokio = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 dare_assets = { path = "../dare_assets" }
 dare_physics = { path = "../dare_physics" }
+dare_ecs = { path = "../dare_ecs" }
 rayon = "1.11.0"
 glam = { workspace = true }
