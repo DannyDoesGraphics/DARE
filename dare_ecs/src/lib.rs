@@ -1,12 +1,13 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::ScheduleLabel;
-use bevy_ecs::system::ScheduleSystem;
+pub mod plugin;
 
 /// A simple application to emulate what Bevy does.
 pub struct App {
     world: World,
 }
 
+/// Scheduler by default used
 #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct InternalSchedule;
 
@@ -74,5 +75,11 @@ impl App {
     pub fn tick(&mut self) {
         self.world.run_schedule(InternalSchedule);
         self.world.clear_trackers();
+    }
+    
+    /// Add a plugin to application
+    pub fn add_plugins<T: plugin::Plugin>(mut self, plugin: T) -> Self {
+        plugin.build(&mut self);
+        self
     }
 }
