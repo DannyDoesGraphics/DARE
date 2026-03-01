@@ -1,0 +1,10 @@
+[package]
+name = "dare_extract"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy_ecs = { workspace = true }
+dare_util = { path = "../dare_util" }
+dare_ecs = { path = "../dare_ecs" }
+crossbeam-channel = { version = "0.5.15" }

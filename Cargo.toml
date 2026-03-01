@@ -4,22 +4,29 @@ members = [
     "dare",
     "dare_engine",
     "macros",
-    "containers", "dare_assets", "dare_physics", "dare_render", "dare_window"
-, "dare_util", "dare_ecs"]
+    "containers",
+    "dare_assets",
+    "dare_physics",
+    "dare_render",
+    "dare_window",
+    "dare_util",
+    "dare_ecs",
+    "dare_extract"
+]
 
 resolver = "3"
 
 [workspace.dependencies]
 tokio = { version = "1.49.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
-glam = "0.30.10"
+glam = "0.32.0"
 bevy_ecs = { version = "0.18.0", features = ["default", "multi_threaded"] }
-futures = "0.3.31"
-futures-util = "0.3.31"
+futures = "0.3.32"
+futures-util = "0.3.32"
 crossbeam-channel = "0.5.15"
 tracing = "0.1.44"
-anyhow = "1.0.100"
+anyhow = "1.0.102"
 thiserror = "2.0.18"
 tracy-client = "0.18.4"
-bytemuck = "1.24.0"
+bytemuck = "1.25.0"
 derivative = "2.2.0"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }

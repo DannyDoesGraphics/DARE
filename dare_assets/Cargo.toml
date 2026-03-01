@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
+futures = { workspace = true }
 bevy_ecs = { workspace = true }
 tracing = { workspace = true }
 glam = { workspace = true }
@@ -13,6 +14,7 @@ dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
 futures-util = { workspace = true }
 bytemuck = { workspace = true }
+crossbeam-channel.workspace = true
 
 [dev-dependencies]
 futures = { workspace = true }

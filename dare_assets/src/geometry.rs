@@ -35,7 +35,9 @@ pub struct GeometryDescription {
 /// Defines the resident state of geometries
 #[derive(Debug)]
 pub struct GeometryRuntime {
+    /// See [`ResidentState`]
     pub residency: std::sync::atomic::AtomicU8,
+    /// Time to live remaining on geometry
     pub ttl: std::sync::atomic::AtomicU16,
 }
 

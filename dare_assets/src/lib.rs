@@ -14,7 +14,7 @@ mod frame;
 pub use asset_manager::AssetManager;
 pub use chunk_desc::ChunkDesc;
 pub use format::*;
-pub use geometry::{DataLocation, GeometryDescription, GeometryRuntime};
+pub use geometry::{DataLocation, GeometryDescription, GeometryRuntime, ResidentState};
 pub use handles::{GeometryDescriptionHandle, MeshHandle};
 pub use mesh::MeshAsset;
 pub use stream_state::StreamState;

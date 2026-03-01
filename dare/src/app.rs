@@ -4,7 +4,7 @@ use dagal::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;
-use dare_render::{self, RenderServerPacket};
+use dare_render;
 use std::sync::Arc;
 
 /// This app only exists to get the first window
@@ -12,6 +12,8 @@ pub struct App {
     window: Option<Arc<window::Window>>,
     engine_client: dare_engine::EngineClient,
     render_server: Option<dare_render::RenderServer>,
+    render_client: Option<dare_render::RenderClient>,
+    asset_manager_recv: dare_assets::AssetManager,
     input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     last_position: Option<glam::Vec2>,
     modifier_state: winit::keyboard::ModifiersState,
@@ -152,6 +154,7 @@ impl App {
     pub fn new(
         engine_client: dare_engine::EngineClient,
         input_sender: crate::util::event::EventSender<dare_window::input::Input>,
+        asset_manager_recv: dare_assets::AssetManager,
     ) -> Result<Self> {
         loop {
             let paths: Option<Vec<std::path::PathBuf>> = rfd::FileDialog::new()
@@ -178,6 +181,8 @@ impl App {
             window: None,
             engine_client,
             render_server: None,
+            render_client: None,
+            asset_manager_recv,
             input_sender,
             last_position: None,
             modifier_state: winit::keyboard::ModifiersState::default(),
@@ -197,7 +202,21 @@ impl App {
         };
         let extent = Self::window_extent(window.as_ref());
         let handles = Self::window_handles(window.as_ref());
-        self.render_server = Some(dare_render::RenderServer::new(extent, handles));
+        let asset_manager = std::mem::replace(
+            &mut self.asset_manager_recv,
+            dare_assets::AssetManager::new(16).0,
+        );
+        let config = dare_render::RenderServerConfig {
+            extent,
+            window_handles: handles,
+            asset_manager,
+            frames_in_flight: 3,
+            transfer_buffer_size: 1024 * 1024 * 64,
+            max_transfers: 16,
+        };
+        let (server, client) = dare_render::RenderServer::new(config);
+        self.render_server = Some(server);
+        self.render_client = Some(client);
     }
 
     fn window_extent(window: &window::Window) -> vk::Extent2D {
@@ -223,23 +242,19 @@ impl App {
     }
 
     fn send_resize(&self, window: &window::Window) {
-        if let Some(server) = &self.render_server {
+        if let Some(client) = &self.render_client {
             let extent = Self::window_extent(window);
-            if let Err(err) = server
-                .packet_sender
-                .send(RenderServerPacket::Resize(extent))
-            {
+            if let Err(err) = client.resize(extent) {
                 tracing::warn!(?extent, ?err, "Failed to send resize packet");
             }
         }
     }
 
     fn send_recreate(&self, window: &window::Window) {
-        if let Some(server) = &self.render_server {
+        if let Some(client) = &self.render_client {
             let size = Self::window_extent(window);
             let handles = Self::window_handles(window);
-            let packet = RenderServerPacket::Recreate { size, handles };
-            if let Err(err) = server.packet_sender.send(packet) {
+            if let Err(err) = client.recreate(size, handles) {
                 tracing::warn!(?size, ?err, "Failed to send recreate packet");
             }
         }

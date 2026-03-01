@@ -27,6 +27,10 @@ impl EngineClient {
     }
 }
 
+pub struct EngineServerConfig {
+    pub assets_send: dare_assets::AssetManager,
+}
+
 #[derive(Debug)]
 pub struct EngineServer {
     drop_sender: Option<tokio::sync::oneshot::Sender<()>>,
@@ -34,14 +38,11 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new<F>(_init: F) -> Result<(Self, EngineClient)>
-    where
-        F: FnOnce(&mut dare_ecs::App) + Send + 'static,
+    pub fn new(config: EngineServerConfig) -> Result<(Self, EngineClient)>
     {
         let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
         let mut app = dare_ecs::App::new();
-        let assets = dare_assets::AssetManager::new(16);
-        app.world_mut().insert_resource(assets);
+        app.world_mut().insert_resource(config.assets_send);
         app.schedule_scope(|schedule| {
             schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
         });
@@ -63,8 +64,9 @@ impl EngineServer {
                                 app.tick();
                             }
                             EnginePacket::LoadGltf(path) => {
-                                let asset_manager =
-                                    app.world_mut().remove_resource::<dare_assets::AssetManager>();
+                                let asset_manager = app
+                                    .world_mut()
+                                    .remove_resource::<dare_assets::AssetManager>();
                                 let mut commands = app.world_mut().commands();
                                 if let Some(mut asset_manager) = asset_manager {
                                     asset_manager.load_gltf(&mut commands, &path);

@@ -1,5 +1,5 @@
 mod components;
 mod server;
 
-pub use server::{EngineClient, EngineServer};
+pub use server::{EngineClient, EngineServer, EngineServerConfig};
 pub mod systems;

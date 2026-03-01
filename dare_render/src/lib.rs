@@ -10,10 +10,21 @@ mod contexts;
 pub mod extract;
 mod frame;
 mod resource_manager;
+pub mod snapshot;
 mod systems;
 mod timer;
-pub mod sync_world;
 mod transfer_belt;
+
+/// Configuration for creating a RenderServer.
+#[derive(Debug)]
+pub struct RenderServerConfig {
+    pub extent: vk::Extent2D,
+    pub window_handles: WindowHandles,
+    pub asset_manager: dare_assets::AssetManager,
+    pub frames_in_flight: usize,
+    pub transfer_buffer_size: u64,
+    pub max_transfers: u64,
+}
 
 /// Handle to render server thread.
 ///
@@ -22,13 +33,34 @@ mod transfer_belt;
 pub struct RenderServer {
     thread: Option<std::thread::JoinHandle<()>>,
     drop_sender: Option<tokio::sync::oneshot::Sender<()>>,
-    pub packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
 }
 
 /// Client to communicate with render server.
 #[derive(Debug, Clone)]
 pub struct RenderClient {
-    pub packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
+    packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
+}
+
+impl RenderClient {
+    pub fn new(packet_sender: std::sync::mpsc::Sender<RenderServerPacket>) -> Self {
+        Self { packet_sender }
+    }
+
+    pub fn resize(&self, extent: vk::Extent2D) -> anyhow::Result<()> {
+        Ok(self.packet_sender.send(RenderServerPacket::Resize(extent))?)
+    }
+
+    pub fn recreate(&self, size: vk::Extent2D, handles: WindowHandles) -> anyhow::Result<()> {
+        Ok(self.packet_sender.send(RenderServerPacket::Recreate { size, handles })?)
+    }
+
+    pub fn set_render(&self, handle: dare_assets::MeshHandle, should_render: bool) -> anyhow::Result<()> {
+        Ok(self.packet_sender.send(RenderServerPacket::SetRender { handle, should_render })?)
+    }
+
+    pub fn stop(&self) -> anyhow::Result<()> {
+        Ok(self.packet_sender.send(RenderServerPacket::Stop)?)
+    }
 }
 
 pub enum RenderServerPacket {
@@ -37,21 +69,19 @@ pub enum RenderServerPacket {
         size: vk::Extent2D,
         handles: WindowHandles,
     },
-    CreateGeometryDescription {
-        handle: dare_assets::GeometryDescriptionHandle,
-        description: dare_assets::GeometryDescription,
-        runtime: std::sync::Arc<dare_assets::GeometryRuntime>,
-    },
-    DestroyGeometryDescription {
-        handle: dare_assets::GeometryDescriptionHandle,
+    SetRender {
+        handle: dare_assets::MeshHandle,
+        should_render: bool,
     },
     Stop,
 }
 
 impl RenderServer {
-    pub fn new(extent: vk::Extent2D, window_handles: WindowHandles) -> Self {
+    pub fn new(config: RenderServerConfig) -> (Self, RenderClient) {
         let (drop_sender, mut drop_receiver) = tokio::sync::oneshot::channel();
         let (packet_sender, packet_receiver) = std::sync::mpsc::channel::<RenderServerPacket>();
+        let window_handles = config.window_handles;
+        let extent = config.extent;
         let thread = std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -69,9 +99,12 @@ impl RenderServer {
             let swapchain_context: contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl> =
                 contexts::SwapchainContext::new(surface, extent, &core_context).unwrap();
             let present_context: contexts::PresentContext =
-                contexts::PresentContext::new(&core_context, 3).unwrap(); // 3 frames in flight
+                contexts::PresentContext::new(&core_context, config.frames_in_flight).unwrap();
             let resource_manager =
-                crate::resource_manager::AssetManagerToResourceManager::default();
+                crate::resource_manager::AssetManagerToResourceManager::new(
+                    config.asset_manager,
+                    config.frames_in_flight as u16,
+                );
 
             // Transfer belt
             let transfer_manager: transfer_belt::TransferManager<
@@ -85,8 +118,8 @@ impl RenderServer {
                     .pop()
                     .unwrap(),
                 core_context.allocator.clone(),
-                1024 * 1024 * 64,
-                16,
+                config.transfer_buffer_size,
+                config.max_transfers,
             )
             .unwrap();
 
@@ -150,19 +183,11 @@ impl RenderServer {
                                 },
                             );
                         }
-                        RenderServerPacket::CreateGeometryDescription {
-                            handle,
-                            description,
-                            runtime,
+                        RenderServerPacket::SetRender {
+                            handle: _,
+                            should_render: _,
                         } => {
-                            let mut resource_map = app.world_mut().resource_mut::<crate::resource_manager::AssetManagerToResourceManager>();
-                            resource_map
-                                .geometry_descriptions
-                                .insert(handle, description);
-                            resource_map.geometry_runtimes.insert(handle, runtime);
-                        }
-                        RenderServerPacket::DestroyGeometryDescription { handle: _ } => {
-                            // TODO: unload
+                            tracing::warn!("Tried to set state of unimplemented type");
                         }
                         RenderServerPacket::Stop => {
                             stop = true;
@@ -181,8 +206,11 @@ impl RenderServer {
                 let _ = unsafe { core_context.device.get_handle().device_wait_idle() };
             }
             // drop all contexts here
-            let present_context = app.world_mut().remove_resource::<contexts::PresentContext>();
-            let swapchain_context = app.world_mut()
+            let present_context = app
+                .world_mut()
+                .remove_resource::<contexts::PresentContext>();
+            let swapchain_context = app
+                .world_mut()
                 .remove_resource::<contexts::SwapchainContext<dagal::allocators::GPUAllocatorImpl>>(
                 );
             let core_context = app.world_mut().remove_resource::<contexts::CoreContext>();
@@ -191,14 +219,14 @@ impl RenderServer {
             drop(swapchain_context);
             drop(core_context);
         });
-        Self {
-            thread: Some(thread),
-            drop_sender: Some(drop_sender),
-            packet_sender,
-        }
+        (
+            Self {
+                thread: Some(thread),
+                drop_sender: Some(drop_sender),
+            },
+            RenderClient::new(packet_sender),
+        )
     }
-
-    pub fn client() {}
 }
 
 impl Drop for RenderServer {

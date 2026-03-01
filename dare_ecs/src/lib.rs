@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::ScheduleLabel;
-pub mod plugin;
+mod plugin;
+pub use plugin::*;
 
 /// A simple application to emulate what Bevy does.
 pub struct App {
@@ -60,6 +61,8 @@ impl App {
             .get(InternalSchedule)
             .unwrap()
     }
+    
+    /// Fetches the internal default schedule
     pub fn schedule_scope<O, F: FnOnce(&mut Schedule) -> O>(&mut self, f: F) -> O {
         self.world
             .get_resource_mut::<Schedules>()
