@@ -81,8 +81,8 @@ impl App {
     }
     
     /// Add a plugin to application
-    pub fn add_plugins<T: plugin::Plugin>(mut self, plugin: T) -> Self {
-        plugin.build(&mut self);
+    pub fn add_plugins<T: plugin::Plugin>(&mut self, plugin: T) -> &mut Self {
+        plugin.build(self);
         self
     }
 }

@@ -12,6 +12,7 @@ glam = { workspace = true }
 gltf = { workspace = true }
 dare_containers = { path = "../containers" }
 dare_physics = { path = "../dare_physics" }
+dare_extract = { path = "../dare_extract" }
 futures-util = { workspace = true }
 bytemuck = { workspace = true }
 crossbeam-channel.workspace = true

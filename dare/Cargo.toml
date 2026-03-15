@@ -7,7 +7,14 @@ authors = ["Danny Le <git@dannydoes.graphics>"]
 [dependencies]
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-dagal = { path = "../dagal", features = ["winit", "bootstrap", "gpu-allocator", "log-memory-allocations", "shaderc", "tokio"] }
+dagal = { path = "../dagal", features = [
+    "winit",
+    "bootstrap",
+    "gpu-allocator",
+    "log-memory-allocations",
+    "shaderc",
+    "tokio",
+] }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.22"
 glam = { workspace = true }
@@ -18,6 +25,7 @@ image = "0.25.9"
 tokio = { workspace = true }
 derivative = { workspace = true }
 bevy_ecs = { workspace = true }
+dare_extract = { path = "../dare_extract" }
 dare_containers = { path = "../containers" }
 dare_assets = { path = "../dare_assets" }
 dare_engine = { path = "../dare_engine" }

@@ -5,7 +5,6 @@ use bevy_ecs::prelude::*;
 pub struct MeshHandle {
     id: u64,
 }
-
 impl dare_containers::slot::Slot for MeshHandle {
     fn id(&self) -> u64 {
         self.id & 0xFFFFFFFF
@@ -21,7 +20,6 @@ impl dare_containers::slot::Slot for MeshHandle {
         MeshHandle { id }
     }
 }
-
 impl dare_containers::slot::SlotWithGeneration for MeshHandle {
     fn generation(&self) -> u64 {
         self.id >> 32
@@ -46,13 +44,23 @@ impl dare_containers::slot::SlotWithGeneration for MeshHandle {
         }
     }
 }
+impl dare_extract::Streamable for MeshHandle {
+    type Extracted = Self;
+    
+    fn extract(&self) -> Self::Extracted {
+        *self
+    }
+    
+    fn consume(extract: Self::Extracted) -> Self {
+        extract
+    }
+}
 
 /// A handle to a geometry asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub struct GeometryDescriptionHandle {
     id: u64,
 }
-
 impl dare_containers::slot::Slot for GeometryDescriptionHandle {
     fn id(&self) -> u64 {
         self.id & 0xFFFFFFFF
@@ -68,7 +76,6 @@ impl dare_containers::slot::Slot for GeometryDescriptionHandle {
         GeometryDescriptionHandle { id }
     }
 }
-
 impl dare_containers::slot::SlotWithGeneration for GeometryDescriptionHandle {
     fn generation(&self) -> u64 {
         self.id >> 32
@@ -91,5 +98,16 @@ impl dare_containers::slot::SlotWithGeneration for GeometryDescriptionHandle {
         GeometryDescriptionHandle {
             id: (generation << 32) | (id & 0xFFFFFFFF),
         }
+    }
+}
+impl dare_extract::Streamable for GeometryDescriptionHandle {
+    type Extracted = Self;
+    
+    fn extract(&self) -> Self::Extracted {
+        *self
+    }
+    
+    fn consume(extract: Self::Extracted) -> Self {
+        extract
     }
 }

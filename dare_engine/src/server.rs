@@ -38,8 +38,7 @@ pub struct EngineServer {
 }
 
 impl EngineServer {
-    pub fn new(config: EngineServerConfig) -> Result<(Self, EngineClient)>
-    {
+    pub fn new(config: EngineServerConfig) -> Result<(Self, EngineClient)> {
         let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
         let mut app = dare_ecs::App::new();
         app.world_mut().insert_resource(config.assets_send);
