@@ -151,8 +151,8 @@ impl AssetManager {
             })
             .collect::<Vec<MeshHandle>>();
 
-        tracing::info!("Geometries loaded: {}", accessors.len());
-        tracing::info!("Meshes loaded: {}", meshes.len());
+        tracing::info!("Asset manager detected {} geometeries", accessors.len());
+        tracing::info!("Asset manager detected {} meshes", meshes.len());
 
         for (mesh, transform) in meshes_with_transformations {
             commands.spawn((
