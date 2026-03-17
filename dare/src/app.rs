@@ -91,7 +91,8 @@ impl winit::application::ApplicationHandler for App {
                     let position = glam::Vec2::new(position.x, position.y);
                     let dp: Option<glam::Vec2> = self
                         .last_position
-                        .as_ref().map(|last_position| position - last_position);
+                        .as_ref()
+                        .map(|last_position| position - last_position);
                     self.last_position = Some(position);
                     if let Some(dp) = dp {
                         let _ = self

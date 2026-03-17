@@ -1,7 +1,4 @@
-use std::{
-    ops::Deref,
-    sync::Arc,
-};
+use std::{ops::Deref, sync::Arc};
 
 /// Describes where the underlying bytes are located.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

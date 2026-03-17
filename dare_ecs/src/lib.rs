@@ -60,8 +60,7 @@ impl App {
     }
     #[inline]
     pub fn schedule(&self) -> &Schedule {
-        self
-            .world
+        self.world
             .get_resource::<Schedules>()
             .unwrap()
             .get(InternalSchedule)
@@ -72,11 +71,7 @@ impl App {
     pub fn schedule_scope<O, F: FnOnce(&mut Schedule) -> O>(&mut self, f: F) -> O {
         self.world
             .get_resource_mut::<Schedules>()
-            .and_then(|mut schedules| {
-                schedules
-                    .get_mut(InternalSchedule)
-                    .map(f)
-            })
+            .and_then(|mut schedules| schedules.get_mut(InternalSchedule).map(f))
             .unwrap()
     }
 

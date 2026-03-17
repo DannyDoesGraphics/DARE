@@ -111,10 +111,6 @@ impl RenderServer {
                 contexts::SwapchainContext::new(surface, extent, &core_context).unwrap();
             let present_context: contexts::PresentContext =
                 contexts::PresentContext::new(&core_context, config.frames_in_flight).unwrap();
-            let resource_manager = crate::resource_manager::AssetManagerToResourceManager::new(
-                config.asset_manager,
-                config.frames_in_flight as u16,
-            );
 
             // Transfer belt
             let transfer_manager: transfer_belt::TransferManager<
@@ -133,7 +129,10 @@ impl RenderServer {
             )
             .unwrap();
 
-            app.world_mut().insert_resource(resource_manager);
+            app.add_plugins(resource_manager::ResourceManagerPlugin::new(
+                config.asset_manager,
+                config.frames_in_flight as u16,
+            ));
             app.world_mut().insert_resource(core_context);
             app.world_mut().insert_resource(swapchain_context);
             app.world_mut().insert_resource(present_context);

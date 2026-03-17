@@ -111,9 +111,8 @@ impl AssetManager {
             .remove(handle)
             .inspect(|_| {
                 self.geometry_runtime.remove(&handle);
-                self.buffer.push(RenderAssetCommand::DestroyGeometry {
-                    handle: handle,
-                })
+                self.buffer
+                    .push(RenderAssetCommand::DestroyGeometry { handle })
             })
             .ok()
     }
