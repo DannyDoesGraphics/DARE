@@ -31,9 +31,9 @@ impl<T: Streamable> std::ops::DerefMut for DeltaPackets<T> {
         &mut self.0
     }
 }
-impl<T: Streamable> Into<Vec<DeltaChange<T>>> for DeltaPackets<T> {
-    fn into(self) -> Vec<DeltaChange<T>> {
-        self.0
+impl<T: Streamable> From<DeltaPackets<T>> for Vec<DeltaChange<T>> {
+    fn from(val: DeltaPackets<T>) -> Self {
+        val.0
     }
 }
 
@@ -56,7 +56,7 @@ impl<T: Streamable> DerefMut for ExtractSend<T> {
 struct ExtractRecv<T: Streamable>(crossbeam_channel::Receiver<DeltaPackets<T>>);
 impl<T: Streamable> Deref for ExtractRecv<T> {
     type Target = crossbeam_channel::Receiver<DeltaPackets<T>>;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -117,7 +117,8 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginSend<T> {
 impl<T: Streamable> dare_ecs::Plugin for ExtractPluginRecv<T> {
     fn build(&self, app: &mut dare_ecs::App) {
         app.add_plugins(EntityWorldSyncPlugin::default());
-        app.world_mut().insert_resource(ExtractRecv(self.recv.clone()));
+        app.world_mut()
+            .insert_resource(ExtractRecv(self.recv.clone()));
         app.schedule_scope(|schedule| {
             schedule.add_systems(
                 (|mut sync_entities: ResMut<EntityWorldSync>,
@@ -131,7 +132,7 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginRecv<T> {
                                 let consumed: T = T::consume(extracted);
                                 match sync_entities.get(&entity) {
                                     Some(entity) => {
-                                        commands.entity(entity.clone()).insert(consumed);
+                                        commands.entity(*entity).insert(consumed);
                                     }
                                     None => {
                                         let entity_current: Entity = commands.spawn(consumed).id();
@@ -143,7 +144,7 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginRecv<T> {
                                 let consumed: T = T::consume(extracted);
                                 match sync_entities.get(&entity) {
                                     Some(entity) => {
-                                        commands.entity(entity.clone()).insert(consumed);
+                                        commands.entity(*entity).insert(consumed);
                                     }
                                     None => {
                                         let entity_current: Entity = commands.spawn(consumed).id();
@@ -228,7 +229,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify entity exists in receiver with correct value
-        let query = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).collect::<Vec<_>>();
+        let query = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(query.len(), 1);
         assert_eq!(query[0].0, 42);
     }
@@ -242,13 +247,20 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Modify component value
-        sender.world_mut().entity_mut(entity).insert(TestComponent(20));
+        sender
+            .world_mut()
+            .entity_mut(entity)
+            .insert(TestComponent(20));
 
         // Run sync cycle
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify component updated in receiver
-        let query = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).collect::<Vec<_>>();
+        let query = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(query.len(), 1);
         assert_eq!(query[0].0, 20);
     }
@@ -262,7 +274,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Get initial entity count
-        let initial_count = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let initial_count = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(initial_count, 1);
 
         // Despawn entity (removes component)
@@ -272,7 +288,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify entity despawned in receiver
-        let final_count = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let final_count = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(final_count, 0);
     }
 
@@ -285,15 +305,26 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Store the receiver entity
-        let first_query = receiver.world_mut().query::<(Entity, &TestComponent)>().iter(receiver.world()).collect::<Vec<_>>();
+        let first_query = receiver
+            .world_mut()
+            .query::<(Entity, &TestComponent)>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         let receiver_entity = first_query[0].0;
 
         // Modify and sync again
-        sender.world_mut().entity_mut(entity).insert(TestComponent(2));
+        sender
+            .world_mut()
+            .entity_mut(entity)
+            .insert(TestComponent(2));
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify same entity was updated (not respawned)
-        let second_query = receiver.world_mut().query::<(Entity, &TestComponent)>().iter(receiver.world()).collect::<Vec<_>>();
+        let second_query = receiver
+            .world_mut()
+            .query::<(Entity, &TestComponent)>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(second_query.len(), 1);
         assert_eq!(second_query[0].0, receiver_entity);
         assert_eq!(second_query[0].1.0, 2);
@@ -308,7 +339,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Store the receiver entity for verification
-        let _initial_query = receiver.world_mut().query::<(Entity, &TestComponent)>().iter(receiver.world()).collect::<Vec<_>>();
+        let _initial_query = receiver
+            .world_mut()
+            .query::<(Entity, &TestComponent)>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
 
         // Despawn the entity and respawn a new one (simulating ABA pattern)
         // Note: In real ECS, entity IDs are recycled, so we simulate by
@@ -322,7 +357,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify: receiver should have entity with new value
-        let final_query = receiver.world_mut().query::<(Entity, &TestComponent)>().iter(receiver.world()).collect::<Vec<_>>();
+        let final_query = receiver
+            .world_mut()
+            .query::<(Entity, &TestComponent)>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(final_query.len(), 1);
         assert_eq!(final_query[0].1.0, 200);
 
@@ -342,7 +381,8 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify all entities synced
-        let mut values: Vec<u32> = receiver.world_mut()
+        let mut values: Vec<u32> = receiver
+            .world_mut()
             .query::<&TestComponent>()
             .iter(receiver.world())
             .map(|c| c.0)
@@ -360,7 +400,7 @@ mod test {
 
         // Spawn entity in sender only (no sync yet)
         let _entity = sender.world_mut().spawn(TestComponent(50)).id();
-        sender.tick();  // Generate Add delta but don't run receiver
+        sender.tick(); // Generate Add delta but don't run receiver
 
         // Clear trackers so next change appears as Changed not Add
         sender.world_mut().clear_trackers();
@@ -375,11 +415,18 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Now we have mapping, modify and sync again
-        sender.world_mut().entity_mut(_entity).insert(TestComponent(60));
+        sender
+            .world_mut()
+            .entity_mut(_entity)
+            .insert(TestComponent(60));
         sync_cycle(&mut sender, &mut receiver);
 
         // Verify updated value - entity should be updated (not respawned)
-        let query = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).collect::<Vec<_>>();
+        let query = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(query.len(), 1);
         assert_eq!(query[0].0, 60);
     }
@@ -393,14 +440,19 @@ mod test {
         let e2 = sender.world_mut().spawn(TestComponent(2)).id();
         sync_cycle(&mut sender, &mut receiver);
 
-        let count1 = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let count1 = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(count1, 2, "Phase 1: Should have 2 entities");
 
         // Phase 2: Modify one
         sender.world_mut().entity_mut(e1).insert(TestComponent(10));
         sync_cycle(&mut sender, &mut receiver);
 
-        let values: Vec<u32> = receiver.world_mut()
+        let values: Vec<u32> = receiver
+            .world_mut()
             .query::<&TestComponent>()
             .iter(receiver.world())
             .map(|c| c.0)
@@ -412,14 +464,22 @@ mod test {
         sender.world_mut().entity_mut(e2).despawn();
         sync_cycle(&mut sender, &mut receiver);
 
-        let count3 = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let count3 = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(count3, 1, "Phase 3: Should have 1 entity after despawn");
 
         // Phase 4: Add another
         sender.world_mut().spawn(TestComponent(3));
         sync_cycle(&mut sender, &mut receiver);
 
-        let count4 = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let count4 = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(count4, 2, "Phase 4: Should have 2 entities again");
     }
 
@@ -432,18 +492,41 @@ mod test {
 
         // Sync
         sync_cycle(&mut sender, &mut receiver);
-        assert_eq!(receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count(), 1);
+        assert_eq!(
+            receiver
+                .world_mut()
+                .query::<&TestComponent>()
+                .iter(receiver.world())
+                .count(),
+            1
+        );
 
         // Modify and sync
-        sender.world_mut().entity_mut(entity).insert(TestComponent(100));
+        sender
+            .world_mut()
+            .entity_mut(entity)
+            .insert(TestComponent(100));
         sync_cycle(&mut sender, &mut receiver);
-        let value = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).next().unwrap().0;
+        let value = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .next()
+            .unwrap()
+            .0;
         assert_eq!(value, 100);
 
         // Remove and sync
         sender.world_mut().entity_mut(entity).despawn();
         sync_cycle(&mut sender, &mut receiver);
-        assert_eq!(receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count(), 0);
+        assert_eq!(
+            receiver
+                .world_mut()
+                .query::<&TestComponent>()
+                .iter(receiver.world())
+                .count(),
+            0
+        );
     }
 
     #[test]
@@ -454,7 +537,11 @@ mod test {
         sync_cycle(&mut sender, &mut receiver);
 
         // Should not panic and receiver should have no entities
-        let count = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).count();
+        let count = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .count();
         assert_eq!(count, 0);
     }
 
@@ -472,7 +559,8 @@ mod test {
 
         sync_cycle(&mut sender, &mut receiver);
 
-        let mut received_values: Vec<u32> = receiver.world_mut()
+        let mut received_values: Vec<u32> = receiver
+            .world_mut()
             .query::<&TestComponent>()
             .iter(receiver.world())
             .map(|c| c.0)
@@ -502,7 +590,11 @@ mod test {
         // Sync - this should result in 1 entity with value 999
         sync_cycle(&mut sender, &mut receiver);
 
-        let query = receiver.world_mut().query::<&TestComponent>().iter(receiver.world()).collect::<Vec<_>>();
+        let query = receiver
+            .world_mut()
+            .query::<&TestComponent>()
+            .iter(receiver.world())
+            .collect::<Vec<_>>();
         assert_eq!(query.len(), 1, "Should have exactly 1 entity after ABA");
         assert_eq!(query[0].0, 999, "Should have the new component value");
     }

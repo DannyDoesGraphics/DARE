@@ -47,15 +47,26 @@ impl RenderClient {
     }
 
     pub fn resize(&self, extent: vk::Extent2D) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderServerPacket::Resize(extent))?)
+        Ok(self
+            .packet_sender
+            .send(RenderServerPacket::Resize(extent))?)
     }
 
     pub fn recreate(&self, size: vk::Extent2D, handles: WindowHandles) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderServerPacket::Recreate { size, handles })?)
+        Ok(self
+            .packet_sender
+            .send(RenderServerPacket::Recreate { size, handles })?)
     }
 
-    pub fn set_render(&self, handle: dare_assets::MeshHandle, should_render: bool) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderServerPacket::SetRender { handle, should_render })?)
+    pub fn set_render(
+        &self,
+        handle: dare_assets::MeshHandle,
+        should_render: bool,
+    ) -> anyhow::Result<()> {
+        Ok(self.packet_sender.send(RenderServerPacket::SetRender {
+            handle,
+            should_render,
+        })?)
     }
 
     pub fn stop(&self) -> anyhow::Result<()> {
@@ -100,11 +111,10 @@ impl RenderServer {
                 contexts::SwapchainContext::new(surface, extent, &core_context).unwrap();
             let present_context: contexts::PresentContext =
                 contexts::PresentContext::new(&core_context, config.frames_in_flight).unwrap();
-            let resource_manager =
-                crate::resource_manager::AssetManagerToResourceManager::new(
-                    config.asset_manager,
-                    config.frames_in_flight as u16,
-                );
+            let resource_manager = crate::resource_manager::AssetManagerToResourceManager::new(
+                config.asset_manager,
+                config.frames_in_flight as u16,
+            );
 
             // Transfer belt
             let transfer_manager: transfer_belt::TransferManager<

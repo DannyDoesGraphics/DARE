@@ -25,8 +25,8 @@ fn main() {
     let _client = tracy_client::Client::start();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
     let (asset_manager_send, asset_manager_recv) = dare_assets::AssetManager::new(16);
-    let (re_mesh_send, re_mesh_recv) = dare_extract::channel::<dare_assets::MeshHandle>();
-    
+    let (_re_mesh_send, _re_mesh_recv) = dare_extract::channel::<dare_assets::MeshHandle>();
+
     let (_engine_server, engine_client) =
         dare_engine::EngineServer::new(dare_engine::EngineServerConfig {
             assets_send: asset_manager_send,

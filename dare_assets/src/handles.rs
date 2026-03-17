@@ -46,11 +46,11 @@ impl dare_containers::slot::SlotWithGeneration for MeshHandle {
 }
 impl dare_extract::Streamable for MeshHandle {
     type Extracted = Self;
-    
+
     fn extract(&self) -> Self::Extracted {
         *self
     }
-    
+
     fn consume(extract: Self::Extracted) -> Self {
         extract
     }
@@ -102,11 +102,11 @@ impl dare_containers::slot::SlotWithGeneration for GeometryDescriptionHandle {
 }
 impl dare_extract::Streamable for GeometryDescriptionHandle {
     type Extracted = Self;
-    
+
     fn extract(&self) -> Self::Extracted {
         *self
     }
-    
+
     fn consume(extract: Self::Extracted) -> Self {
         extract
     }

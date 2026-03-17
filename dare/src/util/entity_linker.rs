@@ -70,9 +70,7 @@ impl<T: Component + Clone> ComponentsLinkerReceiver<T> {
                                 }
                                 Some(recv_entity) => {
                                     // Entity already exists, just insert
-                                    commands
-                                        .entity(*recv_entity)
-                                        .insert(component.clone());
+                                    commands.entity(*recv_entity).insert(component.clone());
                                 }
                             }
                         }

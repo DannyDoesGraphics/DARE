@@ -4,7 +4,6 @@ use dagal::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use dagal::winit;
 use dagal::winit::window;
 use dagal::winit::window::WindowId;
-use dare_render;
 use std::sync::Arc;
 
 /// This app only exists to get the first window
@@ -92,8 +91,7 @@ impl winit::application::ApplicationHandler for App {
                     let position = glam::Vec2::new(position.x, position.y);
                     let dp: Option<glam::Vec2> = self
                         .last_position
-                        .as_ref()
-                        .and_then(|last_position| Some(position - last_position));
+                        .as_ref().map(|last_position| position - last_position);
                     self.last_position = Some(position);
                     if let Some(dp) = dp {
                         let _ = self

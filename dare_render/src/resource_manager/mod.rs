@@ -1,11 +1,10 @@
 mod handle;
 
 use dagal::allocators::GPUAllocatorImpl;
-pub use handle::*;
 
 use bevy_ecs::prelude::*;
 use dare_assets::*;
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 pub enum ResourceCommand {
     CreateMesh {},
@@ -63,15 +62,17 @@ impl AssetManagerToResourceManager {
                                                 == dare_assets::ResidentState::ResidentGPU as u8
                                         {
                                             ttl = self.tombstone_ttl;
-                                            return Some(
-                                                dare_assets::ResidentState::Unloading as u8
-                                            );
+                                            Some(
+                                                dare_assets::ResidentState::Unloading as u8,
+                                            )
                                         } else if ttl == 0
                                             && resident_state
                                                 == dare_assets::ResidentState::Unloading as u8
                                         {
                                             self.physical_resource_map.remove(handle).unwrap();
-                                            return Some(dare_assets::ResidentState::Unloaded as u8);
+                                            Some(
+                                                dare_assets::ResidentState::Unloaded as u8,
+                                            )
                                         } else {
                                             None
                                         }
@@ -86,5 +87,5 @@ impl AssetManagerToResourceManager {
     }
 
     /// If `create` is `true`, then a physical resource will be realized
-    pub fn get_physical_resource<T>(&mut self, create: bool) {}
+    pub fn get_physical_resource<T>(&mut self, _create: bool) {}
 }

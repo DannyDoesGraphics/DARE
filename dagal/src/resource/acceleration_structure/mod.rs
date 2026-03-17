@@ -38,7 +38,11 @@ impl Resource for AccelerationStructure {
         Self: Sized,
     {
         match create_info {
-            AccelerationStructureInfo::FromCI { ci, device, name: _ } => {
+            AccelerationStructureInfo::FromCI {
+                ci,
+                device,
+                name: _,
+            } => {
                 if let Some(acceleration_structure_func) =
                     device.get_acceleration_structure().as_ref()
                 {

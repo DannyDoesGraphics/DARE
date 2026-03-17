@@ -21,6 +21,12 @@ pub enum AppStage {
     Last,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         let mut world = World::new();
@@ -54,14 +60,14 @@ impl App {
     }
     #[inline]
     pub fn schedule(&self) -> &Schedule {
-        &self
+        self
             .world
             .get_resource::<Schedules>()
             .unwrap()
             .get(InternalSchedule)
             .unwrap()
     }
-    
+
     /// Fetches the internal default schedule
     pub fn schedule_scope<O, F: FnOnce(&mut Schedule) -> O>(&mut self, f: F) -> O {
         self.world
@@ -69,7 +75,7 @@ impl App {
             .and_then(|mut schedules| {
                 schedules
                     .get_mut(InternalSchedule)
-                    .map(|schedule| f(schedule))
+                    .map(f)
             })
             .unwrap()
     }
@@ -79,7 +85,7 @@ impl App {
         self.world.run_schedule(InternalSchedule);
         self.world.clear_trackers();
     }
-    
+
     /// Add a plugin to application
     pub fn add_plugins<T: plugin::Plugin>(&mut self, plugin: T) -> &mut Self {
         plugin.build(self);

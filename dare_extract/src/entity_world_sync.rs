@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
-use dare_ecs::Plugin;
 use bevy_ecs::{entity::EntityHashMap, prelude::*};
+use dare_ecs::Plugin;
 
 #[derive(Debug, Resource)]
 pub(crate) struct EntityWorldSync {
@@ -9,7 +9,7 @@ pub(crate) struct EntityWorldSync {
 }
 impl Deref for EntityWorldSync {
     type Target = EntityHashMap<Entity>;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.mapping
     }
@@ -27,7 +27,6 @@ impl Plugin for EntityWorldSyncPlugin {
     fn build(&self, world: &mut dare_ecs::App) {
         // check if resource already exists
         if world.world().contains_resource::<EntityWorldSync>() {
-            return;
         } else {
             world.world_mut().insert_resource(EntityWorldSync {
                 mapping: EntityHashMap::new(),

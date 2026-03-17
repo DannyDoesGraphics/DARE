@@ -1,4 +1,3 @@
-
 /// A "frame" is simply a snapshot of the current world and provides a list of candidate meshes to render
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {

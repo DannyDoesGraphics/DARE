@@ -1,4 +1,3 @@
-
 use futures_util::Stream;
 use futures_util::*;
 
@@ -113,7 +112,9 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
                         // end of input stream
                         self.end_of_stream = true;
                         if self.chunk_elements.is_none() {
-                            let result = self.decide_emit().map(|out| self.apply_format_conversion(out));
+                            let result = self
+                                .decide_emit()
+                                .map(|out| self.apply_format_conversion(out));
                             return std::task::Poll::Ready(result);
                         }
                     }
@@ -138,27 +139,23 @@ mod tests {
     fn test_u8_to_u8_identity() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data = vec![vec![1u8, 2, 3, 4, 5]];
-            let stream = stream::iter(input_data);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::U8,
-                5,
-                None,
-                None,
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data = vec![vec![1u8, 2, 3, 4, 5]];
+                let stream = stream::iter(input_data);
+
+                let mut reshaper = ByteStreamReshaper::new(stream, Format::U8, 5, None, None);
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         assert_eq!(flattened, vec![1u8, 2, 3, 4, 5]);
     }
 
@@ -166,33 +163,30 @@ mod tests {
     fn test_u8_to_u16() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data = vec![vec![1u8, 2, 255]];
-            let stream = stream::iter(input_data);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::U8,
-                3,
-                None,
-                Some(Format::U16),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data = vec![vec![1u8, 2, 255]];
+                let stream = stream::iter(input_data);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::U8, 3, None, Some(Format::U16));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         let expected_u16: Vec<u16> = vec![1, 2, 255];
         let mut expected_bytes = Vec::new();
         for val in expected_u16 {
             expected_bytes.extend_from_slice(&val.to_ne_bytes());
         }
-        
+
         assert_eq!(flattened, expected_bytes);
     }
 
@@ -200,33 +194,30 @@ mod tests {
     fn test_u8_to_f32() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data = vec![vec![0u8, 128, 255]];
-            let stream = stream::iter(input_data);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::U8,
-                3,
-                None,
-                Some(Format::F32),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data = vec![vec![0u8, 128, 255]];
+                let stream = stream::iter(input_data);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::U8, 3, None, Some(Format::F32));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         let expected_f32: Vec<f32> = vec![0.0, 128.0, 255.0];
         let mut expected_bytes = Vec::new();
         for val in expected_f32 {
             expected_bytes.extend_from_slice(&val.to_ne_bytes());
         }
-        
+
         assert_eq!(flattened, expected_bytes);
     }
 
@@ -234,38 +225,35 @@ mod tests {
     fn test_f32_to_u32() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_f32: Vec<f32> = vec![0.0, 42.5, 1000.7];
-            let mut input_bytes = Vec::new();
-            for val in input_f32 {
-                input_bytes.extend_from_slice(&val.to_ne_bytes());
-            }
-            
-            let stream = stream::iter(vec![input_bytes]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::F32,
-                3,
-                None,
-                Some(Format::U32),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_f32: Vec<f32> = vec![0.0, 42.5, 1000.7];
+                let mut input_bytes = Vec::new();
+                for val in input_f32 {
+                    input_bytes.extend_from_slice(&val.to_ne_bytes());
+                }
+
+                let stream = stream::iter(vec![input_bytes]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U32));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         let expected_u32: Vec<u32> = vec![0, 43, 1001];
         let mut expected_bytes = Vec::new();
         for val in expected_u32 {
             expected_bytes.extend_from_slice(&val.to_ne_bytes());
         }
-        
+
         assert_eq!(flattened, expected_bytes);
     }
 
@@ -273,32 +261,29 @@ mod tests {
     fn test_f32_to_u8() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_f32: Vec<f32> = vec![0.0, 128.3, 300.5, 255.0];
-            let mut input_bytes = Vec::new();
-            for val in input_f32 {
-                input_bytes.extend_from_slice(&val.to_ne_bytes());
-            }
-            
-            let stream = stream::iter(vec![input_bytes]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::F32,
-                4,
-                None,
-                Some(Format::U8),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_f32: Vec<f32> = vec![0.0, 128.3, 300.5, 255.0];
+                let mut input_bytes = Vec::new();
+                for val in input_f32 {
+                    input_bytes.extend_from_slice(&val.to_ne_bytes());
+                }
+
+                let stream = stream::iter(vec![input_bytes]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::F32, 4, None, Some(Format::U8));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         assert_eq!(flattened, vec![0u8, 128, 255, 255]);
     }
 
@@ -306,32 +291,29 @@ mod tests {
     fn test_f32_to_u8_max_elements_limit() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_f32: Vec<f32> = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
-            let mut input_bytes = Vec::new();
-            for val in input_f32 {
-                input_bytes.extend_from_slice(&val.to_ne_bytes());
-            }
-            
-            let stream = stream::iter(vec![input_bytes]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::F32,
-                3,
-                None,
-                Some(Format::U8),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_f32: Vec<f32> = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
+                let mut input_bytes = Vec::new();
+                for val in input_f32 {
+                    input_bytes.extend_from_slice(&val.to_ne_bytes());
+                }
+
+                let stream = stream::iter(vec![input_bytes]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U8));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         assert_eq!(flattened, vec![10u8, 20, 30]);
         assert_eq!(flattened.len(), 3);
     }
@@ -340,42 +322,31 @@ mod tests {
     fn test_u8x4_to_f32x3() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data = vec![
-                10u8, 20, 30, 40,
-                50, 60, 70, 80,
-                100, 110, 120, 130,
-            ];
-            
-            let stream = stream::iter(vec![input_data]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::U8x4,
-                3,
-                None,
-                Some(Format::F32x3),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data = vec![10u8, 20, 30, 40, 50, 60, 70, 80, 100, 110, 120, 130];
+
+                let stream = stream::iter(vec![input_data]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::U8x4, 3, None, Some(Format::F32x3));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
-        let expected: Vec<f32> = vec![
-            10.0, 20.0, 30.0,
-            50.0, 60.0, 70.0,
-            100.0, 110.0, 120.0,
-        ];
+
+        let expected: Vec<f32> = vec![10.0, 20.0, 30.0, 50.0, 60.0, 70.0, 100.0, 110.0, 120.0];
         let mut expected_bytes = Vec::new();
         for val in expected {
             expected_bytes.extend_from_slice(&val.to_ne_bytes());
         }
-        
+
         assert_eq!(flattened, expected_bytes);
     }
 
@@ -383,36 +354,31 @@ mod tests {
     fn test_f32x4_to_u8() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data: Vec<f32> = vec![
-                127.7, 20.0, 30.0, 40.0,
-                300.5, 110.0, 120.0, 130.0,
-                200.4, 210.0, 220.0, 230.0,
-            ];
-            let mut input_bytes = Vec::new();
-            for val in input_data {
-                input_bytes.extend_from_slice(&val.to_ne_bytes());
-            }
-            
-            let stream = stream::iter(vec![input_bytes]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::F32x4,
-                3,
-                None,
-                Some(Format::U8),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data: Vec<f32> = vec![
+                    127.7, 20.0, 30.0, 40.0, 300.5, 110.0, 120.0, 130.0, 200.4, 210.0, 220.0, 230.0,
+                ];
+                let mut input_bytes = Vec::new();
+                for val in input_data {
+                    input_bytes.extend_from_slice(&val.to_ne_bytes());
+                }
+
+                let stream = stream::iter(vec![input_bytes]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
+
         assert_eq!(flattened, vec![128u8, 255, 200]);
     }
 
@@ -420,40 +386,31 @@ mod tests {
     fn test_f32x4_to_u8x3() {
         let mut pool = LocalPool::new();
         let (sender, receiver) = futures::channel::mpsc::unbounded();
-        
-        pool.spawner().spawn_local(async move {
-            let input_data: Vec<f32> = vec![
-                127.3, 255.9, 30.5, 40.0,
-                100.7, 300.0, 120.1, 130.0,
-                200.6, 0.4, 220.0, 230.0,
-            ];
-            let mut input_bytes = Vec::new();
-            for val in input_data {
-                input_bytes.extend_from_slice(&val.to_ne_bytes());
-            }
-            
-            let stream = stream::iter(vec![input_bytes]);
-            
-            let mut reshaper = ByteStreamReshaper::new(
-                stream,
-                Format::F32x4,
-                3,
-                None,
-                Some(Format::U8x3),
-            );
-            
-            while let Some(chunk) = reshaper.next().await {
-                sender.unbounded_send(chunk).unwrap();
-            }
-        }).unwrap();
-        
+
+        pool.spawner()
+            .spawn_local(async move {
+                let input_data: Vec<f32> = vec![
+                    127.3, 255.9, 30.5, 40.0, 100.7, 300.0, 120.1, 130.0, 200.6, 0.4, 220.0, 230.0,
+                ];
+                let mut input_bytes = Vec::new();
+                for val in input_data {
+                    input_bytes.extend_from_slice(&val.to_ne_bytes());
+                }
+
+                let stream = stream::iter(vec![input_bytes]);
+
+                let mut reshaper =
+                    ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8x3));
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
         let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
-        
-        assert_eq!(flattened, vec![
-            127u8, 255, 31,
-            101, 255, 120,
-            201, 0, 220,
-        ]);
+
+        assert_eq!(flattened, vec![127u8, 255, 31, 101, 255, 120, 201, 0, 220,]);
     }
 }

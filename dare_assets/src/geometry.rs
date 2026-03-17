@@ -1,4 +1,7 @@
-use std::{ops::Deref, sync::{Arc, atomic::AtomicU8}};
+use std::{
+    ops::Deref,
+    sync::Arc,
+};
 
 /// Describes where the underlying bytes are located.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -15,7 +18,7 @@ pub enum ResidentState {
     Loading = 1u8,
     ResidentGPU = 2u8,
     Unloading = 3u8,
-    Unloaded = 4u8
+    Unloaded = 4u8,
 }
 
 /// A structure representing metadata to load a geometry

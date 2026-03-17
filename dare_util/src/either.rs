@@ -13,27 +13,26 @@ impl<A: Debug, B: Debug> Debug for Either<A, B> {
         }
     }
 }
-impl<A: PartialEq, B: PartialEq> PartialEq for Either<A,B> {
+impl<A: PartialEq, B: PartialEq> PartialEq for Either<A, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Left(a), Self::Left(b)) => a == b,
             (Self::Right(a), Self::Right(b)) => a == b,
-            _ => false
+            _ => false,
         }
     }
 }
-impl<A: Eq, B: Eq> Eq for Either<A,B> {}
-impl<A: PartialOrd + PartialOrd<B>, B: PartialOrd + PartialOrd<A>> PartialOrd for Either<A,B> {
+impl<A: Eq, B: Eq> Eq for Either<A, B> {}
+impl<A: PartialOrd + PartialOrd<B>, B: PartialOrd + PartialOrd<A>> PartialOrd for Either<A, B> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Self::Left(a), Self::Left(b)) => a.partial_cmp(b),
             (Self::Left(a), Self::Right(b)) => a.partial_cmp(b),
             (Self::Right(a), Self::Left(b)) => a.partial_cmp(b),
-            (Self::Right(a), Self::Right(b)) => a.partial_cmp(b)
+            (Self::Right(a), Self::Right(b)) => a.partial_cmp(b),
         }
     }
 }
-
 
 impl<A: Clone, B: Clone> Clone for Either<A, B> {
     fn clone(&self) -> Self {
@@ -62,14 +61,14 @@ impl<A, B> Either<A, B> {
     pub fn from_left(a: A) -> Self {
         Self::Left(a)
     }
-    
+
     pub fn from_right(b: B) -> Self {
         Self::Right(b)
     }
-    
+
     pub fn left_ref(&self) -> Option<&A> {
         match self {
-            Self::Left(a) => Some(&a),
+            Self::Left(a) => Some(a),
             Self::Right(_) => None,
         }
     }
@@ -77,7 +76,7 @@ impl<A, B> Either<A, B> {
     pub fn right_ref(&self) -> Option<&B> {
         match self {
             Self::Left(_) => None,
-            Self::Right(b) => Some(&b),
+            Self::Right(b) => Some(b),
         }
     }
 
