@@ -244,7 +244,7 @@ impl App {
         if let Some(client) = &self.render_client {
             let extent = Self::window_extent(window);
             if let Err(err) = client.resize(extent) {
-                tracing::warn!(?extent, ?err, "Failed to send resize packet");
+                tracing::warn!(?extent, ?err, "Failed to send resize command");
             }
         }
     }
@@ -254,7 +254,7 @@ impl App {
             let size = Self::window_extent(window);
             let handles = Self::window_handles(window);
             if let Err(err) = client.recreate(size, handles) {
-                tracing::warn!(?size, ?err, "Failed to send recreate packet");
+                tracing::warn!(?size, ?err, "Failed to send recreate command");
             }
         }
     }

@@ -2,27 +2,27 @@ use anyhow::Result;
 use tokio::sync::oneshot::error::TryRecvError;
 
 #[derive(Debug)]
-pub enum EnginePacket {
+pub enum EngineCommand {
     Tick,
     LoadGltf(std::path::PathBuf),
 }
 
 #[derive(Debug, Clone)]
 pub struct EngineClient {
-    server_send: std::sync::mpsc::Sender<EnginePacket>,
+    server_send: std::sync::mpsc::Sender<EngineCommand>,
 }
 
 impl EngineClient {
-    pub fn new(server_send: std::sync::mpsc::Sender<EnginePacket>) -> Self {
+    pub fn new(server_send: std::sync::mpsc::Sender<EngineCommand>) -> Self {
         Self { server_send }
     }
 
     pub fn tick(&self) -> Result<()> {
-        Ok(self.server_send.send(EnginePacket::Tick)?)
+        Ok(self.server_send.send(EngineCommand::Tick)?)
     }
 
     pub fn load_gltf(&self, path: std::path::PathBuf) -> Result<()> {
-        self.server_send.send(EnginePacket::LoadGltf(path))?;
+        self.server_send.send(EngineCommand::LoadGltf(path))?;
         Ok(())
     }
 }
@@ -39,7 +39,7 @@ pub struct EngineServer {
 
 impl EngineServer {
     pub fn new(config: EngineServerConfig) -> Result<(Self, EngineClient)> {
-        let (server_send, server_recv) = std::sync::mpsc::channel::<EnginePacket>();
+        let (server_send, server_recv) = std::sync::mpsc::channel::<EngineCommand>();
         let mut app = dare_ecs::App::new();
         app.world_mut().insert_resource(config.assets_send);
         app.schedule_scope(|schedule| {
@@ -57,12 +57,12 @@ impl EngineServer {
                     Err(_) => {
                         break;
                     }
-                    Ok(packet) => {
-                        match packet {
-                            EnginePacket::Tick => {
+                    Ok(command) => {
+                        match command {
+                            EngineCommand::Tick => {
                                 app.tick();
                             }
-                            EnginePacket::LoadGltf(path) => {
+                            EngineCommand::LoadGltf(path) => {
                                 let asset_manager = app
                                     .world_mut()
                                     .remove_resource::<dare_assets::AssetManager>();

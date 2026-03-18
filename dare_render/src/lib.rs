@@ -38,24 +38,24 @@ pub struct RenderServer {
 /// Client to communicate with render server.
 #[derive(Debug, Clone)]
 pub struct RenderClient {
-    packet_sender: std::sync::mpsc::Sender<RenderServerPacket>,
+    command_sender: std::sync::mpsc::Sender<RenderServerCommand>,
 }
 
 impl RenderClient {
-    pub fn new(packet_sender: std::sync::mpsc::Sender<RenderServerPacket>) -> Self {
-        Self { packet_sender }
+    pub fn new(command_sender: std::sync::mpsc::Sender<RenderServerCommand>) -> Self {
+        Self { command_sender }
     }
 
     pub fn resize(&self, extent: vk::Extent2D) -> anyhow::Result<()> {
         Ok(self
-            .packet_sender
-            .send(RenderServerPacket::Resize(extent))?)
+            .command_sender
+            .send(RenderServerCommand::Resize(extent))?)
     }
 
     pub fn recreate(&self, size: vk::Extent2D, handles: WindowHandles) -> anyhow::Result<()> {
         Ok(self
-            .packet_sender
-            .send(RenderServerPacket::Recreate { size, handles })?)
+            .command_sender
+            .send(RenderServerCommand::Recreate { size, handles })?)
     }
 
     pub fn set_render(
@@ -63,18 +63,18 @@ impl RenderClient {
         handle: dare_assets::MeshHandle,
         should_render: bool,
     ) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderServerPacket::SetRender {
+        Ok(self.command_sender.send(RenderServerCommand::SetRender {
             handle,
             should_render,
         })?)
     }
 
     pub fn stop(&self) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderServerPacket::Stop)?)
+        Ok(self.command_sender.send(RenderServerCommand::Stop)?)
     }
 }
 
-pub enum RenderServerPacket {
+pub enum RenderServerCommand {
     Resize(vk::Extent2D),
     Recreate {
         size: vk::Extent2D,
@@ -90,7 +90,7 @@ pub enum RenderServerPacket {
 impl RenderServer {
     pub fn new(config: RenderServerConfig) -> (Self, RenderClient) {
         let (drop_sender, mut drop_receiver) = tokio::sync::oneshot::channel();
-        let (packet_sender, packet_receiver) = std::sync::mpsc::channel::<RenderServerPacket>();
+        let (command_sender, command_receiver) = std::sync::mpsc::channel::<RenderServerCommand>();
         let window_handles = config.window_handles;
         let extent = config.extent;
         let thread = std::thread::spawn(move || {
@@ -149,9 +149,9 @@ impl RenderServer {
                     Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
                 }
                 let mut stop = false;
-                while let Ok(packet) = packet_receiver.try_recv() {
-                    match packet {
-                        RenderServerPacket::Resize(extent) => {
+                while let Ok(command) = command_receiver.try_recv() {
+                    match command {
+                        RenderServerCommand::Resize(extent) => {
                             app.world_mut().resource_scope(
                                 |world,
                                  mut swapchain_context: Mut<
@@ -171,7 +171,7 @@ impl RenderServer {
                                 },
                             );
                         }
-                        RenderServerPacket::Recreate { size, handles } => {
+                        RenderServerCommand::Recreate { size, handles } => {
                             app.world_mut().resource_scope(
                                 |world,
                                  mut swapchain_context: Mut<
@@ -192,13 +192,13 @@ impl RenderServer {
                                 },
                             );
                         }
-                        RenderServerPacket::SetRender {
+                        RenderServerCommand::SetRender {
                             handle: _,
                             should_render: _,
                         } => {
                             tracing::warn!("Tried to set state of unimplemented type");
                         }
-                        RenderServerPacket::Stop => {
+                        RenderServerCommand::Stop => {
                             stop = true;
                             break;
                         }
@@ -233,7 +233,7 @@ impl RenderServer {
                 thread: Some(thread),
                 drop_sender: Some(drop_sender),
             },
-            RenderClient::new(packet_sender),
+            RenderClient::new(command_sender),
         )
     }
 }
