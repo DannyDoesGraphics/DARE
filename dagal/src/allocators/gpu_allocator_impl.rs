@@ -29,6 +29,12 @@ impl Destructible for GPUAllocatorImpl {
     }
 }
 
+impl Drop for GPUAllocatorImpl {
+    fn drop(&mut self) {
+        self.destroy();
+    }
+}
+
 impl GPUAllocatorImpl {
     pub fn new(
         allocator_ci: gpu_allocator::vulkan::AllocatorCreateDesc,
