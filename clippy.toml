@@ -1,0 +1,7 @@
+doc-valid-idents = [
+    "NVidia",
+    "glTF",
+    "..",
+]
+
+check-private-items = true
