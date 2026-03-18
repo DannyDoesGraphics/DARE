@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
 use std::ptr;
 
-pub struct WindowlessContext {}
-
-pub struct WindowedContext {}
+pub struct Context {}
 
 pub trait ContextInit {
     type Output<A: Allocator>;
@@ -32,34 +30,7 @@ pub trait ContextInit {
     ) -> anyhow::Result<Self::Output<A>>;
 }
 
-impl ContextInit for WindowlessContext {
-    type Output<A: Allocator> = (
-        crate::core::Instance,
-        crate::device::PhysicalDevice,
-        crate::device::LogicalDevice,
-        A,
-    );
-
-    fn init(_settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
-        todo!()
-    }
-
-    fn init_with_allocator<
-        A: Allocator,
-        F: FnOnce(
-            &crate::core::Instance,
-            &crate::device::PhysicalDevice,
-            &crate::device::LogicalDevice,
-        ) -> anyhow::Result<A>,
-    >(
-        _settings: AppSettings,
-        _make_alloc: F,
-    ) -> anyhow::Result<Self::Output<A>> {
-        todo!()
-    }
-}
-
-impl ContextInit for WindowedContext {
+impl ContextInit for Context {
     type Output<A: Allocator> = (
         crate::core::Instance,
         crate::device::PhysicalDevice,

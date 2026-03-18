@@ -65,9 +65,12 @@ impl AssetManagerToResourceManager {
                     .ok();
             })
     }
-    
+
     /// Make a non-resident resource
-    pub fn get_physical_resource<T: 'static>(&self, handle: &GeometryDescriptionHandle) -> Option<&T> {
+    pub fn get_physical_resource<T: 'static>(
+        &self,
+        handle: &GeometryDescriptionHandle,
+    ) -> Option<&T> {
         self.physical_resource_map
             .get(handle)
             .and_then(|b| b.downcast_ref::<T>())
