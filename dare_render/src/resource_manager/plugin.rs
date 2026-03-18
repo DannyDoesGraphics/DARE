@@ -71,6 +71,9 @@ impl AssetManagerToResourceManager {
 }
 
 /// Plugin for initializing resource manager systems and resources
+///
+/// The plugin will tick and update the asset manager's handles during the `[dare_ecs::AppStage::PostUpdate]` stage. Handles during the ticking
+/// will transition into their relevant state.
 #[derive(Debug)]
 pub struct ResourceManagerPlugin {
     asset_manager: std::cell::RefCell<Option<dare_assets::AssetManager>>,
@@ -100,6 +103,15 @@ impl Plugin for ResourceManagerPlugin {
             let resource_manager =
                 AssetManagerToResourceManager::new(asset_manager, self.tombstone_ttl);
             world.world_mut().insert_resource(resource_manager);
+
+            world.schedule_scope(|schedule| {
+                schedule.add_systems(
+                    (|mut resource_manager: ResMut<AssetManagerToResourceManager>| {
+                        resource_manager.tick();
+                    })
+                    .in_set(dare_ecs::AppStage::PostUpdate),
+                );
+            });
         }
     }
 }

@@ -11,11 +11,18 @@ pub enum DataLocation {
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 #[repr(u8)]
 pub enum ResidentState {
+    /// Asset is not resident on the GPU
     Empty = 0u8,
+    /// Asset is being loaded onto the GPU
     Loading = 1u8,
+    /// Asset is resident on the GPU, and is ready to be used
     ResidentGPU = 2u8,
+    /// Asset is being unloaded from the GPU
     Unloading = 3u8,
+    /// Asset is no longer resident on the GPU
     Unloaded = 4u8,
+    /// Asset failed to load, and must be manually acknowledged by the user
+    Failed = 5u8,
 }
 
 /// A structure representing metadata to load a geometry
