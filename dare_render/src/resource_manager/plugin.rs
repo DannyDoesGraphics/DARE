@@ -65,9 +65,13 @@ impl AssetManagerToResourceManager {
                     .ok();
             })
     }
-
-    /// If `create` is `true`, then a physical resource will be realized
-    pub fn get_physical_resource<T>(&mut self, _create: bool) {}
+    
+    /// Make a non-resident resource
+    pub fn get_physical_resource<T: 'static>(&self, handle: &GeometryDescriptionHandle) -> Option<&T> {
+        self.physical_resource_map
+            .get(handle)
+            .and_then(|b| b.downcast_ref::<T>())
+    }
 }
 
 /// Plugin for initializing resource manager systems and resources
