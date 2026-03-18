@@ -28,12 +28,47 @@ impl TestContext {
                 surface_format: None,
                 present_mode: None,
                 gpu_requirements: dagal::bootstrap::app_info::GPURequirements {
-                    dedicated: Expected::Preferred(true),
-                    features: dagal::ash::vk::PhysicalDeviceFeatures::default(),
-                    features_1: dagal::ash::vk::PhysicalDeviceVulkan11Features::default(),
-                    features_2: dagal::ash::vk::PhysicalDeviceVulkan12Features::default(),
-                    features_3: dagal::ash::vk::PhysicalDeviceVulkan13Features::default(),
-                    device_extensions: Vec::new(),
+                    dedicated: Expected::Required(true),
+                    features: vk::PhysicalDeviceFeatures {
+                        shader_int64: vk::TRUE,
+                        ..Default::default()
+                    },
+                    features_1: vk::PhysicalDeviceVulkan11Features {
+                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                        variable_pointers: vk::TRUE,
+                        variable_pointers_storage_buffer: vk::TRUE,
+                        shader_draw_parameters: vk::TRUE,
+                        ..Default::default()
+                    },
+                    features_2: vk::PhysicalDeviceVulkan12Features {
+                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                        buffer_device_address: vk::TRUE,
+                        descriptor_indexing: vk::TRUE,
+                        descriptor_binding_partially_bound: vk::TRUE,
+                        descriptor_binding_update_unused_while_pending: vk::TRUE,
+                        descriptor_binding_sampled_image_update_after_bind: vk::TRUE,
+                        descriptor_binding_storage_image_update_after_bind: vk::TRUE,
+                        descriptor_binding_uniform_buffer_update_after_bind: vk::TRUE,
+                        shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
+                        shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
+                        shader_storage_image_array_non_uniform_indexing: vk::TRUE,
+                        runtime_descriptor_array: vk::TRUE,
+                        scalar_block_layout: vk::TRUE,
+                        timeline_semaphore: vk::TRUE,
+                        descriptor_binding_storage_buffer_update_after_bind: vk::TRUE,
+                        ..Default::default()
+                    },
+                    features_3: vk::PhysicalDeviceVulkan13Features {
+                        s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                        dynamic_rendering: vk::TRUE,
+                        synchronization2: vk::TRUE,
+                        ..Default::default()
+                    },
+                    device_extensions: vec![Expected::Preferred(
+                        dagal::ash::ext::debug_utils::NAME
+                            .to_string_lossy()
+                            .to_string(),
+                    )],
                     queues: vec![QueueRequest {
                         strict: false,
                         queue_type: vec![Expected::Required(
@@ -42,7 +77,7 @@ impl TestContext {
                                 | vk::QueueFlags::COMPUTE,
                         )]
                         .into(),
-                        count: Expected::Required(1),
+                        count: Expected::Required(2),
                     }],
                 },
             })
