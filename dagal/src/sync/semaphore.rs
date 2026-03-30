@@ -3,10 +3,7 @@ use ash::vk;
 use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Semaphore {
-    handle: vk::Semaphore,
-    device: crate::device::LogicalDevice,
-}
+pub struct Semaphore(super::BinarySemaphore);
 
 impl Semaphore {
     pub fn new(
@@ -36,18 +33,21 @@ impl Semaphore {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkSemaphore {:p}", handle);
 
-        Ok(Self { handle, device })
+        Ok(Self(super::BinarySemaphore {
+            device,
+            handle
+        }))
     }
 
     /// Signal a semaphore to a given value
     pub fn signal(&self, value: u64) -> Result<(), crate::DagalError> {
         unsafe {
-            self.device
+            self.0.device
                 .get_handle()
                 .signal_semaphore(&vk::SemaphoreSignalInfo {
                     s_type: vk::StructureType::SEMAPHORE_SIGNAL_INFO,
                     p_next: std::ptr::null(),
-                    semaphore: self.handle,
+                    semaphore: self.0.handle,
                     value,
                     _marker: std::marker::PhantomData,
                 })?;
@@ -58,10 +58,20 @@ impl Semaphore {
     /// Get semaphore current value
     pub fn current_value(&self) -> Result<u64, crate::DagalError> {
         Ok(unsafe {
-            self.device
+            self.0.device
                 .get_handle()
-                .get_semaphore_counter_value(self.handle)
+                .get_semaphore_counter_value(self.0.handle)
         }?)
+    }
+    
+    /// AsRef the timeline semaphore as a binary one
+    pub(crate) fn as_binary_semaphore(&self) -> &super::BinarySemaphore {
+        &self.0
+    }
+    
+    /// AsMut the timeline semaphore as a binary one
+    pub(crate) fn mut_binary_semaphore(&mut self) -> &mut super::BinarySemaphore {
+        &mut self.0
     }
 }
 
@@ -70,9 +80,9 @@ impl Destructible for Semaphore {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Destroying VkSemaphore {:p}", self.handle);
         unsafe {
-            self.device
+            self.0.device
                 .get_handle()
-                .destroy_semaphore(self.handle, None);
+                .destroy_semaphore(self.0.handle, None);
         }
     }
 }
@@ -81,15 +91,15 @@ impl AsRaw for Semaphore {
     type RawType = vk::Semaphore;
 
     unsafe fn raw(self) -> Self::RawType {
-        self.handle
+        self.0.handle
     }
 
     unsafe fn as_raw(&self) -> &Self::RawType {
-        &self.handle
+        &self.0.handle
     }
 
     unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
-        &mut self.handle
+        &mut self.0.handle
     }
 }
 

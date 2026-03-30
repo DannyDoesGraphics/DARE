@@ -1,12 +1,18 @@
+use std::marker::PhantomData;
+use std::ptr;
+
 use dagal::ash::vk;
 use dagal::bootstrap::app_info::Expected;
 use dagal::bootstrap::app_info::QueueRequest;
 use dagal::bootstrap::init::ContextInit;
+use dagal::device::queue::QueueGuardExt;
+use dagal::traits::AsRaw;
 
 /// Headless Vulkan instance
 #[derive(Debug)]
 pub struct TestContext {
     allocator: dagal::allocators::GPUAllocatorImpl,
+    queue: dagal::device::Queue,
     device: dagal::device::LogicalDevice,
     physical_device: dagal::device::PhysicalDevice,
     instance: dagal::core::Instance,
@@ -83,12 +89,78 @@ impl TestContext {
             })
             .unwrap();
 
+        // Retrieve transfer queues
+        let queue: dagal::device::Queue = physical_device
+            .get_active_queues()
+            .iter()
+            .map(|queue_info| unsafe {
+                device.get_queue(
+                    &vk::DeviceQueueInfo2 {
+                        s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                        p_next: ptr::null(),
+                        flags: vk::DeviceQueueCreateFlags::empty(),
+                        queue_family_index: queue_info.family_index,
+                        queue_index: queue_info.index,
+                        _marker: Default::default(),
+                    },
+                    queue_info.queue_flags,
+                    queue_info.strict,
+                    queue_info.can_present,
+                )
+            })
+            .collect::<Vec<dagal::device::Queue>>().pop().unwrap();
+
         Ok(Self {
             instance,
             physical_device,
             device,
+            queue,
             allocator,
         })
+    }
+
+    /// Perform immediate submission of GPU commands and await on their completion
+    pub async fn immediate_submit<F: FnOnce(&Self, &dagal::command::CommandBufferRecording) -> R, R>(&self, f: F) -> dagal::Result<R> {
+        let fence = dagal::sync::Fence::new(self.device.clone(), vk::FenceCreateFlags::empty())?;
+        
+        let command_pool = dagal::command::CommandPool::new(
+            dagal::command::CommandPoolCreateInfo::WithQueue {
+                device: self.device.clone(),
+                queue: &self.queue,
+                flags: vk::CommandPoolCreateFlags::empty(),
+            }
+        )?;
+        let command_buffer = command_pool.allocate(1)?.pop().unwrap();
+        let command_buffer = command_buffer.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT).unwrap();
+        
+        let res = f(&self, &command_buffer);
+        
+        let command_buffer = command_buffer.end().unwrap();
+        
+        let submit_infos: Vec<vk::SubmitInfo2> = vec![
+            vk::SubmitInfo2 {
+                s_type: vk::StructureType::SUBMIT_INFO_2,
+                p_next: ptr::null(),
+                flags: vk::SubmitFlags::None,
+                wait_semaphore_info_count: 0,
+                p_wait_semaphore_infos: ptr::null(),
+                signal_semaphore_info_count: 0,
+                p_signal_semaphore_infos: ptr::null(),
+                command_buffer_info_count: 1,
+                p_command_buffer_infos: &vk::CommandBufferSubmitInfo {
+                    s_type: vk::StructureType::COMMAND_BUFFER_SUBMIT_INFO,
+                    p_next: ptr::null(),
+                    command_buffer: unsafe {
+                        *command_buffer.as_raw()
+                    },
+                    device_mask: 0,
+                    _marker: PhantomData::default(),
+                },
+                _marker: PhantomData::default(),
+           }
+        ];
+        self.queue.acquire_queue_async().await.unwrap().try_submit_async(&self.device, &submit_infos, &fence).await.unwrap();
+        Ok(res)
     }
 }
 

@@ -6,8 +6,8 @@ use crate::traits::{AsRaw, Destructible};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BinarySemaphore {
-    handle: vk::Semaphore,
-    device: crate::device::LogicalDevice,
+    pub(super) handle: vk::Semaphore,
+    pub(super) device: crate::device::LogicalDevice,
 }
 
 impl BinarySemaphore {
