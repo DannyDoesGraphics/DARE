@@ -2,6 +2,7 @@ use std::ffi::{c_char, CStr, CString};
 
 pub use align::*;
 pub use free_list_allocator::FreeList;
+pub use queue_allocator::QueueAllocator;
 
 pub mod align;
 pub mod format;
