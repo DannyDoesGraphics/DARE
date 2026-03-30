@@ -3,6 +3,7 @@ pub mod binary_semaphore;
 pub mod fence;
 mod memory_barrier;
 pub mod semaphore;
+pub mod submit_batch;
 
 pub use binary_semaphore::BinarySemaphore;
 pub use fence::Fence;
