@@ -4,7 +4,7 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::traits::AsRaw;
+use crate::traits::{self, AsRaw};
 #[allow(unused_imports)]
 use crate::DagalError;
 use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
@@ -154,16 +154,16 @@ pub trait QueueGuardExt<T: ?Sized> {
     /// Submit a command buffer with an already acquired queue guard and wait for fence completion
     fn try_submit_async<'a>(
         &mut self,
-        command_buffer: &mut crate::command::CommandBufferExecutable,
+        device: &crate::device::LogicalDevice,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
-        fence: &'a mut crate::sync::Fence,
+        fence: &'a crate::sync::Fence,
     ) -> impl std::future::Future<Output = Result<(), crate::DagalError>>;
 
     fn try_submit_no_wait<'a>(
         &mut self,
-        command_buffer: &mut crate::command::CommandBufferExecutable,
+        device: &crate::device::LogicalDevice,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
-        fence: Option<&'a mut crate::sync::Fence>,
+        fence: Option<&'a crate::sync::Fence>,
     ) -> Result<(), crate::DagalError>;
 }
 
@@ -171,37 +171,29 @@ impl<G> QueueGuardExt<vk::Queue> for G
 where
     G: crate::concurrency::Guard<vk::Queue>,
 {
-    #[allow(clippy::manual_async_fn)]
-    fn try_submit_async<'a>(
+    async fn try_submit_async<'a>(
         &mut self,
-        command_buffer: &mut crate::command::CommandBufferExecutable,
+        device: &crate::device::LogicalDevice,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
-        fence: &'a mut crate::sync::Fence,
-    ) -> impl std::future::Future<Output = Result<(), crate::DagalError>> {
-        async move {
-            unsafe {
-                command_buffer.get_device().get_handle().queue_submit2(
-                    **self,
-                    submit_infos,
-                    *fence.as_raw(),
-                )
-            }?;
-
-            fence.fence_await().await?;
-
-            Ok(())
-        }
+        fence: &'a crate::sync::Fence,
+    ) -> crate::Result<()> {
+        unsafe {
+            device
+                .get_handle()
+                .queue_submit2(**self, submit_infos, *fence.as_raw())
+        }?;
+        fence.fence_await().await?;
+        Ok(())
     }
 
-    #[allow(clippy::manual_async_fn)]
     fn try_submit_no_wait<'a>(
         &mut self,
-        command_buffer: &mut crate::command::CommandBufferExecutable,
+        device: &crate::device::LogicalDevice,
         submit_infos: &'a [vk::SubmitInfo2<'a>],
-        fence: Option<&'a mut crate::sync::Fence>,
+        fence: Option<&'a crate::sync::Fence>,
     ) -> Result<(), crate::DagalError> {
         unsafe {
-            command_buffer.get_device().get_handle().queue_submit2(
+            device.get_handle().queue_submit2(
                 **self,
                 submit_infos,
                 match fence {
