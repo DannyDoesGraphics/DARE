@@ -141,7 +141,7 @@ impl TestContext {
             vk::SubmitInfo2 {
                 s_type: vk::StructureType::SUBMIT_INFO_2,
                 p_next: ptr::null(),
-                flags: vk::SubmitFlags::None,
+                flags: vk::SubmitFlags::empty(),
                 wait_semaphore_info_count: 0,
                 p_wait_semaphore_infos: ptr::null(),
                 signal_semaphore_info_count: 0,
