@@ -119,6 +119,21 @@ impl TestContext {
         })
     }
 
+    /// Get the logical device
+    pub fn device(&self) -> dagal::device::LogicalDevice {
+        self.device.clone()
+    }
+
+    /// Get the queue
+    pub fn queue(&self) -> dagal::device::Queue {
+        self.queue.clone()
+    }
+
+    /// Get the allocator
+    pub fn allocator(&self) -> dagal::allocators::GPUAllocatorImpl {
+        self.allocator.clone()
+    }
+
     /// Perform immediate submission of GPU commands and await on their completion
     pub async fn immediate_submit<F: FnOnce(&Self, &dagal::command::CommandBufferRecording) -> R, R>(&self, f: F) -> dagal::Result<R> {
         let fence = dagal::sync::Fence::new(self.device.clone(), vk::FenceCreateFlags::empty())?;
@@ -209,6 +224,14 @@ mod tests {
         let data = buffer.read::<u32>(0, 16).unwrap();
         for (i, val) in data.iter().enumerate() {
             assert_eq!(*val, pattern, "Buffer word {} should be 0x{:08X}, got 0x{:08X}", i, pattern, val);
+        }
+    }
+}
+
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.get_handle().device_wait_idle().unwrap();
         }
     }
 }
