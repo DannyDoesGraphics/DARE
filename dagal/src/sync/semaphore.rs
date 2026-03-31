@@ -106,6 +106,6 @@ impl AsRaw for Semaphore {
 #[cfg(feature = "raii")]
 impl Drop for Semaphore {
     fn drop(&mut self) {
-        self.destroy();
+        // Empty drop to prevent double destruction
     }
 }
