@@ -167,11 +167,48 @@ impl TestContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dagal::resource::traits::Resource;
+    use dagal::command::command_buffer::CmdBuffer;
 
     /// Literally test if the context can be created
     #[tokio::test]
     async fn test_new() {
         let context = TestContext::new().unwrap();
         drop(context);
+    }
+
+    #[tokio::test]
+    async fn test_immediate_submit() {
+        let mut context = TestContext::new().unwrap();
+
+        // Create a small buffer for testing
+        let buffer = dagal::resource::Buffer::new(dagal::resource::BufferCreateInfo::NewEmptyBuffer {
+            device: context.device.clone(),
+            name: Some("TestBuffer".to_string()),
+            allocator: &mut context.allocator,
+            size: 64,
+            memory_type: dagal::allocators::MemoryLocation::GpuToCpu,
+            usage_flags: vk::BufferUsageFlags::TRANSFER_DST,
+        }).unwrap();
+
+        // Fill buffer with 0xDEADBEEF pattern using GPU command
+        let pattern: u32 = 0xDEADBEEF;
+        context.immediate_submit(|_context, recording| {
+            unsafe {
+                recording.get_device().get_handle().cmd_fill_buffer(
+                    *recording.as_raw(),
+                    *buffer.as_raw(),
+                    0,
+                    64,
+                    pattern,
+                );
+            }
+        }).await.unwrap();
+
+        // Read back and verify the data
+        let data = buffer.read::<u32>(0, 16).unwrap();
+        for (i, val) in data.iter().enumerate() {
+            assert_eq!(*val, pattern, "Buffer word {} should be 0x{:08X}, got 0x{:08X}", i, pattern, val);
+        }
     }
 }
