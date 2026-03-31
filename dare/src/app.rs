@@ -115,11 +115,17 @@ impl winit::application::ApplicationHandler for App {
                         == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyO)
                 {
                     // open file dialog
-                    let path = rfd::FileDialog::new()
+                    let paths: Option<Vec<std::path::PathBuf>> = rfd::FileDialog::new()
                         .add_filter("gltf", &["gltf", "glb"])
                         .set_title("Gltf file to load")
                         .pick_files();
-                    println!("Selected file: {:?}", path);
+                    if let Some(paths) = paths {
+                        for path in paths {
+                            self.engine_client.load_gltf(path.clone()).unwrap();
+                            println!("Selected file: {:?}", path);
+                        }
+                    }
+                    
                 }
 
                 let _ = self
