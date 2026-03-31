@@ -678,6 +678,7 @@ impl TransferPool {
         self.send.send(transfer_request).unwrap();
     }
 
+    /// Send a transfer request which await
     pub async fn send(&self, mut transfer_request: TransferRequest) {
         let maybe_rx = match &mut transfer_request {
             TransferRequest::Buffer { oneshot, .. } => {
