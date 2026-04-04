@@ -109,16 +109,27 @@ impl AssetManager {
                             HashMap::new();
                         let mut vertex_buffer: Option<GeometryDescriptionHandle> = None;
                         let mut normal_buffer: Option<GeometryDescriptionHandle> = None;
+                        let mut bounding_box: Option<dare_physics::BoundingBox> = None;
 
                         for (semantic, accessor) in primitive.attributes() {
                             match semantic {
                                 gltf::Semantic::Positions => {
+                                    
                                     assert!(
                                         vertex_buffer
                                             .replace(accessors[accessor.index()])
                                             .is_none(),
                                         "Vertex buffer already exists"
                                     );
+                                    
+                                    let min_arr = accessor.min().unwrap();
+                                    let max_arr = accessor.max().unwrap();
+                                    let min_arr = min_arr.as_array().unwrap();
+                                    let max_arr = max_arr.as_array().unwrap();
+                                    bounding_box = Some(dare_physics::BoundingBox::new(
+                                        glam::Vec3::new(min_arr[0].as_f64().unwrap() as f32, min_arr[1].as_f64().unwrap() as f32, min_arr[2].as_f64().unwrap_or_default() as f32),
+                                        glam::Vec3::new(max_arr[0].as_f64().unwrap() as f32, max_arr[1].as_f64().unwrap() as f32, max_arr[2].as_f64().unwrap_or_default() as f32)
+                                    ));
                                 }
                                 gltf::Semantic::Normals => {
                                     assert!(
@@ -140,23 +151,26 @@ impl AssetManager {
                             }
                         }
 
-                        self.mesh_store.insert(MeshAsset {
+                        (self.mesh_store.insert(MeshAsset {
                             index_buffer: accessors[primitive.indices().unwrap().index()],
                             vertex_buffer: vertex_buffer.unwrap(),
                             normal_buffer: normal_buffer.unwrap(),
                             uv_buffers,
-                        })
+                        }), bounding_box.unwrap())
                     })
-                    .collect::<Vec<MeshHandle>>()
+                    .collect::<Vec<(MeshHandle, dare_physics::BoundingBox)>>()
             })
-            .collect::<Vec<MeshHandle>>();
+            .collect::<Vec<(MeshHandle, dare_physics::BoundingBox)>>();
 
-        tracing::info!("Asset manager detected {} geometeries", accessors.len());
+        tracing::info!("Asset manager detected {} geometries", accessors.len());
         tracing::info!("Asset manager detected {} meshes", meshes.len());
 
-        for (mesh, transform) in meshes_with_transformations {
+        for (mesh_idx, transform) in meshes_with_transformations {
+            
+            let (mesh, bounding_box) = meshes[mesh_idx.index()].clone();
             commands.spawn((
-                meshes[mesh.index()],
+                mesh,
+                bounding_box,
                 dare_physics::Transform::from(transform),
             ));
         }

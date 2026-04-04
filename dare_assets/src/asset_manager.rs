@@ -1,5 +1,4 @@
 use bevy_ecs::prelude::*;
-use futures::SinkExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -37,6 +36,7 @@ pub struct AssetManager {
     ttl: u16,
     geometry_descriptions:
         dare_containers::slot_map::SlotMap<GeometryDescription, GeometryDescriptionHandle>,
+    path_hashing: HashMap<u64, GeometryDescription>,
     pub geometry_runtime:
         HashMap<GeometryDescriptionHandle, std::sync::Arc<crate::geometry::GeometryRuntime>>,
     pub mesh_store: dare_containers::slot_map::SlotMap<MeshAsset, MeshHandle>,
