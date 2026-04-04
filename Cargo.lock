@@ -381,9 +381,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "bevy_ecs"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24637a7c8643cab493f4085cda6bde4895f0e0816699c59006f18819da2ca0b8"
+checksum = "c9cf7a3ee41342dd7b5a5d82e200d0e8efb933169247fce853b4ad633d51e87d"
 dependencies = [
  "arrayvec",
  "bevy_ecs_macros",
@@ -996,7 +996,7 @@ dependencies = [
  "derivative",
  "futures",
  "futures-util",
- "glam 0.32.0",
+ "glam 0.32.1",
  "gpu-allocator",
  "log",
  "petgraph",
@@ -1030,7 +1030,7 @@ dependencies = [
  "dare_window",
  "derivative",
  "futures",
- "glam 0.32.0",
+ "glam 0.32.1",
  "gltf",
  "image",
  "num-traits",
@@ -1055,7 +1055,7 @@ dependencies = [
  "dare_physics",
  "futures",
  "futures-util",
- "glam 0.32.0",
+ "glam 0.32.1",
  "gltf",
  "tracing",
 ]
@@ -1089,7 +1089,7 @@ dependencies = [
  "dare_assets",
  "dare_ecs",
  "dare_physics",
- "glam 0.32.0",
+ "glam 0.32.1",
  "rayon",
  "tokio",
  "tracing",
@@ -1110,7 +1110,7 @@ name = "dare_physics"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
- "glam 0.32.0",
+ "glam 0.32.1",
 ]
 
 [[package]]
@@ -1126,7 +1126,7 @@ dependencies = [
  "dare_physics",
  "dare_util",
  "dare_window",
- "glam 0.32.0",
+ "glam 0.32.1",
  "gltf",
  "tokio",
  "tracing",
@@ -1146,7 +1146,7 @@ name = "dare_window"
 version = "0.1.0"
 dependencies = [
  "dagal",
- "glam 0.32.0",
+ "glam 0.32.1",
 ]
 
 [[package]]
@@ -1590,9 +1590,9 @@ dependencies = [
 
 [[package]]
 name = "glam"
-version = "0.32.0"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34627c5158214743a374170fed714833fdf4e4b0cbcc1ea98417866a4c5d4441"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
 
 [[package]]
 name = "gloo-timers"
@@ -3352,9 +3352,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.49.0"
+version = "1.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
+checksum = "2bd1c4c0fc4a7ab90fc15ef6daaa3ec3b893f004f915f2392557ed23237820cd"
 dependencies = [
  "pin-project-lite",
  "tokio-macros",
@@ -3362,9 +3362,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
+checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
 dependencies = [
  "proc-macro2",
  "quote",

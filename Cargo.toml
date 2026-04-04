@@ -17,9 +17,9 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-tokio = { version = "1.49.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
-glam = "0.32.0"
-bevy_ecs = { version = "0.18.0", features = ["default", "multi_threaded"] }
+tokio = { version = "1.51.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
+glam = "0.32.1"
+bevy_ecs = { version = "0.18.1", features = ["default", "multi_threaded"] }
 futures = "0.3.32"
 futures-util = "0.3.32"
 crossbeam-channel = "0.5.15"
