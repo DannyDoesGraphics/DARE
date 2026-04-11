@@ -5,11 +5,11 @@ mod entity_world_sync;
 
 use std::ops::{Deref, DerefMut};
 
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, query::QueryFilter};
 pub(crate) use entity_world_sync::*;
 
 #[derive(Debug, Clone)]
-enum DeltaChange<T: Streamable> {
+enum DeltaChange<T: Project> {
     Add(Entity, T::Extracted),
     Remove(Entity),
     Changed(Entity, T::Extracted),
@@ -17,8 +17,8 @@ enum DeltaChange<T: Streamable> {
 
 /// Grouping multiple deltas in one packet so we don't spam the channel
 #[derive(Debug)]
-struct DeltaPackets<T: Streamable>(Vec<DeltaChange<T>>);
-impl<T: Streamable> std::ops::Deref for DeltaPackets<T> {
+struct DeltaPackets<T: Project>(Vec<DeltaChange<T>>);
+impl<T: Project> std::ops::Deref for DeltaPackets<T> {
     type Target = Vec<DeltaChange<T>>;
 
     fn deref(&self) -> &Self::Target {
@@ -26,35 +26,35 @@ impl<T: Streamable> std::ops::Deref for DeltaPackets<T> {
     }
 }
 
-impl<T: Streamable> std::ops::DerefMut for DeltaPackets<T> {
+impl<T: Project> std::ops::DerefMut for DeltaPackets<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
-impl<T: Streamable> From<DeltaPackets<T>> for Vec<DeltaChange<T>> {
+impl<T: Project> From<DeltaPackets<T>> for Vec<DeltaChange<T>> {
     fn from(val: DeltaPackets<T>) -> Self {
         val.0
     }
 }
 
 #[derive(Debug, Resource)]
-struct ExtractSend<T: Streamable>(crossbeam_channel::Sender<DeltaPackets<T>>);
-impl<T: Streamable> Deref for ExtractSend<T> {
+struct ExtractSend<T: Project>(crossbeam_channel::Sender<DeltaPackets<T>>);
+impl<T: Project> Deref for ExtractSend<T> {
     type Target = crossbeam_channel::Sender<DeltaPackets<T>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl<T: Streamable> DerefMut for ExtractSend<T> {
+impl<T: Project> DerefMut for ExtractSend<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 #[derive(Debug, Resource)]
-struct ExtractRecv<T: Streamable>(crossbeam_channel::Receiver<DeltaPackets<T>>);
-impl<T: Streamable> Deref for ExtractRecv<T> {
+struct ExtractRecv<T: Project>(crossbeam_channel::Receiver<DeltaPackets<T>>);
+impl<T: Project> Deref for ExtractRecv<T> {
     type Target = crossbeam_channel::Receiver<DeltaPackets<T>>;
 
     fn deref(&self) -> &Self::Target {
@@ -63,33 +63,33 @@ impl<T: Streamable> Deref for ExtractRecv<T> {
 }
 
 #[derive(Debug, Resource)]
-pub struct ExtractPluginRecv<T: Streamable> {
+pub struct ExtractPluginRecv<T: Project> {
     recv: crossbeam_channel::Receiver<DeltaPackets<T>>,
 }
-impl<T: Streamable> AsRef<crossbeam_channel::Receiver<DeltaPackets<T>>> for ExtractPluginRecv<T> {
+impl<T: Project> AsRef<crossbeam_channel::Receiver<DeltaPackets<T>>> for ExtractPluginRecv<T> {
     fn as_ref(&self) -> &crossbeam_channel::Receiver<DeltaPackets<T>> {
         &self.recv
     }
 }
 
 #[derive(Debug, Resource)]
-pub struct ExtractPluginSend<T: Streamable> {
+pub struct ExtractPluginSend<T: Project> {
     send: crossbeam_channel::Sender<DeltaPackets<T>>,
 }
 
-pub fn channel<T: Streamable>() -> (ExtractPluginSend<T>, ExtractPluginRecv<T>) {
+pub fn channel<T: Project>() -> (ExtractPluginSend<T>, ExtractPluginRecv<T>) {
     let (send, recv) = crossbeam_channel::unbounded();
     (ExtractPluginSend { send }, ExtractPluginRecv { recv })
 }
 
-impl<T: Streamable> dare_ecs::Plugin for ExtractPluginSend<T> {
+impl<T: Project> dare_ecs::Plugin for ExtractPluginSend<T> {
     fn build(&self, app: &mut dare_ecs::App) {
         app.world_mut()
             .insert_resource(ExtractSend(self.send.clone()));
 
         app.schedule_scope(|schedule| {
             schedule.add_systems(
-                (|changes: Query<(Entity, Ref<T>)>,
+                (|changes: Query<(Entity, Ref<T>), T::Filter>,
                   mut removed: RemovedComponents<T>,
                   send: Res<ExtractSend<T>>| {
                     let mut deltas: DeltaPackets<T> = DeltaPackets(Vec::new());
@@ -105,7 +105,7 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginSend<T> {
                         }
                     }
 
-                    // Send deltas, ignoring errors (receiver may be dropped in tests)
+                    // Send deltas, ignoring errors
                     let _ = send.send(deltas);
                 })
                 .in_set(dare_ecs::AppStage::Last),
@@ -114,7 +114,7 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginSend<T> {
     }
 }
 
-impl<T: Streamable> dare_ecs::Plugin for ExtractPluginRecv<T> {
+impl<T: Project> dare_ecs::Plugin for ExtractPluginRecv<T> {
     fn build(&self, app: &mut dare_ecs::App) {
         app.add_plugins(EntityWorldSyncPlugin::default());
         app.world_mut()
@@ -166,14 +166,10 @@ impl<T: Streamable> dare_ecs::Plugin for ExtractPluginRecv<T> {
     }
 }
 
-/// Implies a component can be streamed
-pub trait Streamable: Component {
+/// Implies a component can be projected
+pub trait Project: Component {
     type Extracted: Send + std::fmt::Debug;
-
-    /// Determines if components should be sent over using a Snapshot vs Delta format
-    fn should_delta() -> bool {
-        true
-    }
+    type Filter: QueryFilter;
 
     /// Transform component to be sent between worlds for projection
     fn extract(&self) -> Self::Extracted;
@@ -190,8 +186,9 @@ mod test {
     #[derive(Debug, PartialEq, Eq, Copy, Clone, Component)]
     struct TestComponent(u32);
 
-    impl Streamable for TestComponent {
+    impl Project for TestComponent {
         type Extracted = Self;
+        type Filter = ();
 
         fn consume(extract: Self::Extracted) -> Self {
             extract
