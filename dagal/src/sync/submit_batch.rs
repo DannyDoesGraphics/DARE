@@ -25,11 +25,9 @@ impl<'a> SubmitBatch<'a> {
         self.command_infos.push(vk::CommandBufferSubmitInfo {
             s_type: vk::StructureType::SEMAPHORE_SUBMIT_INFO,
             p_next: ptr::null(),
-            command_buffer: unsafe {
-                *command.as_raw()
-            },
+            command_buffer: unsafe { *command.as_raw() },
             device_mask: 0,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         });
         self.idx += 1;
         SubmitBatchCommandHandle(self.idx)
@@ -37,9 +35,9 @@ impl<'a> SubmitBatch<'a> {
 
     pub fn then(
         &mut self,
-        previous: SubmitBatchCommandHandle,
+        _previous: SubmitBatchCommandHandle,
         stage: vk::PipelineStageFlags2,
-        command: &'a crate::command::CommandBufferExecutable,
+        _command: &'a crate::command::CommandBufferExecutable,
     ) -> crate::Result<SubmitBatchCommandHandle> {
         self.semaphores.push(crate::sync::BinarySemaphore::new(
             self.device.clone(),
@@ -53,7 +51,7 @@ impl<'a> SubmitBatch<'a> {
             stage_mask: stage,
             value: 0,
             semaphore: unsafe { *self.semaphores.last().unwrap().as_raw() },
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         });
         self.idx += 1;
         Ok(SubmitBatchCommandHandle(self.idx))

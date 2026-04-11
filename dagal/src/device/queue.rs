@@ -4,7 +4,7 @@ use std::sync::Arc;
 #[cfg(not(feature = "tokio"))]
 use std::sync::{Mutex, MutexGuard};
 
-use crate::traits::{self, AsRaw};
+use crate::traits::AsRaw;
 #[allow(unused_imports)]
 use crate::DagalError;
 use crate::{command::command_buffer::CmdBuffer, prelude as dagal};

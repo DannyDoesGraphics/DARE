@@ -125,7 +125,6 @@ impl winit::application::ApplicationHandler for App {
                             println!("Selected file: {:?}", path);
                         }
                     }
-                    
                 }
 
                 let _ = self

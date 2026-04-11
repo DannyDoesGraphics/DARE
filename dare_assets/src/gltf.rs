@@ -114,21 +114,28 @@ impl AssetManager {
                         for (semantic, accessor) in primitive.attributes() {
                             match semantic {
                                 gltf::Semantic::Positions => {
-                                    
                                     assert!(
                                         vertex_buffer
                                             .replace(accessors[accessor.index()])
                                             .is_none(),
                                         "Vertex buffer already exists"
                                     );
-                                    
+
                                     let min_arr = accessor.min().unwrap();
                                     let max_arr = accessor.max().unwrap();
                                     let min_arr = min_arr.as_array().unwrap();
                                     let max_arr = max_arr.as_array().unwrap();
                                     bounding_box = Some(dare_physics::BoundingBox::new(
-                                        glam::Vec3::new(min_arr[0].as_f64().unwrap() as f32, min_arr[1].as_f64().unwrap() as f32, min_arr[2].as_f64().unwrap_or_default() as f32),
-                                        glam::Vec3::new(max_arr[0].as_f64().unwrap() as f32, max_arr[1].as_f64().unwrap() as f32, max_arr[2].as_f64().unwrap_or_default() as f32)
+                                        glam::Vec3::new(
+                                            min_arr[0].as_f64().unwrap() as f32,
+                                            min_arr[1].as_f64().unwrap() as f32,
+                                            min_arr[2].as_f64().unwrap_or_default() as f32,
+                                        ),
+                                        glam::Vec3::new(
+                                            max_arr[0].as_f64().unwrap() as f32,
+                                            max_arr[1].as_f64().unwrap() as f32,
+                                            max_arr[2].as_f64().unwrap_or_default() as f32,
+                                        ),
                                     ));
                                 }
                                 gltf::Semantic::Normals => {
@@ -151,12 +158,15 @@ impl AssetManager {
                             }
                         }
 
-                        (self.mesh_store.insert(MeshAsset {
-                            index_buffer: accessors[primitive.indices().unwrap().index()],
-                            vertex_buffer: vertex_buffer.unwrap(),
-                            normal_buffer: normal_buffer.unwrap(),
-                            uv_buffers,
-                        }), bounding_box.unwrap())
+                        (
+                            self.mesh_store.insert(MeshAsset {
+                                index_buffer: accessors[primitive.indices().unwrap().index()],
+                                vertex_buffer: vertex_buffer.unwrap(),
+                                normal_buffer: normal_buffer.unwrap(),
+                                uv_buffers,
+                            }),
+                            bounding_box.unwrap(),
+                        )
                     })
                     .collect::<Vec<(MeshHandle, dare_physics::BoundingBox)>>()
             })
@@ -166,13 +176,8 @@ impl AssetManager {
         tracing::info!("Asset manager detected {} meshes", meshes.len());
 
         for (mesh_idx, transform) in meshes_with_transformations {
-            
             let (mesh, bounding_box) = meshes[mesh_idx.index()].clone();
-            commands.spawn((
-                mesh,
-                bounding_box,
-                dare_physics::Transform::from(transform),
-            ));
+            commands.spawn((mesh, bounding_box, dare_physics::Transform::from(transform)));
         }
     }
 }

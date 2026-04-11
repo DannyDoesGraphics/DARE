@@ -9,12 +9,9 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     pub fn new(min: glam::Vec3, max: glam::Vec3) -> Self {
-        Self {
-            min,
-            max
-        }
+        Self { min, max }
     }
-    
+
     /// Correct the existing bounding box ensuring minimum bounds are minimum and maximum bounds are maximum extents
     pub fn correct(&mut self) {
         let min = self.min;
