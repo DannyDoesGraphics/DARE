@@ -4,5 +4,6 @@
     ],
     "rust-analyzer.rustup.toolchain": "stable-x86_64-pc-windows-msvc",
     "rust-analyzer.cargo.targetDir": "target/rust-analyzer",
-    "rust-analyzer.procMacro.enable": true
+    "rust-analyzer.procMacro.enable": true,
+    "sarif-viewer.connectToGithubCodeScanning": "off"
 }

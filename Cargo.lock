@@ -1088,6 +1088,7 @@ dependencies = [
  "bevy_ecs",
  "dare_assets",
  "dare_ecs",
+ "dare_extract",
  "dare_physics",
  "glam 0.32.1",
  "rayon",
@@ -1110,6 +1111,7 @@ name = "dare_physics"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
+ "dare_extract",
  "glam 0.32.1",
 ]
 
@@ -1123,6 +1125,8 @@ dependencies = [
  "dare_assets",
  "dare_containers",
  "dare_ecs",
+ "dare_engine",
+ "dare_extract",
  "dare_physics",
  "dare_util",
  "dare_window",

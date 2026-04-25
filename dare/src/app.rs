@@ -13,6 +13,7 @@ pub struct App {
     render_server: Option<dare_render::RenderServer>,
     render_client: Option<dare_render::RenderClient>,
     asset_manager_recv: dare_assets::AssetManager,
+    render_projections: Option<dare_render::RenderProjectionPlugins>,
     input_sender: crate::util::event::EventSender<dare_window::input::Input>,
     last_position: Option<glam::Vec2>,
     modifier_state: winit::keyboard::ModifiersState,
@@ -159,6 +160,7 @@ impl App {
         engine_client: dare_engine::EngineClient,
         input_sender: crate::util::event::EventSender<dare_window::input::Input>,
         asset_manager_recv: dare_assets::AssetManager,
+        render_projections: dare_render::RenderProjectionPlugins,
     ) -> Result<Self> {
         loop {
             let paths: Option<Vec<std::path::PathBuf>> = rfd::FileDialog::new()
@@ -187,6 +189,7 @@ impl App {
             render_server: None,
             render_client: None,
             asset_manager_recv,
+            render_projections: Some(render_projections),
             input_sender,
             last_position: None,
             modifier_state: winit::keyboard::ModifiersState::default(),
@@ -210,6 +213,7 @@ impl App {
             &mut self.asset_manager_recv,
             dare_assets::AssetManager::new(16).0,
         );
+        let projections = self.render_projections.take().unwrap_or_default();
         let config = dare_render::RenderServerConfig {
             extent,
             window_handles: handles,
@@ -217,6 +221,7 @@ impl App {
             frames_in_flight: 3,
             transfer_buffer_size: 1024 * 1024 * 64,
             max_transfers: 16,
+            projections,
         };
         let (server, client) = dare_render::RenderServer::new(config);
         self.render_server = Some(server);

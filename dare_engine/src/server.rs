@@ -29,6 +29,15 @@ impl EngineClient {
 
 pub struct EngineServerConfig {
     pub assets_send: dare_assets::AssetManager,
+    pub projections: EngineProjectionPlugins,
+}
+
+#[derive(Debug, Default)]
+pub struct EngineProjectionPlugins {
+    pub send_mesh_handle: Option<dare_extract::ExtractPluginSend<dare_assets::MeshHandle>>,
+    pub send_transform: Option<dare_extract::ExtractPluginSend<dare_physics::Transform>>,
+    pub send_bounding_box: Option<dare_extract::ExtractPluginSend<dare_physics::BoundingBox>>,
+    pub send_camera: Option<dare_extract::ExtractPluginSend<crate::components::Camera>>,
 }
 
 #[derive(Debug)]
@@ -42,6 +51,18 @@ impl EngineServer {
         let (server_send, server_recv) = std::sync::mpsc::channel::<EngineCommand>();
         let mut app = dare_ecs::App::new();
         app.world_mut().insert_resource(config.assets_send);
+        if let Some(p) = config.projections.send_mesh_handle {
+            app.add_plugins(p);
+        }
+        if let Some(p) = config.projections.send_transform {
+            app.add_plugins(p);
+        }
+        if let Some(p) = config.projections.send_bounding_box {
+            app.add_plugins(p);
+        }
+        if let Some(p) = config.projections.send_camera {
+            app.add_plugins(p);
+        }
         app.schedule_scope(|schedule| {
             schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
         });

@@ -50,3 +50,17 @@ impl BoundingBox {
         ]
     }
 }
+
+impl dare_extract::Project for BoundingBox {
+    type Extracted = (glam::Vec3, glam::Vec3);
+    type Filter = ();
+
+    fn extract(&self) -> Self::Extracted {
+        (self.min, self.max)
+    }
+
+    fn consume(extract: Self::Extracted) -> Self {
+        let (min, max) = extract;
+        Self { min, max }
+    }
+}

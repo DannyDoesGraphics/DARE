@@ -3,7 +3,6 @@ use crate::bootstrap::app_info::AppSettings;
 use crate::traits::AsRaw;
 use ash::vk;
 use gpu_allocator::vulkan::AllocatorCreateDesc;
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void, CString};
 use std::ptr;
@@ -42,7 +41,7 @@ impl ContextInit for Context {
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         let application_name: CString = CString::new(settings.name.clone())?;
         let engine_name: CString = CString::new(settings.engine_name.clone())?;
-        let application_info = unsafe {
+        let application_info =
             vk::ApplicationInfo {
                 s_type: vk::StructureType::APPLICATION_INFO,
                 p_next: ptr::null(),
@@ -57,8 +56,7 @@ impl ContextInit for Context {
                     settings.api_version.3,
                 ),
                 _marker: Default::default(),
-            }
-        };
+            };
         let mut layers: Vec<CString> = Vec::new();
         if settings.enable_validation {
             layers.push(CString::new("VK_LAYER_KHRONOS_validation")?);

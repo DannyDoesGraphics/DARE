@@ -25,14 +25,34 @@ fn main() {
     let _client = tracy_client::Client::start();
     let (input_send, _input_recv) = util::event::event_send::<dare_window::input::Input>();
     let (asset_manager_send, asset_manager_recv) = dare_assets::AssetManager::new(16);
-    let (_re_mesh_send, _re_mesh_recv) = dare_extract::channel::<dare_assets::MeshHandle>();
+    let (re_mesh_send, re_mesh_recv) = dare_extract::channel::<dare_assets::MeshHandle>();
+    let (re_transform_send, re_transform_recv) = dare_extract::channel::<dare_physics::Transform>();
+    let (re_bb_send, re_bb_recv) = dare_extract::channel::<dare_physics::BoundingBox>();
+    let (re_camera_send, re_camera_recv) = dare_extract::channel::<dare_engine::Camera>();
 
     let (_engine_server, engine_client) =
         dare_engine::EngineServer::new(dare_engine::EngineServerConfig {
             assets_send: asset_manager_send,
+            projections: dare_engine::EngineProjectionPlugins {
+                send_mesh_handle: Some(re_mesh_send),
+                send_transform: Some(re_transform_send),
+                send_bounding_box: Some(re_bb_send),
+                send_camera: Some(re_camera_send),
+            },
         })
         .unwrap();
-    let mut app = app::App::new(engine_client, input_send, asset_manager_recv).unwrap();
+    let mut app = app::App::new(
+        engine_client,
+        input_send,
+        asset_manager_recv,
+        dare_render::RenderProjectionPlugins {
+            recv_mesh_handle: Some(re_mesh_recv),
+            recv_transform: Some(re_transform_recv),
+            recv_bounding_box: Some(re_bb_recv),
+            recv_camera: Some(re_camera_recv),
+        },
+    )
+    .unwrap();
     let event_loop = winit::event_loop::EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     event_loop.run_app(&mut app).unwrap();

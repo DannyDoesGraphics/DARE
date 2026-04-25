@@ -19,3 +19,5 @@ dare_assets = { path = "../dare_assets" }
 dare_ecs = { path = "../dare_ecs" }
 tracy-client = { workspace = true }
 dare_util = { path = "../dare_util" }
+dare_extract = { path = "../dare_extract" }
+dare_engine = { path = "../dare_engine" }

@@ -24,6 +24,15 @@ pub struct RenderServerConfig {
     pub frames_in_flight: usize,
     pub transfer_buffer_size: u64,
     pub max_transfers: u64,
+    pub projections: RenderProjectionPlugins,
+}
+
+#[derive(Debug, Default)]
+pub struct RenderProjectionPlugins {
+    pub recv_mesh_handle: Option<dare_extract::ExtractPluginRecv<dare_assets::MeshHandle>>,
+    pub recv_transform: Option<dare_extract::ExtractPluginRecv<dare_physics::Transform>>,
+    pub recv_bounding_box: Option<dare_extract::ExtractPluginRecv<dare_physics::BoundingBox>>,
+    pub recv_camera: Option<dare_extract::ExtractPluginRecv<dare_engine::Camera>>,
 }
 
 /// Handle to render server thread.
@@ -93,6 +102,7 @@ impl RenderServer {
         let (command_sender, command_receiver) = std::sync::mpsc::channel::<RenderServerCommand>();
         let window_handles = config.window_handles;
         let extent = config.extent;
+        let projections = config.projections;
         let thread = std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -103,6 +113,18 @@ impl RenderServer {
             app.world_mut().insert_resource(timer::Timer {
                 last_recorded: None,
             });
+            if let Some(p) = projections.recv_mesh_handle {
+                app.add_plugins(p);
+            }
+            if let Some(p) = projections.recv_transform {
+                app.add_plugins(p);
+            }
+            if let Some(p) = projections.recv_bounding_box {
+                app.add_plugins(p);
+            }
+            if let Some(p) = projections.recv_camera {
+                app.add_plugins(p);
+            }
 
             // Core context
             let (core_context, surface): (contexts::CoreContext, dagal::wsi::SurfaceQueried) =
