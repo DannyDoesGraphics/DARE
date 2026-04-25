@@ -1,6 +1,5 @@
 use crate::device::physical_device::PhysicalDevice;
 use crate::device::QueueInfo;
-use crate::resource::traits::Resource;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
@@ -56,9 +55,7 @@ impl Destructible for LogicalDeviceInner {
 #[cfg(feature = "raii")]
 impl Drop for LogicalDeviceInner {
     fn drop(&mut self) {
-        unsafe {
-            self.destroy();
-        }
+        self.destroy();
     }
 }
 

@@ -3,7 +3,6 @@ use std::ptr;
 use ash::vk;
 
 use crate::command::command_buffer::CmdBuffer;
-use crate::resource::traits::Resource;
 use crate::traits::AsRaw;
 
 /// Contains the dynamic render context which contains references to the original command buffer

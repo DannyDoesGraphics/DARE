@@ -20,6 +20,7 @@ pub use raw_window_handle;
     not(feature = "futures"),
     not(feature = "async-std")
 ))]
+#[allow(non_camel_case_types)]
 pub(crate) type DEFAULT_LOCKABLE<T> = tokio::sync::Mutex<T>;
 
 #[cfg(all(

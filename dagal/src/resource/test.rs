@@ -5,6 +5,7 @@ use crate::traits::AsRaw;
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
+#[allow(unused)]
 pub struct TestResource {
     id: u64,
 }

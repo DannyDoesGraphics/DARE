@@ -41,22 +41,21 @@ impl ContextInit for Context {
     fn init(settings: AppSettings) -> anyhow::Result<Self::Output<GPUAllocatorImpl>> {
         let application_name: CString = CString::new(settings.name.clone())?;
         let engine_name: CString = CString::new(settings.engine_name.clone())?;
-        let application_info =
-            vk::ApplicationInfo {
-                s_type: vk::StructureType::APPLICATION_INFO,
-                p_next: ptr::null(),
-                p_application_name: application_name.as_ptr(),
-                application_version: settings.version,
-                p_engine_name: engine_name.as_ptr(),
-                engine_version: settings.engine_version,
-                api_version: vk::make_api_version(
-                    settings.api_version.0,
-                    settings.api_version.1,
-                    settings.api_version.2,
-                    settings.api_version.3,
-                ),
-                _marker: Default::default(),
-            };
+        let application_info = vk::ApplicationInfo {
+            s_type: vk::StructureType::APPLICATION_INFO,
+            p_next: ptr::null(),
+            p_application_name: application_name.as_ptr(),
+            application_version: settings.version,
+            p_engine_name: engine_name.as_ptr(),
+            engine_version: settings.engine_version,
+            api_version: vk::make_api_version(
+                settings.api_version.0,
+                settings.api_version.1,
+                settings.api_version.2,
+                settings.api_version.3,
+            ),
+            _marker: Default::default(),
+        };
         let mut layers: Vec<CString> = Vec::new();
         if settings.enable_validation {
             layers.push(CString::new("VK_LAYER_KHRONOS_validation")?);
@@ -81,7 +80,7 @@ impl ContextInit for Context {
 
         let layers_ptr: Vec<*const c_char> = layers.iter().map(|s| s.as_ptr()).collect();
         let extensions_ptr: Vec<*const c_char> = extensions.iter().map(|s| s.as_ptr()).collect();
-        let instance = unsafe {
+        let instance =
             crate::core::Instance::new(vk::InstanceCreateInfo {
                 s_type: vk::StructureType::INSTANCE_CREATE_INFO,
                 p_next: ptr::null(),
@@ -92,8 +91,7 @@ impl ContextInit for Context {
                 enabled_extension_count: extensions_ptr.len() as u32,
                 pp_enabled_extension_names: extensions_ptr.as_ptr(),
                 _marker: Default::default(),
-            })?
-        };
+            })?;
         let surface: Option<crate::wsi::Surface> =
             if let (Some(display_handle), Some(window_handle)) =
                 (settings.raw_display_handle, settings.raw_window_handle)
@@ -169,6 +167,7 @@ impl ContextInit for Context {
         }
         .into_values()
         .collect::<Vec<vk::DeviceQueueCreateInfo>>();
+        #[allow(deprecated)]
         let logical_device =
             crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
                 instance: instance.get_instance(),

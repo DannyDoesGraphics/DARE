@@ -33,7 +33,8 @@ pub trait SyncLockable: Lockable + TryLockable {
 }
 
 pub trait AsyncLockable: Lockable + TryLockable {
-    async fn lock<'a>(&'a self) -> Result<Self::Lock<'a>>;
+    
+    fn lock<'a>(&'a self) -> impl std::future::Future<Output = Result<Self::Lock<'a>>>;
 
     fn blocking_lock(&self) -> Result<Self::Lock<'_>>;
 }

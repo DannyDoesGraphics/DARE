@@ -7,7 +7,7 @@ use std::sync::{Mutex, MutexGuard};
 use crate::traits::AsRaw;
 #[allow(unused_imports)]
 use crate::DagalError;
-use crate::{command::command_buffer::CmdBuffer, prelude as dagal};
+use crate::{prelude as dagal};
 #[allow(unused_imports)]
 use anyhow::Result;
 use ash::vk::{self};

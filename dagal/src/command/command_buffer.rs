@@ -152,11 +152,6 @@ pub struct CommandBufferRecording {
 }
 
 impl CommandBufferRecording {
-    /// Create a new [`CommandBufferRecording`] from VkObjects. For internal use only.
-    pub(crate) fn from_vk(handle: vk::CommandBuffer, device: crate::device::LogicalDevice) -> Self {
-        Self { handle, device }
-    }
-
     /// Ends recording into the command buffer
     pub fn end(self) -> Result<CommandBufferExecutable> {
         unsafe { self.device.get_handle().end_command_buffer(self.handle)? }
@@ -188,13 +183,6 @@ pub struct CommandBufferExecutable {
 }
 
 impl CommandBufferExecutable {
-    unsafe fn clone(&self) -> Self {
-        Self {
-            handle: self.handle,
-            device: self.device.clone(),
-        }
-    }
-
     /// Quickly acquire a [`VkCommandBufferSubmitInfo`](vk::CommandBufferSubmitInfo) for
     /// a single [`VkCommandBuffer`](vk::CommandBuffer).
     pub fn submit_info(&self) -> vk::CommandBufferSubmitInfo<'static> {

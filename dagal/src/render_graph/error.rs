@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error, Copy, Clone, PartialEq, Eq, Hash)]
+#[allow(unused)]
 pub enum DagalRenderGraphError {
     #[error("Mismatch between requested resource kind and physical resource kind")]
     MismatchResourceKind,

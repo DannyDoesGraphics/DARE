@@ -62,16 +62,6 @@ impl Semaphore {
                 .get_semaphore_counter_value(self.0.handle)
         }?)
     }
-
-    /// AsRef the timeline semaphore as a binary one
-    pub(crate) fn as_binary_semaphore(&self) -> &super::BinarySemaphore {
-        &self.0
-    }
-
-    /// AsMut the timeline semaphore as a binary one
-    pub(crate) fn mut_binary_semaphore(&mut self) -> &mut super::BinarySemaphore {
-        &mut self.0
-    }
 }
 
 impl Destructible for Semaphore {

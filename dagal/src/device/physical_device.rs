@@ -84,6 +84,7 @@ impl PhysicalDevice {
     ) -> anyhow::Result<Self> {
         use std::ffi::c_void;
 
+        #[allow(unused)]
         struct PhysicalDeviceInfo<'a> {
             physical_device: vk::PhysicalDevice,
             properties_1_3: vk::PhysicalDeviceVulkan13Properties<'a>,

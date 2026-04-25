@@ -92,6 +92,12 @@ impl<'a> InstanceBuilder<'a> {
         let mut app_information = self.application_info;
         app_information.s_type = vk::StructureType::APPLICATION_INFO;
         app_information.p_next = ptr::null();
+        app_information.api_version = vk::make_api_version(
+            0,
+            self.vulkan_version.0,
+            self.vulkan_version.1,
+            self.vulkan_version.2,
+        );
         instance_ci.p_application_info = &app_information;
 
         if self.validate {
@@ -120,14 +126,6 @@ impl<'a> InstanceBuilder<'a> {
         let layer_cptrs: Vec<*const c_char> =
             layer_cstring.iter().map(|name| name.as_ptr()).collect();
         instance_ci.pp_enabled_layer_names = layer_cptrs.as_ptr();
-
-        app_information.api_version = vk::make_api_version(
-            0,
-            self.vulkan_version.0,
-            self.vulkan_version.1,
-            self.vulkan_version.2,
-        );
-
         crate::core::Instance::new(instance_ci)
     }
 }

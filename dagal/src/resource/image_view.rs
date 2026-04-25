@@ -1,4 +1,3 @@
-use crate::allocators::Allocator;
 use crate::resource::traits::{Nameable, Resource};
 use crate::traits::{AsRaw, Destructible};
 use anyhow::Result;

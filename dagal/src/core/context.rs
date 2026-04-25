@@ -1,6 +1,6 @@
 use std::sync::Arc;
-
 /// Contains a dagal context mainly used by the render graph
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Context {
     pub instance: Arc<crate::core::Instance>,
