@@ -12,7 +12,7 @@ use ash::vk;
 use crate::traits::AsRaw;
 
 /// Defines a command buffer in the failed state
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CommandBufferInvalid {
     handle: vk::CommandBuffer,
     device: crate::device::LogicalDevice,
@@ -74,7 +74,7 @@ impl AsRaw for CommandBufferInvalid {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CommandBuffer {
     handle: vk::CommandBuffer,
     device: crate::device::LogicalDevice,
@@ -164,14 +164,6 @@ impl CommandBufferRecording {
     /// Acquire a dynamic rendering context from the current [`CommandBufferRecording`]
     pub fn dynamic_rendering(&self) -> crate::command::DynamicRenderContext<'_> {
         crate::command::DynamicRenderContext::from_vk(self)
-    }
-
-    /// SAFETY: You should never be cloning command buffers around, but this is done to help with utility internally
-    pub unsafe fn clone(&self) -> Self {
-        Self {
-            handle: self.handle,
-            device: self.device.clone(),
-        }
     }
 }
 
@@ -450,7 +442,6 @@ impl CommandBufferState {
                 Ok(())
             }
             CommandBufferState::Executable(cmd) => {
-                // Move out of executable state and reset
                 let cmd_buf = CommandBuffer {
                     handle: unsafe { *cmd.as_raw() },
                     device: cmd.get_device().clone(),
@@ -462,8 +453,10 @@ impl CommandBufferState {
                 Ok(())
             }
             CommandBufferState::Invalid(invalid) => {
-                // Try to reset from invalid state
-                match invalid.clone().reset(flags) {
+                let handle = unsafe { *invalid.as_raw() };
+                let device = invalid.get_device().clone();
+                let reason = invalid.error();
+                match CommandBufferInvalid::new(handle, device, reason).reset(flags) {
                     Ok(cmd_buf) => {
                         *self = CommandBufferState::Ready(cmd_buf);
                         Ok(())
@@ -475,7 +468,7 @@ impl CommandBufferState {
     }
 
     pub fn begin(&mut self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
-        *self = Self::from(match self {
+        let next = match self {
             CommandBufferState::Recording(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Ready, got Recording"
@@ -492,27 +485,36 @@ impl CommandBufferState {
                     invalid.error()
                 ))
             }
-            CommandBufferState::Ready(cmd) => match cmd.clone().begin(flags) {
-                Ok(recording) => Ok::<CommandBufferRecording, anyhow::Error>(recording),
-                Err(invalid) => {
-                    *self = Self::Invalid(invalid);
-                    return Err(anyhow::anyhow!(
-                        "Failed to begin command buffer: {}",
-                        self.get_error().unwrap()
-                    ));
+            CommandBufferState::Ready(cmd) => {
+                let handle = unsafe { *cmd.as_raw() };
+                let device = cmd.get_device().clone();
+                match CommandBuffer::new(handle, device).begin(flags) {
+                    Ok(recording) => CommandBufferState::Recording(recording),
+                    Err(invalid) => CommandBufferState::Invalid(invalid),
                 }
-            },
-        }?);
+            }
+        };
+        if matches!(&next, CommandBufferState::Invalid(_)) {
+            *self = next;
+            return Err(anyhow::anyhow!(
+                "Failed to begin command buffer: {}",
+                self.get_error().unwrap()
+            ));
+        }
+        *self = next;
         Ok(())
     }
 
-    // Recording
     pub fn end(&mut self) -> Result<()> {
-        *self = Self::from(match self {
-            CommandBufferState::Recording(r) => match unsafe { r.clone().end() } {
-                Ok(executable) => Ok::<CommandBufferExecutable, anyhow::Error>(executable),
-                Err(e) => return Err(e),
-            },
+        let next = match self {
+            CommandBufferState::Recording(r) => {
+                let handle = unsafe { *r.as_raw() };
+                let device = r.get_device().clone();
+                match (CommandBufferRecording { handle, device }).end() {
+                    Ok(executable) => CommandBufferState::Executable(executable),
+                    Err(e) => return Err(e),
+                }
+            }
             CommandBufferState::Executable(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Recording, got Executable"
@@ -529,7 +531,8 @@ impl CommandBufferState {
                     invalid.error()
                 ))
             }
-        }?);
+        };
+        *self = next;
         Ok(())
     }
 }

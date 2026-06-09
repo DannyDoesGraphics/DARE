@@ -7,28 +7,32 @@ authors = ["Danny Le <git@dannydoes.graphics>"]
 [dependencies]
 ash = "0.38.0"
 ash-window = { version = "0.13.0", optional = false }
-gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", version = "0.27.0", features = ["default", "vulkan"], optional = true }
-winit = { version = "0.30.5", optional = true }
+gpu-allocator = { git = "https://github.com/Traverse-Research/gpu-allocator.git", version = "0.28.0", features = [
+  "default",
+  "vulkan",
+], optional = true }
+winit = { version = "0.30.13", features = ["rwh_06"], optional = true }
 raw-window-handle = { version = "0.6.2", optional = false }
-vk-mem = { version = "0.4.0", optional = true }
-tokio = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
-futures-util = { workspace = true }
-async-std = { version = "1.13.0", optional = true }
+vk-mem = { version = "0.5.0", optional = true }
 derivative = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 petgraph = "0.8.2"
-shaderc = { version = "0.9.1", optional = true }
+shaderc = { version = "0.10.1", optional = true }
 glam = { workspace = true }
-log = "0.4.22"
+log = "0.4.30"
 
-[dev-dependencies]
-winit = { version = "0.30.0", optional = false }
 
 [features]
-default = ["bootstrap", "winit", "gpu-allocator", "vk-mem-rs", "shaderc", "raii"]
+default = [
+  "bootstrap",
+  "winit",
+  "gpu-allocator",
+  "vk-mem-rs",
+  "shaderc",
+  "raii",
+]
 # Adds support for window into dagal
 winit = ["dep:winit"]
 # Adds support for gpu-allocator for the primary allocation
@@ -45,8 +49,3 @@ shaderc = ["dep:shaderc"]
 bootstrap = []
 # Whether resources should be automatically cleaned up
 raii = []
-# Enables concurrency features
-concurrent = []
-tokio = ["dep:tokio", "concurrent"]
-futures = ["dep:futures", "concurrent"]
-async-std = ["dep:async-std", "concurrent"]

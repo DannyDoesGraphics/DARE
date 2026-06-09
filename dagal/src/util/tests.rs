@@ -23,13 +23,11 @@ pub struct TestSettings {
     pub logical_device_extensions: Vec<CString>,
 }
 
-pub struct TestVulkan<
-    M: dagal::concurrency::Lockable<Target = vk::Queue> = dagal::DEFAULT_LOCKABLE<vk::Queue>,
-> {
+pub struct TestVulkan {
     pub device: Option<crate::device::LogicalDevice>,
     pub debug_messenger: Option<crate::device::DebugMessenger>,
     pub physical_device: Option<crate::device::PhysicalDevice>,
-    pub queue_allocator: Option<crate::util::queue_allocator::QueueAllocator<M>>,
+    pub queue_registry: Option<crate::device::QueueRegistry>,
     pub instance: crate::core::Instance,
 }
 
@@ -76,7 +74,7 @@ pub fn create_vulkan(settings: TestSettings) -> TestVulkan {
         device: None,
         debug_messenger: Some(debug_messenger),
         physical_device: None,
-        queue_allocator: None,
+        queue_registry: None,
         instance,
     }
 }
@@ -102,12 +100,12 @@ pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
         .build(test_vulkan.instance.get_instance())
         .unwrap();
 
-    let queue_allocator = dagal::util::QueueAllocator::from(queues);
+    let queue_registry = crate::device::QueueRegistry::from_queues(queues).unwrap();
     TestVulkan {
         device: Some(logical_device),
         debug_messenger: test_vulkan.debug_messenger,
         physical_device: Some(physical_device),
-        queue_allocator: Some(queue_allocator),
+        queue_registry: Some(queue_registry),
         instance: test_vulkan.instance,
     }
 }

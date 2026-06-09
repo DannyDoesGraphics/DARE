@@ -12,9 +12,6 @@ pub enum DagalError {
     #[error("It is impossible to create requested queue")]
     ImpossibleQueue,
 
-    #[error("Unable to acquire queue; all candidates are busy")]
-    QueueBusy,
-
     #[error("No suitable physical device has been found")]
     NoPhysicalDevice,
 
@@ -65,9 +62,6 @@ pub enum DagalError {
 
     #[error(transparent)]
     VkError(#[from] vk::Result),
-
-    #[error(transparent)]
-    Concurrency(#[from] crate::concurrency::lockable::TryLockError),
 }
 
 impl<T> From<PoisonError<T>> for DagalError {

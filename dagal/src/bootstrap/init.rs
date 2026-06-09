@@ -80,18 +80,17 @@ impl ContextInit for Context {
 
         let layers_ptr: Vec<*const c_char> = layers.iter().map(|s| s.as_ptr()).collect();
         let extensions_ptr: Vec<*const c_char> = extensions.iter().map(|s| s.as_ptr()).collect();
-        let instance =
-            crate::core::Instance::new(vk::InstanceCreateInfo {
-                s_type: vk::StructureType::INSTANCE_CREATE_INFO,
-                p_next: ptr::null(),
-                flags: vk::InstanceCreateFlags::empty(),
-                p_application_info: &application_info,
-                enabled_layer_count: layers_ptr.len() as u32,
-                pp_enabled_layer_names: layers_ptr.as_ptr(),
-                enabled_extension_count: extensions_ptr.len() as u32,
-                pp_enabled_extension_names: extensions_ptr.as_ptr(),
-                _marker: Default::default(),
-            })?;
+        let instance = crate::core::Instance::new(vk::InstanceCreateInfo {
+            s_type: vk::StructureType::INSTANCE_CREATE_INFO,
+            p_next: ptr::null(),
+            flags: vk::InstanceCreateFlags::empty(),
+            p_application_info: &application_info,
+            enabled_layer_count: layers_ptr.len() as u32,
+            pp_enabled_layer_names: layers_ptr.as_ptr(),
+            enabled_extension_count: extensions_ptr.len() as u32,
+            pp_enabled_extension_names: extensions_ptr.as_ptr(),
+            _marker: Default::default(),
+        })?;
         let surface: Option<crate::wsi::Surface> =
             if let (Some(display_handle), Some(window_handle)) =
                 (settings.raw_display_handle, settings.raw_window_handle)

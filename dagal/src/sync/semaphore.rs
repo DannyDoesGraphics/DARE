@@ -33,7 +33,7 @@ impl Semaphore {
         #[cfg(feature = "log-lifetimes")]
         tracing::trace!("Creating VkSemaphore {:p}", handle);
 
-        Ok(Self(super::BinarySemaphore { device, handle }))
+        Ok(Self(super::BinarySemaphore::from_handle(device, handle)))
     }
 
     /// Signal a semaphore to a given value
@@ -67,7 +67,7 @@ impl Semaphore {
 impl Destructible for Semaphore {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkSemaphore {:p}", self.handle);
+        tracing::trace!("Destroying VkSemaphore {:p}", self.0.handle);
         unsafe {
             self.0
                 .device

@@ -209,7 +209,7 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 let queue_flags: vk::QueueFlags = queue_request.family_flags;
                 let dedicated: bool = queue_request.dedicated;
                 queues.push(unsafe {
-                    device.get_queue::<crate::concurrency::DEFAULT_LOCKABLE<vk::Queue>>(
+                    device.get_queue(
                         &vk::DeviceQueueInfo2 {
                             s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
                             p_next: ptr::null(),

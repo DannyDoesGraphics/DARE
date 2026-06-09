@@ -1,15 +1,8 @@
 use std::ptr;
-use std::task::{Context, Poll};
-use std::{future::Future, sync::Arc};
-use std::{
-    pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
-};
 
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
-use futures_util::task::AtomicWaker;
 
 use crate::traits::{AsRaw, Destructible};
 
@@ -19,7 +12,7 @@ pub struct Fence {
     handle: vk::Fence,
     device: crate::device::LogicalDevice,
 }
-impl Unpin for Fence {}
+
 impl Fence {
     pub fn new(
         device: crate::device::LogicalDevice,
@@ -94,18 +87,6 @@ impl Fence {
     pub fn get_fence_status(&self) -> Result<bool, crate::DagalError> {
         unsafe { Ok(self.device.get_handle().get_fence_status(self.handle)?) }
     }
-
-    /// Get a struct which can await on a fence
-    pub fn fence_await<'a>(&'a self) -> FenceWait<'a> {
-        FenceWait {
-            fence: self,
-            spawned: AtomicBool::new(false),
-            state: Arc::new(WaitState {
-                done: AtomicBool::new(false),
-                waker: AtomicWaker::new(),
-            }),
-        }
-    }
 }
 
 impl Destructible for Fence {
@@ -139,61 +120,5 @@ impl AsRaw for Fence {
 impl Drop for Fence {
     fn drop(&mut self) {
         self.destroy();
-    }
-}
-
-struct WaitState {
-    done: AtomicBool,
-    waker: AtomicWaker,
-}
-
-/// Defines a struct which awaits on a fence
-pub struct FenceWait<'a> {
-    pub fence: &'a Fence,
-    state: Arc<WaitState>,
-    spawned: AtomicBool,
-}
-impl<'a> FenceWait<'a> {
-    fn spawn_once(&self) {
-        if self
-            .spawned
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-        {
-            let device = self.fence.device.clone();
-            let handle = self.fence.handle;
-            let state = self.state.clone();
-            std::thread::spawn(move || {
-                let _ = unsafe {
-                    device
-                        .get_handle()
-                        .wait_for_fences(&[handle], true, u64::MAX)
-                };
-                state.done.store(true, Ordering::SeqCst);
-                state.waker.wake();
-            });
-        }
-    }
-}
-
-impl<'a> Future for FenceWait<'a> {
-    type Output = Result<(), crate::DagalError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.state.done.load(Ordering::SeqCst) {
-            match unsafe {
-                self.fence
-                    .device
-                    .get_handle()
-                    .get_fence_status(self.fence.handle)
-            } {
-                Ok(true) => return Poll::Ready(Ok(())),
-                Err(e) => return Poll::Ready(Err(crate::DagalError::VkError(e))),
-                _ => {}
-            }
-        }
-        self.state.waker.register(cx.waker());
-        self.spawn_once();
-        Poll::Pending
     }
 }

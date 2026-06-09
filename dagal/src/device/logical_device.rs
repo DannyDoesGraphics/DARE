@@ -168,15 +168,15 @@ impl LogicalDevice {
     ///
     /// # Safety
     /// Queues created here do not guarantee thread safety whatsoever with other queues
-    pub unsafe fn get_queue<M: crate::concurrency::lockable::Lockable<Target = vk::Queue>>(
+    pub unsafe fn get_queue(
         &self,
         queue_info: &vk::DeviceQueueInfo2,
         queue_flags: vk::QueueFlags,
         strict: bool,
         can_present: bool,
-    ) -> crate::device::Queue<M> {
+    ) -> crate::device::Queue {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
-        crate::device::Queue::<M>::new(
+        crate::device::Queue::new(
             self.clone(),
             queue,
             QueueInfo {

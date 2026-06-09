@@ -2,12 +2,10 @@ use std::ffi::{c_char, CStr, CString};
 
 pub use align::*;
 pub use free_list_allocator::FreeList;
-pub use queue_allocator::QueueAllocator;
 
 pub mod align;
 pub mod format;
 pub mod free_list_allocator;
-pub mod queue_allocator;
 pub mod tests;
 
 pub fn convert_raw_c_ptrs_to_cstring(raw_pointers: &'static [*const c_char]) -> Vec<CString> {

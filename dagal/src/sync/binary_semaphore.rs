@@ -33,6 +33,10 @@ impl BinarySemaphore {
         Ok(Self { handle, device })
     }
 
+    pub(super) fn from_handle(device: crate::device::LogicalDevice, handle: vk::Semaphore) -> Self {
+        Self { handle, device }
+    }
+
     pub fn get_handle(&self) -> &vk::Semaphore {
         &self.handle
     }
