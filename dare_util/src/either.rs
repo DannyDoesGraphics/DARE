@@ -95,9 +95,6 @@ impl<A, B> Either<A, B> {
     }
 
     pub fn is_left(&self) -> bool {
-        match self {
-            Self::Left(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Left(_))
     }
 }

@@ -1,14 +1,10 @@
-use std::ptr;
-
-use dagal::allocators::{Allocator, GPUAllocatorImpl};
+use dagal::allocators::GPUAllocatorImpl;
 
 use dare_window::WindowHandles;
 
-/// Contains core rendering context information
-#[derive(Debug, bevy_ecs::resource::Resource)]
+#[derive(Debug)]
 pub struct CoreContext {
-    pub present_queue: dagal::device::Queue,
-    pub queue_allocator: dagal::util::queue_allocator::QueueAllocator,
+    pub queues: dagal::device::QueueRegistry,
     pub allocator: GPUAllocatorImpl,
     pub device: dagal::device::LogicalDevice,
     pub physical_device: dagal::device::PhysicalDevice,
@@ -33,7 +29,7 @@ impl CoreContext {
                 engine_version: 0,
                 api_version: (1, 4, 0, 0),
                 enable_validation: true,
-                debug_utils: cfg!(debug_assertions),
+                debug_utils: false,
                 raw_display_handle: Some(*handles.raw_display_handle),
                 raw_window_handle: Some(*handles.raw_window_handle),
                 surface_format: Some(Expected::Preferred(vk::SurfaceFormatKHR {
@@ -110,54 +106,16 @@ impl CoreContext {
                 },
             })?;
 
-        // Retrieve transfer queues
-        let all_queues = physical_device
-            .get_active_queues()
-            .iter()
-            .map(|queue_info| unsafe {
-                device.get_queue(
-                    &vk::DeviceQueueInfo2 {
-                        s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-                        p_next: ptr::null(),
-                        flags: vk::DeviceQueueCreateFlags::empty(),
-                        queue_family_index: queue_info.family_index,
-                        queue_index: queue_info.index,
-                        _marker: Default::default(),
-                    },
-                    queue_info.queue_flags,
-                    queue_info.strict,
-                    queue_info.can_present,
-                )
-            })
-            .collect::<Vec<dagal::device::Queue>>();
-
-        let (present_queue, remaining_queues) = {
-            let mut present_queue = None;
-            let mut remaining = Vec::new();
-
-            for queue in all_queues {
-                if present_queue.is_none() && queue.can_present() {
-                    present_queue = Some(queue);
-                } else {
-                    remaining.push(queue);
-                }
-            }
-
-            (present_queue.unwrap(), remaining)
-        };
-
-        // Use remaining queues for the allocator (dedicated queues removed)
-        let queue_allocator = dagal::util::queue_allocator::QueueAllocator::from(remaining_queues);
+        let queues = dagal::device::QueueRegistry::from_device(&device, &physical_device)?;
         let surface = surface.unwrap().query_details(physical_device.handle())?;
 
         Ok((
             Self {
-                instance,
-                physical_device,
-                device,
+                queues,
                 allocator,
-                present_queue,
-                queue_allocator,
+                device,
+                physical_device,
+                instance,
             },
             surface,
         ))

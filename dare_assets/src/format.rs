@@ -48,16 +48,12 @@ impl Format {
     }
 
     pub fn signed(&self) -> bool {
-        match self {
-            Format::U8 | Format::U8x3 | Format::U8x4 | Format::U16 | Format::U32 | Format::U64 => {
-                false
-            }
-            _ => true,
-        }
+        !matches!(
+            self,
+            Format::U8 | Format::U8x3 | Format::U8x4 | Format::U16 | Format::U32 | Format::U64
+        )
     }
 }
-
-// ---------- scalar io (unaligned) ----------
 
 #[inline(always)]
 fn read_unaligned<T: Copy>(src: &[u8], off: usize) -> T {

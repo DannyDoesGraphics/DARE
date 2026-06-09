@@ -10,9 +10,7 @@ pub struct SwapchainFrame<A: Allocator> {
 pub struct Frame {
     /// Used by CPU to know when rendering is done
     pub render_fence: dagal::sync::Fence,
-    /// Used to signal when frame has rendered to GPU for presentation
-    pub render_semaphore: dagal::sync::BinarySemaphore,
-    /// Used to signal when image is available for rendering from swapchain
+    /// Signaled when the swapchain image is available for rendering
     pub swapchain_semaphore: dagal::sync::BinarySemaphore,
     pub command_pool: dagal::command::CommandPool,
     pub command_buffer: dagal::command::CommandBuffer,

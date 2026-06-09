@@ -5,7 +5,6 @@ use dagal::ash::vk;
 use dagal::bootstrap::app_info::Expected;
 use dagal::bootstrap::app_info::QueueRequest;
 use dagal::bootstrap::init::ContextInit;
-use dagal::device::queue::QueueGuardExt;
 use dagal::traits::AsRaw;
 
 /// Headless Vulkan instance
@@ -127,8 +126,8 @@ impl TestContext {
     }
 
     /// Get the queue
-    pub fn queue(&self) -> dagal::device::Queue {
-        self.queue.clone()
+    pub fn queue_info(&self) -> dagal::device::QueueInfo {
+        self.queue.get_info()
     }
 
     /// Get the allocator
@@ -136,8 +135,8 @@ impl TestContext {
         self.allocator.clone()
     }
 
-    /// Perform immediate submission of GPU commands and await on their completion
-    pub async fn immediate_submit<
+    /// Perform immediate submission of GPU commands and wait on their completion
+    pub fn immediate_submit<
         F: FnOnce(&Self, &dagal::command::CommandBufferRecording) -> R,
         R,
     >(
@@ -180,12 +179,7 @@ impl TestContext {
             _marker: PhantomData,
         }];
         self.queue
-            .acquire_queue_async()
-            .await
-            .unwrap()
-            .try_submit_async(&self.device, &submit_infos, &fence)
-            .await
-            .unwrap();
+            .submit2_and_wait_fence(&submit_infos, &fence)?;
         Ok(res)
     }
 }
@@ -197,14 +191,14 @@ mod tests {
     use dagal::resource::traits::Resource;
 
     /// Literally test if the context can be created
-    #[tokio::test]
-    async fn test_new() {
+    #[test]
+    fn test_new() {
         let context = TestContext::new().unwrap();
         drop(context);
     }
 
-    #[tokio::test]
-    async fn test_immediate_submit() {
+    #[test]
+    fn test_immediate_submit() {
         let mut context = TestContext::new().unwrap();
 
         // Create a small buffer for testing
@@ -231,7 +225,6 @@ mod tests {
                     pattern,
                 );
             })
-            .await
             .unwrap();
 
         // Read back and verify the data

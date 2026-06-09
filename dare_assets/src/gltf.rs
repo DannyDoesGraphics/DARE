@@ -1,18 +1,20 @@
-use crate::{
-    AssetManager, DataLocation, Format, GeometryDescription, GeometryDescriptionHandle, MeshAsset,
-    MeshHandle,
-};
+use crate::{DataLocation, Format};
 use bevy_ecs::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-impl AssetManager {
+impl crate::Assets<crate::Mesh> {
     /// Loads a glTF file and spawns entities containing `(MeshHandle, dare_physics::Transform)`.
-    pub fn load_gltf(&mut self, commands: &mut Commands, path: &std::path::Path) {
+    pub fn load_gltf(
+        &mut self,
+        commands: &mut Commands,
+        buffers: &mut crate::Assets<crate::Buffer>,
+        path: &std::path::Path,
+    ) {
         let gltf = gltf::Gltf::open(path).expect("Failed to open gltf file");
         let blob: Option<Arc<[u8]>> = gltf.blob.as_ref().map(|b| Arc::from(b.as_slice()));
 
-        let accessors: Vec<GeometryDescriptionHandle> =
+        let accessors: Vec<crate::AssetHandle<crate::Buffer>> =
             gltf.accessors()
                 .map(|accessor| {
                     if accessor.sparse().is_some() {
@@ -22,7 +24,7 @@ impl AssetManager {
                     let buffer_view = accessor.view().expect("Accessor has no buffer view");
                     let buffer = buffer_view.buffer();
 
-                    self.create_geometry(GeometryDescription {
+                    let buffer = crate::Buffer {
                         location: match buffer.source() {
                             gltf::buffer::Source::Bin => DataLocation::Blob(blob.clone().expect(
                                 "No blob data in gltf, but accessor references binary buffer",
@@ -69,7 +71,8 @@ impl AssetManager {
                         offset: buffer_view.offset() as u64 + accessor.offset() as u64,
                         stride: buffer_view.stride().map(|s| s as u64),
                         count: accessor.count() as u64,
-                    })
+                    };
+                    buffers.insert(buffer)
                 })
                 .collect();
 
@@ -86,6 +89,7 @@ impl AssetManager {
                 })
                 .collect();
 
+            // BFS to unravel the transformation tree
             while let Some((node, transform)) = queue.pop_front() {
                 for child in node.children() {
                     let t = glam::Mat4::from_cols_array_2d(&child.transform().matrix());
@@ -105,10 +109,10 @@ impl AssetManager {
             .flat_map(|mesh| {
                 mesh.primitives()
                     .map(|primitive| {
-                        let mut uv_buffers: HashMap<u32, GeometryDescriptionHandle> =
+                        let mut uv_buffers: HashMap<u32, crate::AssetHandle<crate::Buffer>> =
                             HashMap::new();
-                        let mut vertex_buffer: Option<GeometryDescriptionHandle> = None;
-                        let mut normal_buffer: Option<GeometryDescriptionHandle> = None;
+                        let mut vertex_buffer: Option<crate::AssetHandle<crate::Buffer>> = None;
+                        let mut normal_buffer: Option<crate::AssetHandle<crate::Buffer>> = None;
                         let mut bounding_box: Option<dare_physics::BoundingBox> = None;
 
                         for (semantic, accessor) in primitive.attributes() {
@@ -116,7 +120,7 @@ impl AssetManager {
                                 gltf::Semantic::Positions => {
                                     assert!(
                                         vertex_buffer
-                                            .replace(accessors[accessor.index()])
+                                            .replace(accessors[accessor.index()].clone())
                                             .is_none(),
                                         "Vertex buffer already exists"
                                     );
@@ -141,7 +145,7 @@ impl AssetManager {
                                 gltf::Semantic::Normals => {
                                     assert!(
                                         normal_buffer
-                                            .replace(accessors[accessor.index()])
+                                            .replace(accessors[accessor.index()].clone())
                                             .is_none(),
                                         "Normal buffer already exists"
                                     );
@@ -149,7 +153,7 @@ impl AssetManager {
                                 gltf::Semantic::TexCoords(index) => {
                                     assert!(
                                         uv_buffers
-                                            .insert(index, accessors[accessor.index()])
+                                            .insert(index, accessors[accessor.index()].clone())
                                             .is_none(),
                                         "UV buffer already exists"
                                     );
@@ -159,8 +163,9 @@ impl AssetManager {
                         }
 
                         (
-                            self.mesh_store.insert(MeshAsset {
-                                index_buffer: accessors[primitive.indices().unwrap().index()],
+                            self.insert(crate::Mesh {
+                                index_buffer: accessors[primitive.indices().unwrap().index()]
+                                    .clone(),
                                 vertex_buffer: vertex_buffer.unwrap(),
                                 normal_buffer: normal_buffer.unwrap(),
                                 uv_buffers,
@@ -168,12 +173,12 @@ impl AssetManager {
                             bounding_box.unwrap(),
                         )
                     })
-                    .collect::<Vec<(MeshHandle, dare_physics::BoundingBox)>>()
+                    .collect::<Vec<(crate::AssetHandle<crate::Mesh>, dare_physics::BoundingBox)>>()
             })
-            .collect::<Vec<(MeshHandle, dare_physics::BoundingBox)>>();
+            .collect::<Vec<(crate::AssetHandle<crate::Mesh>, dare_physics::BoundingBox)>>();
 
-        tracing::info!("Asset manager detected {} geometries", accessors.len());
-        tracing::info!("Asset manager detected {} meshes", meshes.len());
+        tracing::info!("Loaded {} geometries", accessors.len());
+        tracing::info!("Loaded {} meshes", meshes.len());
 
         for (mesh_idx, transform) in meshes_with_transformations {
             let (mesh, bounding_box) = meshes[mesh_idx.index()].clone();

@@ -1,9 +1,11 @@
 pub mod core;
+pub mod gpu;
 pub mod present;
 pub mod swapchain;
 mod test_context;
 
 pub use core::*;
+pub use gpu::*;
 pub use present::*;
 pub use swapchain::*;
 

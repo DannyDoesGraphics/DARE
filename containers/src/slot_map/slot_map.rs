@@ -86,7 +86,7 @@ impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
         })
     }
 
-    pub fn get_mut(&mut self, slot: S) -> Option<&mut T> {
+    pub fn get_mut(&mut self, slot: &S) -> Option<&mut T> {
         self.slots.get(slot.id() as usize).and_then(|proxy_slot| {
             if proxy_slot.generation() == slot.generation() {
                 self.data
@@ -182,7 +182,7 @@ mod tests {
     fn test_get_mut() {
         let mut slot_map = SlotMap::default();
         let slot: DefaultSlot<i32> = slot_map.insert(42);
-        if let Some(value) = slot_map.get_mut(slot.clone()) {
+        if let Some(value) = slot_map.get_mut(&slot) {
             *value = 100;
         }
         assert_eq!(slot_map.get(slot), Some(&100));

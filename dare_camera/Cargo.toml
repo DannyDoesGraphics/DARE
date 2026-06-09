@@ -1,10 +1,9 @@
 [package]
-name = "dare_physics"
+name = "dare_camera"
 version = "0.1.0"
 edition = "2024"
-authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
 bevy_ecs = { workspace = true }
 glam = { workspace = true }
-
+gltf = { workspace = true }

@@ -5,13 +5,13 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
-anyhow = { workspace = true }
 bevy_ecs = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 dare_assets = { path = "../dare_assets" }
 dare_physics = { path = "../dare_physics" }
 dare_ecs = { path = "../dare_ecs" }
-dare_extract = { path = "../dare_extract" }
+dagal = { path = "../dagal", features = ["winit"] }
+dare_window = { path = "../dare_window" }
+rfd = "0.17.2"
 rayon = "1.11.0"
 glam = { workspace = true }

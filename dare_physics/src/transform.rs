@@ -40,16 +40,3 @@ impl From<glam::Mat4> for Transform {
         }
     }
 }
-
-impl dare_extract::Project for Transform {
-    type Extracted = Self;
-    type Filter = ();
-
-    fn extract(&self) -> Self::Extracted {
-        *self
-    }
-
-    fn consume(extract: Self::Extracted) -> Self {
-        extract
-    }
-}

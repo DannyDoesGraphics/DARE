@@ -1,23 +1,25 @@
+use crate::buffer::Buffer;
 use std::collections::HashMap;
-
-use crate::GeometryDescriptionHandle;
 
 /// Logical description of a mesh made up of multiple geometry slices.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MeshAsset {
-    pub vertex_buffer: GeometryDescriptionHandle,
-    pub normal_buffer: GeometryDescriptionHandle,
-    pub index_buffer: GeometryDescriptionHandle,
-    pub uv_buffers: HashMap<u32, GeometryDescriptionHandle>,
+pub struct Mesh {
+    pub vertex_buffer: crate::AssetHandle<Buffer>,
+    pub normal_buffer: crate::AssetHandle<Buffer>,
+    pub index_buffer: crate::AssetHandle<Buffer>,
+    pub uv_buffers: HashMap<u32, crate::AssetHandle<Buffer>>,
 }
 
-impl std::hash::Hash for MeshAsset {
+impl std::hash::Hash for Mesh {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.vertex_buffer.hash(state);
         self.normal_buffer.hash(state);
         self.index_buffer.hash(state);
-        if let Some(uv0) = self.uv_buffers.get(&0) {
+        // TODO: this is not optimal at all
+        for (index, uv0) in self.uv_buffers.iter() {
+            index.hash(state);
             uv0.hash(state);
         }
     }
 }
+impl crate::Asset for Mesh {}

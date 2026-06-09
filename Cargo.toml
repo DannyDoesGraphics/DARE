@@ -1,24 +1,31 @@
 [workspace]
 members = [
-    "dagal",
-    "dare",
-    "dare_engine",
-    "macros",
-    "containers",
-    "dare_assets",
-    "dare_physics",
-    "dare_render",
-    "dare_window",
-    "dare_util",
-    "dare_ecs",
-    "dare_extract"
+  "dagal",
+  "dare",
+  "dare_engine",
+  "macros",
+  "containers",
+  "dare_assets",
+  "dare_physics",
+  "dare_render",
+  "dare_window",
+  "dare_util",
+  "dare_ecs",
+  "dare_camera",
 ]
 
 resolver = "3"
 
 [workspace.dependencies]
-tokio = { version = "1.51.0", features = ["sync", "rt", "rt-multi-thread", "macros", "fs"] }
-glam = "0.32.1"
+tokio = { version = "1.52.3", features = [
+  "sync",
+  "rt",
+  "rt-multi-thread",
+  "macros",
+  "fs",
+  "io-util",
+] }
+glam = "0.33.0"
 bevy_ecs = { version = "0.18.1", features = ["default", "multi_threaded"] }
 futures = "0.3.32"
 futures-util = "0.3.32"
@@ -30,3 +37,5 @@ tracy-client = "0.18.4"
 bytemuck = "1.25.0"
 derivative = "2.2.0"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
+reqwest = { version = "0.12.28", features = ["stream"] }
+smol = { version = "2.0.2" }

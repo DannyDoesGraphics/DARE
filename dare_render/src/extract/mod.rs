@@ -1,2 +1,1 @@
-#[derive(Debug, PartialEq, Clone)]
-pub struct FrameInstance {}
+//! Component projection extract (future). Window/surface uses RenderServer commands.

@@ -1,4 +1,5 @@
 //! An implementation of the transfer belt pattern for efficient GPU resource uploads.
+use bevy_ecs::prelude::*;
 use dagal::ash::vk;
 use dagal::{allocators::Allocator, ash::vk::Handle, resource::traits::Resource, traits::AsRaw};
 use std::collections::HashMap;
@@ -28,7 +29,7 @@ enum ChunkDestination {
         dst_offset: u64,
         src_offset: u64,
         src_size: u64,
-        oneshot: Option<tokio::sync::oneshot::Sender<dagal::Result<()>>>,
+        oneshot: Option<std::sync::mpsc::Sender<dagal::Result<()>>>,
     },
     Image {
         src_queue_family: u32,
@@ -42,7 +43,7 @@ enum ChunkDestination {
         subresource_layers: vk::ImageSubresourceLayers,
         src_offset: u64,
         src_size: u64,
-        oneshot: Option<tokio::sync::oneshot::Sender<dagal::Result<()>>>,
+        oneshot: Option<std::sync::mpsc::Sender<dagal::Result<()>>>,
     },
 }
 
@@ -55,7 +56,7 @@ pub enum TransferRequest {
         dst_offset: u64,
         src_size: u64,
         data: Box<[u8]>,
-        oneshot: Option<tokio::sync::oneshot::Sender<dagal::Result<()>>>,
+        oneshot: Option<std::sync::mpsc::Sender<dagal::Result<()>>>,
     },
     Image {
         dst_queue_family: Option<u32>,
@@ -67,7 +68,7 @@ pub enum TransferRequest {
         subresource_layers: vk::ImageSubresourceLayers,
         src_size: u64,
         data: Box<[u8]>,
-        oneshot: Option<tokio::sync::oneshot::Sender<dagal::Result<()>>>,
+        oneshot: Option<std::sync::mpsc::Sender<dagal::Result<()>>>,
     },
 }
 
@@ -121,9 +122,6 @@ pub struct TransferManager<A: Allocator> {
     /// Max belt size of all chunks
     max_belt_size: u64,
 
-    /// Queue allocator
-    queue_allocator: dagal::util::queue_allocator::QueueAllocator,
-
     /// Queue for transfer requests
     send: std::sync::mpsc::Sender<TransferRequest>,
     recv: std::sync::mpsc::Receiver<TransferRequest>,
@@ -134,31 +132,27 @@ pub struct TransferManager<A: Allocator> {
 
 impl<A: Allocator> TransferManager<A> {
     pub fn new(
-        device: dagal::device::LogicalDevice,
         queue: dagal::device::Queue,
         allocator: A,
         max_belt_size: u64,
         lru_cache: u64,
     ) -> dagal::Result<Self> {
+        let device = allocator.get_device().clone();
         let command_pool = dagal::command::CommandPool::new(
-            dagal::command::CommandPoolCreateInfo::WithQueueFamily {
-                device: allocator.get_device().clone(),
+            dagal::command::CommandPoolCreateInfo::WithQueue {
+                device: device.clone(),
                 flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-                queue_family_index: queue.get_family_index(),
+                queue: &queue,
             },
         )?;
 
-        // Initialize a simple queue allocator with the provided queue for now
-        let queue_allocator =
-            dagal::util::queue_allocator::QueueAllocator::from(vec![queue.clone()]);
         // Queue for transfers
         let (send, recv) = std::sync::mpsc::channel::<TransferRequest>();
         Ok(Self {
             chunks_active: Vec::new(),
             chunks_closed: Vec::new(),
             chunks_free: Vec::new(),
-            queue: queue.clone(),
-            queue_allocator,
+            queue,
             command_pool,
             allocator,
 
@@ -265,7 +259,7 @@ impl<A: Allocator> TransferManager<A> {
     }
 
     /// Flush any pending transfers from host to device
-    pub async fn flush(&mut self) -> dagal::Result<()> {
+    pub fn flush(&mut self) -> dagal::Result<()> {
         // flush queue
         let requests: Vec<TransferRequest> = self.recv.try_iter().collect();
         for request in requests {
@@ -333,7 +327,7 @@ impl<A: Allocator> TransferManager<A> {
         let command_buffer: dagal::command::CommandBufferRecording = command_buffer
             .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
             .unwrap();
-        let mut pending_oneshots: Vec<tokio::sync::oneshot::Sender<dagal::Result<()>>> = Vec::new();
+        let mut pending_oneshots: Vec<std::sync::mpsc::Sender<dagal::Result<()>>> = Vec::new();
         for chunk in chunks_submit.iter_mut() {
             // Record copy commands for each chunk
             chunk.max_ticket = self.next_ticket;
@@ -623,24 +617,17 @@ impl<A: Allocator> TransferManager<A> {
                 _marker: std::marker::PhantomData,
             };
             command_buffer
-                .submit(
-                    *self.queue.acquire_queue_async().await.unwrap(),
-                    &[submit_info],
-                    *fence.as_raw(),
-                )
+                .submit(unsafe { *self.queue.as_raw() }, &[submit_info], *fence.as_raw())
                 .unwrap();
         }
 
         // Move chunks to closed list for reclaim() to process later
         self.chunks_closed.append(&mut chunks_submit);
 
-        // Spawn a background task to wait for fence and notify callbacks
-        tokio::spawn(async move {
-            let result = fence.fence_await().await;
-            for oneshot in pending_oneshots {
-                let _ = oneshot.send(result);
-            }
-        });
+        let result: dagal::Result<()> = fence.wait(u64::MAX).map(|_| ());
+        for oneshot in pending_oneshots {
+            let _ = oneshot.send(result);
+        }
 
         self.next_ticket += 1;
         self.reclaim()?;
@@ -667,7 +654,7 @@ impl<A: Allocator> TransferManager<A> {
 }
 
 /// Transfer pool unlike [`TransferPoolInner`] is a handle for sending transfer requests, whilst the inner struct handles the actual transfer logic
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Resource)]
 pub struct TransferPool {
     send: std::sync::mpsc::Sender<TransferRequest>,
 }
@@ -678,25 +665,17 @@ impl TransferPool {
         self.send.send(transfer_request).unwrap();
     }
 
-    /// Send a transfer request which await
-    pub async fn send(&self, mut transfer_request: TransferRequest) {
-        let maybe_rx = match &mut transfer_request {
-            TransferRequest::Buffer { oneshot, .. } => {
-                let (tx, rx) = tokio::sync::oneshot::channel();
+    /// Send a transfer request and block until [`TransferManager::flush`] completes it.
+    pub fn send(&self, mut transfer_request: TransferRequest) -> dagal::Result<()> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        match &mut transfer_request {
+            TransferRequest::Buffer { oneshot, .. }
+            | TransferRequest::Image { oneshot, .. } => {
                 assert!(oneshot.is_none());
                 *oneshot = Some(tx);
-                Some(rx)
             }
-            TransferRequest::Image { oneshot, .. } => {
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                assert!(oneshot.is_none());
-                *oneshot = Some(tx);
-                Some(rx)
-            }
-        };
-        self.send.send(transfer_request).unwrap();
-        if let Some(rx) = maybe_rx {
-            let _ = rx.await.unwrap();
         }
+        self.send.send(transfer_request).unwrap();
+        rx.recv().unwrap()
     }
 }

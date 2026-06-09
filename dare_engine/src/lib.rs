@@ -1,7 +1,6 @@
 mod components;
-mod server;
+mod plugin;
 
 pub use components::*;
-pub use server::EngineProjectionPlugins;
-pub use server::{EngineClient, EngineServer, EngineServerConfig};
+pub use plugin::*;
 pub mod systems;

@@ -3,8 +3,7 @@ use std::ptr;
 use dagal::{allocators::Allocator, ash::vk, resource::traits::Resource, traits::AsRaw};
 use dare_window::WindowHandles;
 
-/// A rendering context for window-based rendering
-#[derive(Debug, bevy_ecs::resource::Resource)]
+#[derive(Debug)]
 pub struct SwapchainContext<A: Allocator> {
     frames: Vec<crate::frame::SwapchainFrame<A>>,
     pub swapchain: dagal::wsi::Swapchain,
@@ -13,6 +12,10 @@ pub struct SwapchainContext<A: Allocator> {
 }
 
 impl<A: Allocator> SwapchainContext<A> {
+    /// Drop image views before the swapchain is destroyed.
+    fn release_frames(&mut self) {
+        self.frames.clear();
+    }
     /// Select a swapchain extent based on surface capabilities and requested extent
     fn select_extent(
         capabilities: &vk::SurfaceCapabilitiesKHR,
@@ -63,10 +66,10 @@ impl<A: Allocator> SwapchainContext<A> {
             .build(&core_context.instance, core_context.device.clone())?;
 
         let mut slf = Self {
-            swapchain,
-            surface,
-            extent: image_extent,
             frames: Vec::new(),
+            swapchain,
+            extent: image_extent,
+            surface,
         };
         slf.rebuild_frames()?;
 
@@ -98,7 +101,7 @@ impl<A: Allocator> SwapchainContext<A> {
     pub fn resize(
         &mut self,
         extent: vk::Extent2D,
-        present_context: &super::PresentContext,
+        present_context: &mut super::PresentContext,
         core_context: &super::CoreContext,
     ) -> dagal::Result<()> {
         if extent.width == 0 || extent.height == 0 {
@@ -145,6 +148,7 @@ impl<A: Allocator> SwapchainContext<A> {
             old_swapchain: *self.swapchain.get_handle(),
             _marker: std::marker::PhantomData,
         };
+        self.release_frames();
         self.swapchain = dagal::wsi::Swapchain::new(
             core_context.instance.get_instance(),
             core_context.device.clone(),
@@ -152,6 +156,7 @@ impl<A: Allocator> SwapchainContext<A> {
         )?;
         self.extent = image_extent;
         self.rebuild_frames()?;
+        present_context.rebuild_present_semaphores(&core_context.device, self.frames.len())?;
 
         Ok(())
     }
@@ -161,18 +166,55 @@ impl<A: Allocator> SwapchainContext<A> {
         &mut self,
         extent: vk::Extent2D,
         handles: WindowHandles,
-        present_context: &super::PresentContext,
+        present_context: &mut super::PresentContext,
         core_context: &super::CoreContext,
     ) -> dagal::Result<()> {
-        let surface: dagal::wsi::SurfaceQueried = dagal::wsi::Surface::new_with_handles(
+        if extent.width == 0 || extent.height == 0 {
+            return Ok(());
+        }
+        unsafe {
+            let fences: Vec<vk::Fence> = present_context
+                .frames
+                .iter()
+                .map(|f| *f.render_fence.as_raw())
+                .collect();
+            core_context
+                .device
+                .get_handle()
+                .wait_for_fences(&fences, true, u64::MAX)
+                .unwrap();
+        }
+
+        let new_surface: dagal::wsi::SurfaceQueried = dagal::wsi::Surface::new_with_handles(
             core_context.instance.get_entry(),
             core_context.instance.get_instance(),
             *handles.raw_display_handle,
             *handles.raw_window_handle,
         )?
         .query_details(*core_context.physical_device.get_handle())?;
-        self.surface = surface;
-        self.resize(extent, present_context, core_context)?;
+
+        let capabilities = new_surface.get_capabilities();
+        let image_extent = Self::select_extent(&capabilities, extent);
+        if image_extent.width == 0 || image_extent.height == 0 {
+            return Ok(());
+        }
+        let image_count = Self::select_image_count(&capabilities, 3);
+        let new_swapchain = dagal::bootstrap::SwapchainBuilder::new(&new_surface)
+            .min_image_count(Some(image_count))
+            .request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            .request_present_mode(vk::PresentModeKHR::MAILBOX)
+            .request_image_format(vk::Format::B8G8R8A8_SRGB)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+            .set_extent(image_extent)
+            .build(&core_context.instance, core_context.device.clone())?;
+
+        self.release_frames();
+        // Drop old swapchain while the old surface is still alive.
+        self.swapchain = new_swapchain;
+        self.surface = new_surface;
+        self.extent = image_extent;
+        self.rebuild_frames()?;
+        present_context.rebuild_present_semaphores(&core_context.device, self.frames.len())?;
 
         Ok(())
     }

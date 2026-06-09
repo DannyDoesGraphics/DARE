@@ -1,10 +1,11 @@
 use dagal::ash::vk;
 
 /// A present context for managing presentation operations
-#[derive(Debug, bevy_ecs::resource::Resource)]
+#[derive(Debug)]
 pub struct PresentContext {
     pub frame_index: u64,
     pub frames: Vec<crate::frame::Frame>,
+    pub present_semaphores: Vec<dagal::sync::BinarySemaphore>,
 }
 
 impl PresentContext {
@@ -16,7 +17,7 @@ impl PresentContext {
                 dagal::command::CommandPoolCreateInfo::WithQueue {
                     device: core_context.device.clone(),
                     flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-                    queue: &core_context.present_queue,
+                    queue: &core_context.queues.present,
                 },
             )?;
             let command_buffer = command_pool.allocate(1).unwrap().pop().unwrap();
@@ -25,10 +26,6 @@ impl PresentContext {
                 render_fence: dagal::sync::Fence::new(
                     core_context.device.clone(),
                     vk::FenceCreateFlags::SIGNALED,
-                )?,
-                render_semaphore: dagal::sync::BinarySemaphore::new(
-                    core_context.device.clone(),
-                    vk::SemaphoreCreateFlags::empty(),
                 )?,
                 swapchain_semaphore: dagal::sync::BinarySemaphore::new(
                     core_context.device.clone(),
@@ -42,14 +39,45 @@ impl PresentContext {
         Ok(Self {
             frame_index: 0,
             frames,
+            present_semaphores: Vec::new(),
         })
     }
-}
 
-impl Drop for PresentContext {
-    fn drop(&mut self) {
-        for frame in &self.frames {
-            frame.render_fence.wait(u64::MAX).unwrap();
+    pub fn rebuild_present_semaphores(
+        &mut self,
+        device: &dagal::device::LogicalDevice,
+        image_count: usize,
+    ) -> dagal::Result<()> {
+        match self.present_semaphores.len().cmp(&image_count) {
+            std::cmp::Ordering::Equal => Ok(()),
+            std::cmp::Ordering::Less => {
+                while self.present_semaphores.len() < image_count {
+                    self.present_semaphores
+                        .push(dagal::sync::BinarySemaphore::new(
+                            device.clone(),
+                            vk::SemaphoreCreateFlags::empty(),
+                        )?);
+                }
+                Ok(())
+            }
+            std::cmp::Ordering::Greater => {
+                self.wait_gpu_idle(device)?;
+                self.present_semaphores.truncate(image_count);
+                Ok(())
+            }
         }
+    }
+
+    fn wait_gpu_idle(&self, device: &dagal::device::LogicalDevice) -> dagal::Result<()> {
+        for frame in &self.frames {
+            frame.render_fence.wait(u64::MAX)?;
+        }
+        unsafe {
+            device
+                .get_handle()
+                .device_wait_idle()
+                .map_err(dagal::DagalError::VkError)?;
+        }
+        Ok(())
     }
 }
