@@ -6,6 +6,10 @@ use derivative::Derivative;
 
 use crate::traits::{AsRaw, Destructible};
 
+/// Refer to [Vulkan docs](https://docs.vulkan.org/refpages/latest/refpages/source/VkFence.html).
+/// 
+/// # Future await implementation
+/// By default, Fences do not poll themselves.
 #[derive(Debug, Derivative)]
 #[derivative(PartialEq, Eq)]
 pub struct Fence {
@@ -86,6 +90,20 @@ impl Fence {
     /// Get the fence status
     pub fn get_fence_status(&self) -> Result<bool, crate::DagalError> {
         unsafe { Ok(self.device.get_handle().get_fence_status(self.handle)?) }
+    }
+}
+
+impl std::future::Future for Fence {
+    type Output = Result<(), crate::DagalError>;
+
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        match self.get_fence_status() {
+            Ok(true) => std::task::Poll::Ready(Ok(())),
+            Ok(false) => {
+                std::task::Poll::Pending
+            },
+            Err(e) => std::task::Poll::Ready(Err(e))
+        }
     }
 }
 

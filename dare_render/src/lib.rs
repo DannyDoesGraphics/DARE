@@ -1,5 +1,6 @@
 use dagal::ash::vk;
-use dare_ecs::SubApp;
+use bevy_ecs::schedule::IntoScheduleConfigs;
+use dare_ecs::{AppStage, SubApp};
 use dare_window::{Window, WindowHandles};
 
 pub mod components;
@@ -79,7 +80,11 @@ impl RenderClient {
                 type A = dagal::allocators::GPUAllocatorImpl;
                 render.schedule_scope(|schedule| {
                     schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
-                    schedule.add_systems(systems::render_system::<A>);
+                    schedule.add_systems((
+                        systems::transfer_belt_poll_system::<A>.in_set(AppStage::PreUpdate),
+                        systems::render_system::<A>.in_set(AppStage::Update),
+                        systems::transfer_belt_flush_system::<A>.in_set(AppStage::PostUpdate),
+                    ));
                 });
             }
 
