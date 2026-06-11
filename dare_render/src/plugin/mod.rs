@@ -44,7 +44,10 @@ impl RenderPlugin {
     }
 }
 
-fn frame_render_start(render: Option<ResMut<RenderContext>>) {
+fn frame_render_start(window: Res<Window>, render: Option<ResMut<RenderContext>>) {
+    if !window.is_valid() {
+        return;
+    }
     let Some(mut render) = render else {
         return;
     };
