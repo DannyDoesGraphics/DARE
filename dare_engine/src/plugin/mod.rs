@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use bevy_ecs::prelude::*;
 use dare_window::{InputLog, WindowPlugin, WindowPluginConfig};
 
-use crate::systems::{cull, open_gltf_pressed};
+use crate::systems::open_gltf_pressed;
 
 #[derive(Debug, Default)]
 pub struct EnginePluginConfig {
@@ -34,9 +34,9 @@ impl dare_ecs::Plugin for EnginePlugin {
         });
 
         app.schedule_scope(|schedule| {
-            schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::MultiThreaded);
+            schedule.set_executor(bevy_ecs::schedule::MultiThreadedExecutor::new());
             schedule.add_systems(
-                (open_gltf_hotkey, load_gltf_from_queue, cull)
+                (open_gltf_hotkey, load_gltf_from_queue)
                     .chain()
                     .in_set(dare_ecs::AppStage::Update),
             );
@@ -49,11 +49,8 @@ struct PendingGltfLoads {
     paths: Vec<PathBuf>,
 }
 
-fn open_gltf_hotkey(mut pending: ResMut<PendingGltfLoads>, mut input: ResMut<InputLog>) {
-    let pressed_open = input
-        .drain()
-        .into_iter()
-        .any(|event| open_gltf_pressed(&event));
+fn open_gltf_hotkey(mut pending: ResMut<PendingGltfLoads>, input: Res<InputLog>) {
+    let pressed_open = input.events().iter().any(open_gltf_pressed);
     if !pressed_open {
         return;
     }

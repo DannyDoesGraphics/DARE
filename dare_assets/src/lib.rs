@@ -16,7 +16,7 @@ pub use buffer::*;
 pub use chunk_desc::ChunkDesc;
 pub use format::*;
 pub use frame::*;
-pub use handles::{AssetHandle, ErasedAssetHandle, MeshHandle};
+pub use handles::{AssetHandle, ErasedAssetHandle};
 pub use mesh::Mesh;
 pub use stream_state::StreamState;
 pub use unit_stream::ByteStreamReshaper;

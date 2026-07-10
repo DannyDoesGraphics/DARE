@@ -11,7 +11,6 @@ members = [
   "dare_window",
   "dare_util",
   "dare_ecs",
-  "dare_camera",
 ]
 
 resolver = "3"
@@ -25,17 +24,17 @@ tokio = { version = "1.52.3", features = [
   "fs",
   "io-util",
 ] }
-glam = "0.33.0"
-bevy_ecs = { version = "0.18.1", features = ["default", "multi_threaded"] }
+glam = "0.33.2"
+bevy_ecs = { version = "0.19.0", features = ["default", "multi_threaded", "debug"] }
 futures = "0.3.32"
 futures-util = "0.3.32"
-crossbeam-channel = "0.5.15"
+crossbeam-channel = "0.5.16"
 tracing = "0.1.44"
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 thiserror = "2.0.18"
 tracy-client = "0.18.4"
 bytemuck = "1.25.0"
 derivative = "2.2.0"
 gltf = { version = "1.4.1", features = ["KHR_lights_punctual"] }
-reqwest = { version = "0.12.28", features = ["stream"] }
+reqwest = { version = "0.13.4", features = ["stream"] }
 smol = { version = "2.0.2" }

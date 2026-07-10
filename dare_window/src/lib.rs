@@ -42,12 +42,10 @@ impl Default for WindowPluginConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct WindowPlugin {
     pub config: WindowPluginConfig,
 }
-
 
 impl WindowPlugin {
     pub fn new(config: WindowPluginConfig) -> Self {
@@ -63,6 +61,9 @@ impl dare_ecs::Plugin for WindowPlugin {
             use bevy_ecs::message::message_update_system;
             use dare_ecs::AppStage;
             schedule.add_systems(message_update_system.in_set(AppStage::First));
+            // Input is read non-destructively during the frame, then cleared once here.
+            schedule
+                .add_systems((|mut input: ResMut<InputLog>| input.clear()).in_set(AppStage::Last));
         });
 
         app.world_mut().insert_resource(InputLog::default());

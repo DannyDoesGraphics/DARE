@@ -12,6 +12,14 @@ impl BoundingBox {
         Self { min, max }
     }
 
+    pub fn min(&self) -> glam::Vec3 {
+        self.min
+    }
+
+    pub fn max(&self) -> glam::Vec3 {
+        self.max
+    }
+
     /// Correct the existing bounding box ensuring minimum bounds are minimum and maximum bounds are maximum extents
     pub fn correct(&mut self) {
         let min = self.min;

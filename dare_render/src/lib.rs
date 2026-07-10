@@ -1,6 +1,5 @@
 use dagal::ash::vk;
-use bevy_ecs::schedule::IntoScheduleConfigs;
-use dare_ecs::{AppStage, SubApp};
+use dare_ecs::SubApp;
 use dare_window::{Window, WindowHandles};
 
 pub mod components;
@@ -13,7 +12,11 @@ pub mod snapshot;
 mod systems;
 mod timer;
 mod transfer_belt;
-pub use plugin::{RenderContext, RenderPlugin, RenderPluginConfig, RenderSubAppLabel};
+pub use plugin::{
+    Camera, CameraPlugin, CameraUpdate, CullPlugin, FlyController, FlyControllerPlugin,
+    RenderContext, RenderMode, RenderModePlugin, RenderPlugin, RenderPluginConfig,
+    RenderSubAppLabel, VisibleMeshList,
+};
 
 #[derive(Debug)]
 pub struct RenderServerSpawnConfig {
@@ -28,10 +31,6 @@ pub struct RenderServerSpawnConfig {
 pub enum RenderPacket {
     Window(Window),
     FrameStart,
-    SetRender {
-        handle: dare_assets::MeshHandle,
-        should_render: bool,
-    },
     /// Last message before senders are dropped.
     Drop,
 }
@@ -51,17 +50,6 @@ impl RenderClient {
     pub fn frame_render_start(&self) -> anyhow::Result<()> {
         Ok(self.packet_sender.send(RenderPacket::FrameStart)?)
     }
-
-    pub fn set_render(
-        &self,
-        handle: dare_assets::MeshHandle,
-        should_render: bool,
-    ) -> anyhow::Result<()> {
-        Ok(self.packet_sender.send(RenderPacket::SetRender {
-            handle,
-            should_render,
-        })?)
-    }
 }
 
 impl RenderClient {
@@ -74,39 +62,27 @@ impl RenderClient {
         };
         let (packet_sender, packet_receiver) = crossbeam_channel::unbounded::<RenderPacket>();
 
-        let thread = std::thread::Builder::new().name(String::from("Render thread")).spawn(move || {
-            let mut render = spawn.render_sub_app;
-            {
-                type A = dagal::allocators::GPUAllocatorImpl;
-                render.schedule_scope(|schedule| {
-                    schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
-                    schedule.add_systems((
-                        systems::transfer_belt_poll_system::<A>.in_set(AppStage::PreUpdate),
-                        systems::render_system::<A>.in_set(AppStage::Update),
-                        systems::transfer_belt_flush_system::<A>.in_set(AppStage::PostUpdate),
-                    ));
-                });
-            }
+        let thread = std::thread::Builder::new()
+            .name(String::from("Render thread"))
+            .spawn(move || {
+                let mut render = spawn.render_sub_app;
 
-            loop {
-                let Ok(packet) = packet_receiver.recv() else {
-                    break;
-                };
-                match packet {
-                    RenderPacket::Window(window) => apply_window(&mut render, gpu_config, window),
-                    RenderPacket::FrameStart => tick_render_frame(&mut render),
-                    RenderPacket::SetRender {
-                        handle: _,
-                        should_render: _,
-                    } => {
-                        tracing::warn!("Tried to set state of unimplemented type");
+                loop {
+                    let Ok(packet) = packet_receiver.recv() else {
+                        break;
+                    };
+                    match packet {
+                        RenderPacket::Window(window) => {
+                            apply_window(&mut render, gpu_config, window)
+                        }
+                        RenderPacket::FrameStart => tick_render_frame(&mut render),
+                        RenderPacket::Drop => break,
                     }
-                    RenderPacket::Drop => break,
                 }
-            }
 
-            teardown_gpu(&mut render);
-        }).unwrap();
+                teardown_gpu(&mut render);
+            })
+            .unwrap();
 
         Self {
             packet_sender,
@@ -137,7 +113,7 @@ fn gpu_ready(render: &SubApp) -> bool {
     type A = dagal::allocators::GPUAllocatorImpl;
     render
         .world()
-        .get_non_send_resource::<contexts::RenderGpu<A>>()
+        .get_non_send::<contexts::RenderGpu<A>>()
         .is_some()
 }
 
@@ -248,7 +224,7 @@ fn bootstrap_gpu(render: &mut SubApp, gpu_config: RenderGpuConfig, window: &Wind
         transfer_pool,
     };
 
-    render.world_mut().insert_non_send_resource(gpu);
+    render.world_mut().insert_non_send(gpu);
 
     tracing::info!(?extent, "Render surface ready");
 }
@@ -257,7 +233,7 @@ fn apply_resize(render: &mut SubApp, extent: vk::Extent2D) {
     type A = dagal::allocators::GPUAllocatorImpl;
     let mut gpu = render
         .world_mut()
-        .get_non_send_resource_mut::<contexts::RenderGpu<A>>()
+        .get_non_send_mut::<contexts::RenderGpu<A>>()
         .expect("RenderGpu missing during resize");
     if let Err(err) = gpu.resize(extent) {
         tracing::error!(?err, ?extent, "Swapchain resize failed");
@@ -268,7 +244,7 @@ fn apply_recreate(render: &mut SubApp, size: vk::Extent2D, handles: WindowHandle
     type A = dagal::allocators::GPUAllocatorImpl;
     let mut gpu = render
         .world_mut()
-        .get_non_send_resource_mut::<contexts::RenderGpu<A>>()
+        .get_non_send_mut::<contexts::RenderGpu<A>>()
         .expect("RenderGpu missing during recreate");
     if let Err(err) = gpu.recreate(size, handles) {
         tracing::error!(?err, ?size, "Swapchain recreate failed");
@@ -285,7 +261,7 @@ fn teardown_gpu(render: &mut SubApp) {
     let world = render.world_mut();
     world.remove_resource::<timer::Timer>();
 
-    if let Some(gpu) = world.remove_non_send_resource::<contexts::RenderGpu<A>>() {
+    if let Some(gpu) = world.remove_non_send::<contexts::RenderGpu<A>>() {
         gpu.shutdown();
     }
 }

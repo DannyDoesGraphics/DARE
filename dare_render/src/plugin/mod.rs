@@ -1,10 +1,19 @@
+pub mod camera;
+pub mod cull;
+pub mod fly_controller;
+pub mod render_mode;
 mod window_sync;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::schedule::IntoScheduleConfigs;
 use dare_ecs::{App, AppStage, Plugin, SubApp};
 use dare_window::Window;
 
 pub use crate::{RenderClient, RenderServerSpawnConfig};
+pub use camera::{Camera, CameraPlugin, CameraUpdate};
+pub use cull::{CullPlugin, VisibleMeshList};
+pub use fly_controller::{FlyController, FlyControllerPlugin};
+pub use render_mode::{RenderMode, RenderModePlugin};
 
 pub struct RenderSubAppLabel;
 impl dare_ecs::SubAppLabel for RenderSubAppLabel {}
@@ -82,9 +91,31 @@ impl Plugin for RenderPlugin {
             .world_mut()
             .init_resource::<Window>();
 
+        // The belt itself is built in `bootstrap_gpu`, once a window yields a device.
+        // These systems no-op until then, since the sub-app only ticks once the GPU is up.
+        app.get_sub_app_mut::<RenderSubAppLabel>()
+            .unwrap()
+            .schedule_scope(|schedule| {
+                schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+                schedule.add_systems((
+                    crate::systems::transfer_belt_poll_system::<dagal::allocators::GPUAllocatorImpl>
+                        .in_set(AppStage::PreUpdate),
+                    crate::systems::render_system::<dagal::allocators::GPUAllocatorImpl>.in_set(AppStage::Update),
+                    crate::systems::transfer_belt_flush_system::<dagal::allocators::GPUAllocatorImpl>
+                        .in_set(AppStage::PostUpdate),
+                ));
+            });
+
+        // Render-mode state + `Tab` toggle + main->render extraction.
+        app.add_plugin(RenderModePlugin);
+        // Camera state + main->render extraction, driven by the fly-cam input loop.
+        app.add_plugin(FlyControllerPlugin);
+        // Per-frame visible mesh list, culled in the main world.
+        app.add_plugin(CullPlugin);
+
         window_sync::register(app);
         app.schedule_scope(|schedule| {
-            schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
+            schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
             schedule.add_systems(frame_render_start.in_set(AppStage::Update));
         });
     }

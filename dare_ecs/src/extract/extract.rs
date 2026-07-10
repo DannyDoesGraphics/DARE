@@ -33,6 +33,22 @@ impl<T: Send + Sync + 'static, To: SubAppLabel, From: SubAppLabel> ExtractPlugin
     }
 }
 
+impl<T: Resource + Clone, To: SubAppLabel, From: SubAppLabel> ExtractPlugin<T, To, From> {
+    /// Allows for trivial implementation of resources which implement [`Clone`] trait.
+    ///
+    /// Will always pick the latest snapshot and drop all other older snapshots.
+    pub fn from_cloneable_resource() -> Self {
+        Self::new(
+            |world: &mut World| world.get_resource::<T>().cloned(),
+            |world: &mut World, mut snapshots: Vec<T>| {
+                if let Some(value) = snapshots.pop() {
+                    world.insert_resource(value);
+                }
+            },
+        )
+    }
+}
+
 impl<T: Send + Sync + 'static, To: SubAppLabel, From: SubAppLabel> Plugin
     for ExtractPlugin<T, To, From>
 {

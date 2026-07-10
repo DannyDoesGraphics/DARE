@@ -21,3 +21,6 @@ dare_util = { path = "../dare_util" }
 crossbeam-channel = { workspace = true }
 futures = { version = "0.3.32" }
 
+[dev-dependencies]
+proptest = "1.11.0"
+

@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 impl crate::Assets<crate::Mesh> {
-    /// Loads a glTF file and spawns entities containing `(MeshHandle, dare_physics::Transform)`.
+    /// Loads a glTF file and spawns entities containing `(AssetHandle<Mesh>, dare_physics::Transform)`.
     pub fn load_gltf(
         &mut self,
         commands: &mut Commands,

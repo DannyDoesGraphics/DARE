@@ -130,16 +130,38 @@ impl TestContext {
         self.queue.get_info()
     }
 
+    /// Acquire an owned handle to the `index`th active queue.
+    ///
+    /// `vkGetDeviceQueue2` hands back the same underlying queue for a given
+    /// family/index pair, so this does not allocate a new queue. Two queues were
+    /// requested at init, so index 0 is free for a caller that needs one of its own
+    /// while [`Self::immediate_submit`] keeps using the context's.
+    pub fn queue(&self, index: usize) -> dagal::device::Queue {
+        let queue_info = self.physical_device.get_active_queues()[index];
+        unsafe {
+            self.device.get_queue(
+                &vk::DeviceQueueInfo2 {
+                    s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                    p_next: ptr::null(),
+                    flags: vk::DeviceQueueCreateFlags::empty(),
+                    queue_family_index: queue_info.family_index,
+                    queue_index: queue_info.index,
+                    _marker: Default::default(),
+                },
+                queue_info.queue_flags,
+                queue_info.strict,
+                queue_info.can_present,
+            )
+        }
+    }
+
     /// Get the allocator
     pub fn allocator(&self) -> dagal::allocators::GPUAllocatorImpl {
         self.allocator.clone()
     }
 
     /// Perform immediate submission of GPU commands and wait on their completion
-    pub fn immediate_submit<
-        F: FnOnce(&Self, &dagal::command::CommandBufferRecording) -> R,
-        R,
-    >(
+    pub fn immediate_submit<F: FnOnce(&Self, &dagal::command::CommandBufferRecording) -> R, R>(
         &self,
         f: F,
     ) -> dagal::Result<R> {
@@ -178,8 +200,7 @@ impl TestContext {
             },
             _marker: PhantomData,
         }];
-        self.queue
-            .submit2_and_wait_fence(&submit_infos, &fence)?;
+        self.queue.submit2_and_wait_fence(&submit_infos, &fence)?;
         Ok(res)
     }
 }

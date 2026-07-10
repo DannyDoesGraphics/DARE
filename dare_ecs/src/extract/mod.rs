@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 pub(crate) type ExtractMap = HashMap<(TypeId, TypeId, TypeId), Box<dyn Any + Send + Sync>>;
 
 /// Handles channel extraction/consumption of the centralized hashmap for ExtractPlugins.
+#[derive(Resource)]
 pub(crate) struct ExtractResource<To: SubAppLabel, From: SubAppLabel> {
     pub(crate) map: ExtractMap,
     pub(crate) inbound: Vec<ExtractMap>,
@@ -25,8 +26,6 @@ pub(crate) struct ExtractResource<To: SubAppLabel, From: SubAppLabel> {
     _to: PhantomData<To>,
     _from: PhantomData<From>,
 }
-
-impl<To: SubAppLabel, From: SubAppLabel> Resource for ExtractResource<To, From> {}
 
 impl<To: SubAppLabel, From: SubAppLabel> Default for ExtractResource<To, From> {
     fn default() -> Self {

@@ -9,6 +9,10 @@ pub struct Transform {
 
 impl Eq for Transform {}
 
+impl dare_ecs::Project for Transform {
+    type Filter = ();
+}
+
 impl Default for Transform {
     fn default() -> Self {
         Self {

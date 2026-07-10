@@ -121,14 +121,12 @@ impl winit::application::ApplicationHandler for WinitApp {
                     height: physical_size.height,
                 });
             }
-            WindowEvent::CloseRequested
-                if !self.awaiting_destroyed => {
-                    self.begin_close();
-                }
-            WindowEvent::Destroyed
-                if self.awaiting_destroyed => {
-                    event_loop.exit();
-                }
+            WindowEvent::CloseRequested if !self.awaiting_destroyed => {
+                self.begin_close();
+            }
+            WindowEvent::Destroyed if self.awaiting_destroyed => {
+                event_loop.exit();
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let Some(window) = self.app.world().get_resource::<WinitWindow>() else {
                     return;
@@ -140,8 +138,16 @@ impl winit::application::ApplicationHandler for WinitApp {
                 }
                 self.last_position = Some(position);
             }
-            WindowEvent::CursorLeft { .. } => {
+            WindowEvent::CursorLeft { .. } | WindowEvent::CursorEntered { .. } => {
                 self.last_position = None;
+            }
+            WindowEvent::Focused(focused) => {
+                if !focused {
+                    self.last_position = None;
+                    if let Some(mut log) = self.app.world_mut().get_resource_mut::<InputLog>() {
+                        log.release_all();
+                    }
+                }
             }
             WindowEvent::ModifiersChanged(modifier) => {
                 self.modifier_state = modifier.state();

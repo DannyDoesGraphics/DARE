@@ -31,7 +31,9 @@ impl Destructible for GPUAllocatorImpl {
 
 impl Drop for GPUAllocatorImpl {
     fn drop(&mut self) {
-        self.destroy();
+        if Arc::strong_count(&self.handle) == 1 {
+            self.destroy();
+        }
     }
 }
 

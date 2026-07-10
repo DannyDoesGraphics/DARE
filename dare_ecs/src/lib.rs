@@ -4,12 +4,12 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::ScheduleLabel;
 pub mod extract;
 mod plugin;
-mod subapp;
 pub mod smol_plugin;
-pub use smol_plugin::{SmolExecutor, SmolExecutorHandle, SmolPlugin};
+mod subapp;
 pub use extract::ExtractPlugin;
-pub use extract::{Project, ProjectPlugin};
+pub use extract::{Project, ProjectEntityMapping, ProjectPlugin};
 pub use plugin::*;
+pub use smol_plugin::{SmolExecutor, SmolExecutorHandle, SmolPlugin};
 pub use subapp::*;
 
 /// Not all subapps are connected to the main thread; some are pipelined or async.

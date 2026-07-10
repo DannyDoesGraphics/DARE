@@ -12,7 +12,10 @@ pub struct QueueRegistry {
 }
 
 impl QueueRegistry {
-    pub fn from_device(device: &LogicalDevice, physical_device: &PhysicalDevice) -> crate::Result<Self> {
+    pub fn from_device(
+        device: &LogicalDevice,
+        physical_device: &PhysicalDevice,
+    ) -> crate::Result<Self> {
         let queues = physical_device
             .get_active_queues()
             .iter()
@@ -35,16 +38,12 @@ impl QueueRegistry {
         if queues.is_empty() {
             return Err(DagalError::ImpossibleQueue.into());
         }
-        let present_idx = queues
-            .iter()
-            .position(|q| q.can_present())
-            .unwrap_or(0);
+        let present_idx = queues.iter().position(|q| q.can_present()).unwrap_or(0);
         let present = queues.remove(present_idx);
 
-        let transfer_idx = queues.iter().position(|q| {
-            q.get_queue_flags()
-                .contains(vk::QueueFlags::TRANSFER)
-        });
+        let transfer_idx = queues
+            .iter()
+            .position(|q| q.get_queue_flags().contains(vk::QueueFlags::TRANSFER));
         let transfer = transfer_idx.map(|i| queues.remove(i));
 
         Ok(Self {
@@ -55,6 +54,8 @@ impl QueueRegistry {
     }
 
     pub fn take_transfer(&mut self) -> crate::Result<Queue> {
-        self.transfer.take().ok_or(DagalError::ImpossibleQueue.into())
+        self.transfer
+            .take()
+            .ok_or(DagalError::ImpossibleQueue.into())
     }
 }

@@ -67,9 +67,15 @@ impl Default for AssetRuntime {
 /// An asset which can be uploaded onto the GPU
 pub trait Asset: Clone + Debug + Send + Sync + Sized + 'static {}
 
+/// An asset container which holds runtime state of each asset.
+///
+/// # Cross-thread synchronization
+/// To handle assets from the engine to other worlds in different threads such as the rendering thread, we use [`AssetSync<A>`] to allow
+/// for **projection** between world A to B. This typically means that the engine world serves as the ground source truth.
 #[derive(Debug, Resource, Default)]
 pub struct Assets<A: Asset> {
     slot_map: SlotMap<A, AssetHandle<A>>,
+    /// Refers to the set of handles which have not been proeprly acknowledged
     dirty_set: HashSet<AssetHandle<A>>,
     runtime_state: HashMap<AssetHandle<A>, Arc<AssetRuntime>>,
     ttl: u16,
@@ -133,6 +139,63 @@ impl<A: Asset> Assets<A> {
     }
 }
 
+#[derive(Debug, Resource)]
+pub struct AssetsProjection<A: Asset> {
+    assets: HashMap<AssetHandle<A>, A>,
+    runtime_state: HashMap<AssetHandle<A>, Arc<AssetRuntime>>,
+}
+
+impl<A: Asset> Default for AssetsProjection<A> {
+    fn default() -> Self {
+        Self {
+            assets: HashMap::default(),
+            runtime_state: HashMap::default(),
+        }
+    }
+}
+
+impl<A: Asset> AssetsProjection<A> {
+    pub fn get(&self, handle: &AssetHandle<A>) -> Option<&A> {
+        self.assets.get(handle)
+    }
+
+    pub fn runtime(&self, handle: &AssetHandle<A>) -> Option<&Arc<AssetRuntime>> {
+        self.runtime_state.get(handle)
+    }
+
+    pub fn contains(&self, handle: &AssetHandle<A>) -> bool {
+        self.assets.contains_key(handle)
+    }
+
+    pub fn len(&self) -> usize {
+        self.assets.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.assets.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&AssetHandle<A>, &A)> {
+        self.assets.iter()
+    }
+
+    pub fn iter_runtimes(
+        &self,
+    ) -> impl Iterator<Item = (&crate::AssetHandle<A>, &Arc<crate::AssetRuntime>)> {
+        self.runtime_state.iter()
+    }
+
+    fn upsert(&mut self, handle: AssetHandle<A>, asset: A, runtime: Arc<AssetRuntime>) {
+        self.assets.insert(handle.clone(), asset);
+        self.runtime_state.insert(handle, runtime);
+    }
+
+    fn remove(&mut self, handle: &AssetHandle<A>) {
+        self.assets.remove(handle);
+        self.runtime_state.remove(handle);
+    }
+}
+
 /// Asset sync effectively perform a hashmap projection from `From` to `To`
 ///
 /// # Limitations
@@ -183,13 +246,13 @@ impl<A: Asset, From: dare_ecs::SubAppLabel, To: dare_ecs::SubAppLabel> dare_ecs:
             .get_sub_app::<To>()
             .unwrap()
             .world()
-            .get_resource::<Assets<A>>()
+            .get_resource::<AssetsProjection<A>>()
             .is_none()
         {
             app.get_sub_app_mut::<To>()
                 .unwrap()
                 .world_mut()
-                .insert_resource(Assets::<A>::new(self.ttl));
+                .insert_resource(AssetsProjection::<A>::default());
         }
         use bevy_ecs::prelude::*;
 
@@ -224,7 +287,7 @@ impl<A: Asset, From: dare_ecs::SubAppLabel, To: dare_ecs::SubAppLabel> dare_ecs:
                     }
                 },
                 |world: &mut World, deltas: Vec<Vec<AssetDelta<A>>>| {
-                    let mut assets = world.get_resource_mut::<Assets<A>>().unwrap();
+                    let mut assets = world.get_resource_mut::<AssetsProjection<A>>().unwrap();
                     for deltas in deltas {
                         for delta in deltas {
                             match delta {
@@ -233,13 +296,10 @@ impl<A: Asset, From: dare_ecs::SubAppLabel, To: dare_ecs::SubAppLabel> dare_ecs:
                                     asset,
                                     runtime,
                                 } => {
-                                    if assets.slot_map.get(handle.clone()).is_some() {
-                                        assets.update(&handle, asset);
-                                    }
-                                    assets.runtime_state.insert(handle, runtime);
+                                    assets.upsert(handle, asset, runtime);
                                 }
                                 AssetDelta::Removed { handle } => {
-                                    assets.remove(handle);
+                                    assets.remove(&handle);
                                 }
                             }
                         }

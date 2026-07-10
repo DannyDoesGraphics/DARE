@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use bevy_ecs::schedule::{ExecutorKind, IntoScheduleConfigs, ScheduleLabel};
+use bevy_ecs::schedule::{IntoScheduleConfigs, ScheduleLabel};
 use bevy_ecs::system::ScheduleSystem;
 
 /// A unique label identifier for each [`SubApp`]
@@ -37,7 +37,7 @@ impl SubApp {
             )
                 .chain(),
         );
-        schedule.set_executor_kind(ExecutorKind::MultiThreaded);
+        schedule.set_executor(bevy_ecs::schedule::MultiThreadedExecutor::new());
 
         world.get_resource_or_init::<Schedules>().insert(schedule);
         Self { world }

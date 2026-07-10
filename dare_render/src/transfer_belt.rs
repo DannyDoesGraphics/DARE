@@ -69,7 +69,10 @@ impl TransferFuture {
 impl std::future::Future for TransferFuture {
     type Output = dagal::Result<()>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> Poll<Self::Output> {
         self.completion.poll()
     }
 }
@@ -153,7 +156,12 @@ impl TransferRequest {
 
     fn attach_completion(&mut self, completion: TransferCompletion) {
         match self {
-            Self::Buffer { completion: slot, .. } | Self::Image { completion: slot, .. } => {
+            Self::Buffer {
+                completion: slot, ..
+            }
+            | Self::Image {
+                completion: slot, ..
+            } => {
                 debug_assert!(slot.is_none());
                 *slot = Some(completion);
             }
@@ -217,13 +225,12 @@ impl<A: Allocator> TransferManager<A> {
         lru_cache: u64,
     ) -> dagal::Result<Self> {
         let device = allocator.get_device().clone();
-        let command_pool = dagal::command::CommandPool::new(
-            dagal::command::CommandPoolCreateInfo::WithQueue {
+        let command_pool =
+            dagal::command::CommandPool::new(dagal::command::CommandPoolCreateInfo::WithQueue {
                 device: device.clone(),
                 flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
                 queue: &queue,
-            },
-        )?;
+            })?;
 
         // Queue for transfers
         let (send, recv) = std::sync::mpsc::channel::<TransferRequest>();
@@ -330,19 +337,20 @@ impl<A: Allocator> TransferManager<A> {
         if let Some(chunk_ix) = self.find_active_with_space(size) {
             Ok(chunk_ix)
         } else {
-            // No active chunk has enough space, try to use a free chunk or create a new one
-            if let Some(mut chunk) = self.chunks_free.pop() {
-                chunk.unused_flush_count = 0;
-                self.chunks_active.push(chunk);
-                Ok(self.chunks_active.len() - 1)
-            } else {
-                // Create a new chunk
-                self.create_chunk(size)?;
-                let mut chunk = self.chunks_free.pop().unwrap();
-                chunk.unused_flush_count = 0;
-                self.chunks_active.push(chunk);
-                Ok(self.chunks_active.len() - 1)
-            }
+            let free_ix = self
+                .chunks_free
+                .iter()
+                .position(|chunk| chunk.buffer.get_size() >= size);
+            let mut chunk = match free_ix {
+                Some(ix) => self.chunks_free.remove(ix),
+                None => {
+                    self.create_chunk(size)?;
+                    self.chunks_free.pop().unwrap()
+                }
+            };
+            chunk.unused_flush_count = 0;
+            self.chunks_active.push(chunk);
+            Ok(self.chunks_active.len() - 1)
         }
     }
 
@@ -382,16 +390,17 @@ impl<A: Allocator> TransferManager<A> {
                     src_size,
                     completion,
                 } => {
-                    buffer_copy_maps.entry(buffer.as_raw()).or_default().push(
-                        vk::BufferCopy2 {
+                    buffer_copy_maps
+                        .entry(buffer.as_raw())
+                        .or_default()
+                        .push(vk::BufferCopy2 {
                             s_type: vk::StructureType::BUFFER_COPY_2,
                             p_next: std::ptr::null(),
                             src_offset,
                             dst_offset,
                             size: src_size,
                             _marker: std::marker::PhantomData,
-                        },
-                    );
+                        });
                     let transfer_family = self.queue.get_family_index();
                     let dst_family = dst_queue_family.unwrap_or(src_queue_family);
                     if src_queue_family != transfer_family {
@@ -481,8 +490,10 @@ impl<A: Allocator> TransferManager<A> {
                         subresource_range,
                         _marker: std::marker::PhantomData,
                     });
-                    image_copy_maps.entry(image.as_raw()).or_default().push(
-                        vk::BufferImageCopy2 {
+                    image_copy_maps
+                        .entry(image.as_raw())
+                        .or_default()
+                        .push(vk::BufferImageCopy2 {
                             s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
                             p_next: std::ptr::null(),
                             buffer_offset: src_offset,
@@ -492,8 +503,7 @@ impl<A: Allocator> TransferManager<A> {
                             image_offset: dst_offset,
                             image_extent: dst_extent,
                             _marker: std::marker::PhantomData,
-                        },
-                    );
+                        });
                     if let Some(completion) = completion {
                         completions.push(completion);
                     }
@@ -503,29 +513,32 @@ impl<A: Allocator> TransferManager<A> {
 
         if !buffer_acquire_barriers.is_empty() || !image_acquire_barriers.is_empty() {
             unsafe {
-                self.allocator.get_device().get_handle().cmd_pipeline_barrier2(
-                    *command_buffer.as_raw(),
-                    &vk::DependencyInfo {
-                        s_type: vk::StructureType::DEPENDENCY_INFO,
-                        p_next: std::ptr::null(),
-                        dependency_flags: vk::DependencyFlags::empty(),
-                        memory_barrier_count: 0,
-                        p_memory_barriers: std::ptr::null(),
-                        buffer_memory_barrier_count: buffer_acquire_barriers.len() as u32,
-                        p_buffer_memory_barriers: if buffer_acquire_barriers.is_empty() {
-                            std::ptr::null()
-                        } else {
-                            buffer_acquire_barriers.as_ptr()
+                self.allocator
+                    .get_device()
+                    .get_handle()
+                    .cmd_pipeline_barrier2(
+                        *command_buffer.as_raw(),
+                        &vk::DependencyInfo {
+                            s_type: vk::StructureType::DEPENDENCY_INFO,
+                            p_next: std::ptr::null(),
+                            dependency_flags: vk::DependencyFlags::empty(),
+                            memory_barrier_count: 0,
+                            p_memory_barriers: std::ptr::null(),
+                            buffer_memory_barrier_count: buffer_acquire_barriers.len() as u32,
+                            p_buffer_memory_barriers: if buffer_acquire_barriers.is_empty() {
+                                std::ptr::null()
+                            } else {
+                                buffer_acquire_barriers.as_ptr()
+                            },
+                            image_memory_barrier_count: image_acquire_barriers.len() as u32,
+                            p_image_memory_barriers: if image_acquire_barriers.is_empty() {
+                                std::ptr::null()
+                            } else {
+                                image_acquire_barriers.as_ptr()
+                            },
+                            _marker: std::marker::PhantomData,
                         },
-                        image_memory_barrier_count: image_acquire_barriers.len() as u32,
-                        p_image_memory_barriers: if image_acquire_barriers.is_empty() {
-                            std::ptr::null()
-                        } else {
-                            image_acquire_barriers.as_ptr()
-                        },
-                        _marker: std::marker::PhantomData,
-                    },
-                );
+                    );
             }
         }
 
@@ -569,29 +582,32 @@ impl<A: Allocator> TransferManager<A> {
 
         if !buffer_release_barriers.is_empty() || !image_release_barriers.is_empty() {
             unsafe {
-                self.allocator.get_device().get_handle().cmd_pipeline_barrier2(
-                    *command_buffer.as_raw(),
-                    &vk::DependencyInfo {
-                        s_type: vk::StructureType::DEPENDENCY_INFO,
-                        p_next: std::ptr::null(),
-                        dependency_flags: vk::DependencyFlags::empty(),
-                        memory_barrier_count: 0,
-                        p_memory_barriers: std::ptr::null(),
-                        buffer_memory_barrier_count: buffer_release_barriers.len() as u32,
-                        p_buffer_memory_barriers: if buffer_release_barriers.is_empty() {
-                            std::ptr::null()
-                        } else {
-                            buffer_release_barriers.as_ptr()
+                self.allocator
+                    .get_device()
+                    .get_handle()
+                    .cmd_pipeline_barrier2(
+                        *command_buffer.as_raw(),
+                        &vk::DependencyInfo {
+                            s_type: vk::StructureType::DEPENDENCY_INFO,
+                            p_next: std::ptr::null(),
+                            dependency_flags: vk::DependencyFlags::empty(),
+                            memory_barrier_count: 0,
+                            p_memory_barriers: std::ptr::null(),
+                            buffer_memory_barrier_count: buffer_release_barriers.len() as u32,
+                            p_buffer_memory_barriers: if buffer_release_barriers.is_empty() {
+                                std::ptr::null()
+                            } else {
+                                buffer_release_barriers.as_ptr()
+                            },
+                            image_memory_barrier_count: image_release_barriers.len() as u32,
+                            p_image_memory_barriers: if image_release_barriers.is_empty() {
+                                std::ptr::null()
+                            } else {
+                                image_release_barriers.as_ptr()
+                            },
+                            _marker: std::marker::PhantomData,
                         },
-                        image_memory_barrier_count: image_release_barriers.len() as u32,
-                        p_image_memory_barriers: if image_release_barriers.is_empty() {
-                            std::ptr::null()
-                        } else {
-                            image_release_barriers.as_ptr()
-                        },
-                        _marker: std::marker::PhantomData,
-                    },
-                );
+                    );
             }
         }
 
@@ -760,5 +776,363 @@ impl TransferPool {
                 Poll::Pending => std::thread::yield_now(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::TestContext;
+    use dagal::allocators::{GPUAllocatorImpl, MemoryLocation};
+    use dagal::command::command_buffer::CmdBuffer;
+    use dagal::resource::{Buffer, BufferCreateInfo};
+    use proptest::prelude::*;
+    use std::sync::{LazyLock, Mutex};
+
+    const BELT_SIZE: u64 = 4096;
+    const LRU_CACHE: u64 = 4;
+
+    /// Fuzzying should re-use rather than spam recreate
+    static FUZZ_FIXTURE: LazyLock<Mutex<Fixture>> = LazyLock::new(|| Mutex::new(Fixture::new()));
+
+    /// Reusable and ensure drop order
+    struct Fixture {
+        belt: TransferManager<GPUAllocatorImpl>,
+        allocator: GPUAllocatorImpl,
+        context: TestContext,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            Self::with_belt_size(BELT_SIZE)
+        }
+
+        fn with_belt_size(belt_size: u64) -> Self {
+            let context = TestContext::new().unwrap();
+            let belt =
+                TransferManager::new(context.queue(0), context.allocator(), belt_size, LRU_CACHE)
+                    .unwrap();
+            let allocator = context.allocator();
+            Self {
+                belt,
+                allocator,
+                context,
+            }
+        }
+
+        fn device_buffer(&mut self, size: u64) -> Buffer<GPUAllocatorImpl> {
+            Buffer::new(BufferCreateInfo::NewEmptyBuffer {
+                device: self.context.device(),
+                name: Some("TransferBeltDst".to_string()),
+                allocator: &mut self.allocator,
+                size,
+                memory_type: MemoryLocation::GpuOnly,
+                usage_flags: vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::TRANSFER_SRC,
+            })
+            .unwrap()
+        }
+    }
+
+    fn bytes_of<T: Copy>(values: &[T]) -> Box<[u8]> {
+        // SAFETY: T is Copy and we only read size_of_val bytes of initialized memory.
+        let bytes = unsafe {
+            std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), std::mem::size_of_val(values))
+        };
+        bytes.to_vec().into_boxed_slice()
+    }
+
+    fn upload(
+        belt: &mut TransferManager<GPUAllocatorImpl>,
+        dst: &Buffer<GPUAllocatorImpl>,
+        dst_offset: u64,
+        data: Box<[u8]>,
+    ) {
+        let future = belt.get_transfer_pool().enqueue(TransferRequest::Buffer {
+            dst_queue_family: None,
+            buffer: unsafe { *dst.as_raw() },
+            dst_offset,
+            src_size: data.len() as u64,
+            data,
+            completion: None,
+        });
+        belt.flush().unwrap();
+        loop {
+            match future.poll() {
+                Poll::Ready(result) => return result.unwrap(),
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    fn readback(fixture: &mut Fixture, src: &Buffer<GPUAllocatorImpl>, size: u64) -> Vec<u8> {
+        let host = Buffer::new(BufferCreateInfo::NewEmptyBuffer {
+            device: fixture.context.device(),
+            name: Some("TransferBeltReadback".to_string()),
+            allocator: &mut fixture.allocator,
+            size,
+            memory_type: MemoryLocation::GpuToCpu,
+            usage_flags: vk::BufferUsageFlags::TRANSFER_DST,
+        })
+        .unwrap();
+
+        fixture
+            .context
+            .immediate_submit(|_context, recording| unsafe {
+                recording.get_device().get_handle().cmd_copy_buffer(
+                    *recording.as_raw(),
+                    *src.as_raw(),
+                    *host.as_raw(),
+                    &[vk::BufferCopy {
+                        src_offset: 0,
+                        dst_offset: 0,
+                        size,
+                    }],
+                );
+            })
+            .unwrap();
+
+        host.read::<u8>(0, size).unwrap().to_vec()
+    }
+
+    fn assert_roundtrip(fixture: &mut Fixture, payload: &[u8]) {
+        let size = payload.len() as u64;
+        let dst = fixture.device_buffer(size);
+        upload(
+            &mut fixture.belt,
+            &dst,
+            0,
+            payload.to_vec().into_boxed_slice(),
+        );
+        assert_eq!(readback(fixture, &dst, size), payload);
+    }
+
+    #[test]
+    fn upload_unaligned_bytes() {
+        let mut fixture = Fixture::new();
+        assert_roundtrip(&mut fixture, &[0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn upload_u32_pattern() {
+        let mut fixture = Fixture::new();
+        let words: Vec<u32> = (0..64u32).map(|i| i.wrapping_mul(0x9E3779B9)).collect();
+        assert_roundtrip(&mut fixture, &bytes_of(&words));
+    }
+
+    #[test]
+    fn upload_f32_payload() {
+        let mut fixture = Fixture::new();
+        let floats: Vec<f32> = (0..48).map(|i| i as f32 * -0.5).collect();
+        assert_roundtrip(&mut fixture, &bytes_of(&floats));
+    }
+
+    #[test]
+    fn upload_struct_payload() {
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct Vertex {
+            position: [f32; 3],
+            color: u32,
+        }
+
+        let mut fixture = Fixture::new();
+        let vertices: Vec<Vertex> = (0..32u32)
+            .map(|i| Vertex {
+                position: [i as f32, -(i as f32), 1.0],
+                color: 0xFF00FF00 ^ i,
+            })
+            .collect();
+        assert_roundtrip(&mut fixture, &bytes_of(&vertices));
+    }
+
+    #[test]
+    fn upload_honors_dst_offset() {
+        let mut fixture = Fixture::new();
+        let dst = fixture.device_buffer(256);
+
+        upload(
+            &mut fixture.belt,
+            &dst,
+            0,
+            vec![0u8; 256].into_boxed_slice(),
+        );
+
+        let payload: Vec<u8> = (0..64u8).collect();
+        upload(
+            &mut fixture.belt,
+            &dst,
+            128,
+            payload.clone().into_boxed_slice(),
+        );
+
+        let read = readback(&mut fixture, &dst, 256);
+        assert!(read[..128].iter().all(|b| *b == 0), "prefix was clobbered");
+        assert_eq!(&read[128..192], payload.as_slice());
+        assert!(read[192..].iter().all(|b| *b == 0), "suffix was clobbered");
+    }
+
+    #[test]
+    fn multiple_requests_share_one_flush() {
+        let mut fixture = Fixture::new();
+
+        let payloads: Vec<Vec<u8>> = (0..3u8)
+            .map(|i| (0..64u8).map(|b| b.wrapping_add(i * 17)).collect())
+            .collect();
+        let destinations: Vec<Buffer<GPUAllocatorImpl>> = payloads
+            .iter()
+            .map(|p| fixture.device_buffer(p.len() as u64))
+            .collect();
+
+        let pool = fixture.belt.get_transfer_pool();
+        let futures: Vec<TransferFuture> = payloads
+            .iter()
+            .zip(&destinations)
+            .map(|(payload, dst)| {
+                pool.enqueue(TransferRequest::Buffer {
+                    dst_queue_family: None,
+                    buffer: unsafe { *dst.as_raw() },
+                    dst_offset: 0,
+                    src_size: payload.len() as u64,
+                    data: payload.clone().into_boxed_slice(),
+                    completion: None,
+                })
+            })
+            .collect();
+
+        fixture.belt.flush().unwrap();
+        assert_eq!(
+            fixture.belt.chunks_closed.len(),
+            1,
+            "requests should share one chunk"
+        );
+
+        for future in &futures {
+            loop {
+                match future.poll() {
+                    Poll::Ready(result) => break result.unwrap(),
+                    Poll::Pending => std::thread::yield_now(),
+                }
+            }
+        }
+
+        for (payload, dst) in payloads.iter().zip(&destinations) {
+            assert_eq!(&readback(&mut fixture, dst, payload.len() as u64), payload);
+        }
+    }
+
+    #[test]
+    fn upload_larger_than_belt_size() {
+        let mut fixture = Fixture::new();
+        let payload: Vec<u8> = (0..(BELT_SIZE as usize * 4)).map(|i| i as u8).collect();
+        assert_roundtrip(&mut fixture, &payload);
+    }
+
+    fn seeded_payload(seed: u64, len: usize) -> Box<[u8]> {
+        let mut state = seed | 1;
+        let mut out = vec![0u8; len];
+        for byte in out.iter_mut() {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            *byte = (state >> 24) as u8;
+        }
+        out.into_boxed_slice()
+    }
+
+    /// Biased toward the boundaries where the belt switches between reusing and creating chunks.
+    fn payload_len() -> impl Strategy<Value = usize> {
+        prop_oneof![
+            1usize..=64,
+            (BELT_SIZE as usize - 2)..=(BELT_SIZE as usize + 2),
+            1usize..=(1usize << 20),
+            (1usize << 20)..=(6usize << 20),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 24, max_shrink_iters: 64, ..ProptestConfig::default() })]
+
+        #[test]
+        fn fuzz_upload_roundtrip(len in payload_len(), seed: u64) {
+            let mut guard = FUZZ_FIXTURE.lock().unwrap_or_else(|e| e.into_inner());
+            let fixture = &mut *guard;
+            let payload = seeded_payload(seed, len);
+
+            let dst = fixture.device_buffer(len as u64);
+            upload(&mut fixture.belt, &dst, 0, payload.clone());
+            let read = readback(fixture, &dst, len as u64);
+
+            prop_assert_eq!(read.len(), payload.len());
+            prop_assert!(read == payload.as_ref(), "payload mismatch at len {}", len);
+        }
+
+        #[test]
+        fn fuzz_batched_writes_do_not_overlap(
+            lens in prop::collection::vec(1usize..=(256 << 10), 1..=6),
+            seed: u64,
+        ) {
+            let mut guard = FUZZ_FIXTURE.lock().unwrap_or_else(|e| e.into_inner());
+            let fixture = &mut *guard;
+
+            let total: usize = lens.iter().sum();
+            let dst = fixture.device_buffer(total as u64);
+
+            let mut expected: Vec<u8> = Vec::with_capacity(total);
+            let mut offset = 0u64;
+            let pool = fixture.belt.get_transfer_pool();
+            let mut futures = Vec::new();
+            for (i, len) in lens.iter().enumerate() {
+                let payload = seeded_payload(seed.wrapping_add(i as u64), *len);
+                expected.extend_from_slice(&payload);
+                futures.push(pool.enqueue(TransferRequest::Buffer {
+                    dst_queue_family: None,
+                    buffer: unsafe { *dst.as_raw() },
+                    dst_offset: offset,
+                    src_size: *len as u64,
+                    data: payload,
+                    completion: None,
+                }));
+                offset += *len as u64;
+            }
+
+            fixture.belt.flush().unwrap();
+            for future in &futures {
+                loop {
+                    match future.poll() {
+                        Poll::Ready(result) => break result.unwrap(),
+                        Poll::Pending => std::thread::yield_now(),
+                    }
+                }
+            }
+
+            let read = readback(fixture, &dst, total as u64);
+            prop_assert!(read == expected, "batched writes clobbered each other");
+        }
+    }
+
+    #[test]
+    fn poll_reclaims_and_evicts_chunks() {
+        let mut fixture = Fixture::new();
+        let dst = fixture.device_buffer(64);
+
+        upload(&mut fixture.belt, &dst, 0, vec![7u8; 64].into_boxed_slice());
+        assert_eq!(fixture.belt.chunks_closed.len(), 1);
+        assert!(fixture.belt.chunks_free.is_empty());
+
+        fixture.belt.poll().unwrap();
+        assert!(
+            fixture.belt.chunks_closed.is_empty(),
+            "finished chunk should be reclaimed"
+        );
+        assert_eq!(fixture.belt.chunks_free.len(), 1);
+
+        for _ in 0..LRU_CACHE {
+            fixture.belt.poll().unwrap();
+        }
+        assert!(
+            fixture.belt.chunks_free.is_empty(),
+            "idle chunk should be evicted"
+        );
     }
 }
