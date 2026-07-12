@@ -17,7 +17,7 @@ pub fn render_assets(
         &dare_assets::AssetHandle<dare_assets::Mesh>,
         &dare_physics::Transform,
     )>,
-    transfer_belt: Res<crate::transfer_belt::TransferPool>,
+    _transfer_belt: Res<crate::transfer_belt::TransferPool>,
     visible_meshes: Res<crate::plugin::VisibleMeshList>,
 ) {
     for entity in visible_meshes.0.iter() {
@@ -45,18 +45,18 @@ pub fn render_assets(
     for (handle, runtime) in buffers.iter_runtimes() {
         if runtime.residency.load(Ordering::Acquire) == *dare_assets::ResidentState::ResidentGPU {
             // SAFETY: failed fetches literally just mean we are at ttl == 0 already.
+            let ttl = runtime.ttl.load(Ordering::Relaxed);
+            let next_ttl = ttl.saturating_sub(1);
             unsafe {
                 runtime
                     .ttl
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |ttl| {
-                        if ttl == 1 {
-                            runtime
-                                .residency
-                                .store(*dare_assets::ResidentState::Unloading, Ordering::Relaxed);
-                        }
-                        ttl.checked_sub(1)
-                    })
+                    .compare_exchange(ttl, next_ttl, Ordering::Relaxed, Ordering::Relaxed)
                     .unwrap_unchecked();
+            }
+            if ttl == 1 {
+                runtime
+                    .residency
+                    .store(*dare_assets::ResidentState::Unloading, Ordering::Relaxed);
             }
         }
     }
