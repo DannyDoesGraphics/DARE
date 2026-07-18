@@ -8,7 +8,6 @@ mod frame;
 mod gltf;
 mod handles;
 mod mesh;
-mod stream_state;
 mod unit_stream;
 
 pub use assets::*;
@@ -18,5 +17,4 @@ pub use format::*;
 pub use frame::*;
 pub use handles::{AssetHandle, ErasedAssetHandle};
 pub use mesh::Mesh;
-pub use stream_state::StreamState;
 pub use unit_stream::ByteStreamReshaper;

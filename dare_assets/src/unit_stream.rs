@@ -5,7 +5,8 @@ use crate::format::format_convert;
 
 /// Responsible for taking in a stream of unstructured bytes, and shaping them into [Format; chunk_size] chunks streamed out
 #[derive(Debug, Clone, Hash)]
-pub struct ByteStreamReshaper<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> {
+pub struct ByteStreamReshaper<InStream: Stream<Item = anyhow::Result<In>> + Unpin, In: AsRef<[u8]>>
+{
     incoming_stream: InStream,
     incoming_format: crate::Format,
     max_elements: u64,
@@ -19,8 +20,10 @@ pub struct ByteStreamReshaper<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8
     end_of_stream: bool,
 }
 
-impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> ByteStreamReshaper<InStream, In> {
-    fn new(
+impl<InStream: Stream<Item = anyhow::Result<In>> + Unpin, In: AsRef<[u8]>>
+    ByteStreamReshaper<InStream, In>
+{
+    pub fn new(
         stream: InStream,
         incoming: crate::Format,
         max_elements: u64,
@@ -54,32 +57,32 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> ByteStreamReshaper<In
         self.buffered_bytes.drain(..n).collect()
     }
 
-    fn decide_emit(&mut self) -> Option<Vec<u8>> {
+    fn decide_emit(&mut self, force: bool) -> Option<Vec<u8>> {
         if self.max_elements == 0 {
-            None
-        } else {
-            let buffered_elems: usize = self
-                .buffered_bytes
-                .len()
-                .div_euclid(self.incoming_format.size_in_bytes());
-            let to_remove = (buffered_elems as u64).min(self.max_elements);
-            self.max_elements = self.max_elements.saturating_sub(to_remove);
-            if to_remove == 0 {
-                None
-            } else if let Some(buffered) = self.chunk_elements
-                && buffered_elems > buffered as usize
-            {
-                Some(self.take_input_elems(to_remove as usize))
-            } else if self.chunk_elements.is_none() {
-                Some(self.take_input_elems(to_remove as usize))
-            } else {
-                None
-            }
+            return None;
         }
+        let buffered_elems: usize = self
+            .buffered_bytes
+            .len()
+            .div_euclid(self.incoming_format.size_in_bytes());
+        let to_remove = (buffered_elems as u64).min(self.max_elements);
+        if to_remove == 0 {
+            return None;
+        }
+        let should_emit = force
+            || match self.chunk_elements {
+                Some(threshold) => buffered_elems > threshold as usize,
+                None => true,
+            };
+        if !should_emit {
+            return None;
+        }
+        self.max_elements = self.max_elements.saturating_sub(to_remove);
+        Some(self.take_input_elems(to_remove as usize))
     }
 }
 
-impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
+impl<InStream: Stream<Item = anyhow::Result<In>> + Unpin, In: AsRef<[u8]>> Stream
     for ByteStreamReshaper<InStream, In>
 {
     type Item = Vec<u8>;
@@ -90,7 +93,7 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
             if self.end_of_stream
-                && let Some(out) = self.decide_emit()
+                && let Some(out) = self.decide_emit(true)
             {
                 let converted = self.apply_format_conversion(out);
                 return std::task::Poll::Ready(Some(converted));
@@ -98,25 +101,21 @@ impl<InStream: Stream<Item = In> + Unpin, In: AsRef<[u8]>> Stream
                 return std::task::Poll::Ready(None);
             } else {
                 match self.incoming_stream.poll_next_unpin(cx) {
-                    std::task::Poll::Ready(Some(piece)) => {
+                    std::task::Poll::Ready(Some(Ok(piece))) => {
                         let b: &[u8] = piece.as_ref();
                         if !b.is_empty() {
                             self.buffered_bytes.extend_from_slice(b);
                         }
-                        if let Some(elems) = self.decide_emit() {
+                        if let Some(elems) = self.decide_emit(false) {
                             let converted = self.apply_format_conversion(elems);
                             return std::task::Poll::Ready(Some(converted));
                         }
                     }
+                    std::task::Poll::Ready(Some(Err(err))) => {
+                        tracing::warn!(?err, "byte stream chunk read failed, skipping");
+                    }
                     std::task::Poll::Ready(None) => {
-                        // end of input stream
                         self.end_of_stream = true;
-                        if self.chunk_elements.is_none() {
-                            let result = self
-                                .decide_emit()
-                                .map(|out| self.apply_format_conversion(out));
-                            return std::task::Poll::Ready(result);
-                        }
                     }
                     std::task::Poll::Pending => {
                         return std::task::Poll::Pending;
@@ -143,7 +142,7 @@ mod tests {
         pool.spawner()
             .spawn_local(async move {
                 let input_data = vec![vec![1u8, 2, 3, 4, 5]];
-                let stream = stream::iter(input_data);
+                let stream = stream::iter(input_data.into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper = ByteStreamReshaper::new(stream, Format::U8, 5, None, None);
 
@@ -167,7 +166,7 @@ mod tests {
         pool.spawner()
             .spawn_local(async move {
                 let input_data = vec![vec![1u8, 2, 255]];
-                let stream = stream::iter(input_data);
+                let stream = stream::iter(input_data.into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::U8, 3, None, Some(Format::U16));
@@ -198,7 +197,7 @@ mod tests {
         pool.spawner()
             .spawn_local(async move {
                 let input_data = vec![vec![0u8, 128, 255]];
-                let stream = stream::iter(input_data);
+                let stream = stream::iter(input_data.into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::U8, 3, None, Some(Format::F32));
@@ -234,7 +233,7 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes]);
+                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U32));
@@ -270,7 +269,7 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes]);
+                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 4, None, Some(Format::U8));
@@ -300,7 +299,7 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes]);
+                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U8));
@@ -327,7 +326,7 @@ mod tests {
             .spawn_local(async move {
                 let input_data = vec![10u8, 20, 30, 40, 50, 60, 70, 80, 100, 110, 120, 130];
 
-                let stream = stream::iter(vec![input_data]);
+                let stream = stream::iter(vec![input_data].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::U8x4, 3, None, Some(Format::F32x3));
@@ -365,7 +364,7 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes]);
+                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8));
@@ -397,7 +396,7 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes]);
+                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8x3));
@@ -412,5 +411,33 @@ mod tests {
         let flattened: Vec<u8> = result.into_iter().flatten().collect();
 
         assert_eq!(flattened, vec![127u8, 255, 31, 101, 255, 120, 201, 0, 220,]);
+    }
+
+    #[test]
+    fn test_ignores_upstream_error() {
+        let mut pool = LocalPool::new();
+        let (sender, receiver) = futures::channel::mpsc::unbounded();
+
+        pool.spawner()
+            .spawn_local(async move {
+                let items: Vec<anyhow::Result<Vec<u8>>> = vec![
+                    Ok(vec![1u8, 2, 3, 4]),
+                    Err(anyhow::anyhow!("upstream read failed")),
+                    Ok(vec![5u8, 6, 7, 8]),
+                ];
+                let stream = stream::iter(items);
+
+                let mut reshaper = ByteStreamReshaper::new(stream, Format::U8, 100, None, None);
+
+                while let Some(chunk) = reshaper.next().await {
+                    sender.unbounded_send(chunk).unwrap();
+                }
+            })
+            .unwrap();
+
+        let result: Vec<Vec<u8>> = pool.run_until(receiver.collect());
+        let flattened: Vec<u8> = result.into_iter().flatten().collect();
+
+        assert_eq!(flattened, vec![1u8, 2, 3, 4, 5, 6, 7, 8]);
     }
 }

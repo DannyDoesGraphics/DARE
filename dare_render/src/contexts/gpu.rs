@@ -12,7 +12,7 @@ pub struct RenderGpu<A: Allocator> {
     pub present: PresentContext,
     pub swapchain: SwapchainContext<A>,
     pub transfer: TransferManager<A>,
-    pub transfer_pool: TransferPool,
+    pub transfer_pool: TransferPool<A>,
 }
 
 impl<A: Allocator> RenderGpu<A> {

@@ -1,6 +1,20 @@
 use dare_engine::{EnginePluginConfig, bootstrap_engine};
 use dare_render::{RenderPlugin, RenderPluginConfig};
-use tracing_subscriber::FmtSubscriber;
+use std::path::PathBuf;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
+
+fn parse_gltf_arg() -> Option<PathBuf> {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--gltf" {
+            return args.next().map(PathBuf::from);
+        }
+        if let Some(path) = arg.strip_prefix("--gltf=") {
+            return Some(PathBuf::from(path));
+        }
+    }
+    None
+}
 
 fn main() {
     tracy_client::Client::start();
@@ -13,18 +27,21 @@ fn main() {
     }));
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO)
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with_file(true)
         .with_line_number(true)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
     let _client = tracy_client::Client::start();
 
+    let gltf_path = parse_gltf_arg();
     let mut app = bootstrap_engine(EnginePluginConfig {
-        prompt_gltf_on_startup: true,
+        prompt_gltf_on_startup: gltf_path.is_none(),
+        initial_gltf: gltf_path.into_iter().collect(),
         ..Default::default()
     });
     app.add_plugin(RenderPlugin::new(RenderPluginConfig::default()));
+    app.add_plugin(dare_ecs::SmolPlugin);
 
     app.run();
 }

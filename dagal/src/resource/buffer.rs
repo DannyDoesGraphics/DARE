@@ -56,7 +56,7 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
     NewEmptyBuffer {
         device: crate::device::LogicalDevice,
         name: Option<String>,
-        allocator: &'a mut A,
+        allocator: &'a A,
         /// Size in bytes
         size: vk::DeviceSize,
         memory_type: crate::allocators::MemoryLocation,
@@ -65,7 +65,7 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
     FromOwnedCreateInfo {
         create_info: OwnedBufferCreateInfo,
         device: crate::device::LogicalDevice,
-        allocator: &'a mut A,
+        allocator: &'a A,
     },
 }
 

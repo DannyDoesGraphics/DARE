@@ -130,6 +130,11 @@ impl Queue {
         fence.wait(u64::MAX)?;
         Ok(())
     }
+
+    pub fn wait_idle(&self) -> Result<(), DagalError> {
+        unsafe { self.device.get_handle().queue_wait_idle(self.handle) }
+            .map_err(DagalError::VkError)
+    }
 }
 
 impl AsRaw for Queue {

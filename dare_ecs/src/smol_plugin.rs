@@ -6,7 +6,33 @@ use smol::{Executor, Task};
 
 fn executor() -> &'static Executor<'static> {
     static EXECUTOR: OnceLock<&'static Executor<'static>> = OnceLock::new();
-    EXECUTOR.get_or_init(|| Box::leak(Box::new(Executor::new())))
+    EXECUTOR.get_or_init(|| {
+        let ex: &'static Executor<'static> = Box::leak(Box::new(Executor::new()));
+
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        for i in 0..num_threads {
+            std::thread::Builder::new()
+                .name(format!("smol-executor ({i})"))
+                .spawn(move || {
+                    loop {
+                        if let Err(payload) = std::panic::catch_unwind(|| {
+                            smol::future::block_on(ex.run(std::future::pending::<()>()))
+                        }) {
+                            let msg = payload
+                                .downcast_ref::<&str>()
+                                .map(|s| s.to_string())
+                                .or_else(|| payload.downcast_ref::<String>().cloned())
+                                .unwrap_or_else(|| "<non-string panic payload>".to_string());
+                            tracing::error!(panic = %msg, "smol executor task panicked");
+                        }
+                    }
+                })
+                .expect("failed to spawn smol executor thread");
+        }
+        ex
+    })
 }
 
 /// Cloneable handle to the app's shared executor.

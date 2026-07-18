@@ -1,7 +1,6 @@
 use crate::{DataLocation, Format};
 use bevy_ecs::prelude::*;
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 
 impl crate::Assets<crate::Mesh> {
     /// Loads a glTF file and spawns entities containing `(AssetHandle<Mesh>, dare_physics::Transform)`.
@@ -12,7 +11,15 @@ impl crate::Assets<crate::Mesh> {
         path: &std::path::Path,
     ) {
         let gltf = gltf::Gltf::open(path).expect("Failed to open gltf file");
-        let blob: Option<Arc<[u8]>> = gltf.blob.as_ref().map(|b| Arc::from(b.as_slice()));
+        let bin_chunk_offset: Option<usize> = gltf.blob.is_some().then(|| {
+            use std::io::Read;
+            let mut file = std::fs::File::open(path).expect("Failed to open glb file");
+            let mut header = [0u8; 16];
+            file.read_exact(&mut header)
+                .expect("Failed to read glb binary chunk header");
+            let json_chunk_length = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
+            20 + json_chunk_length + 8
+        });
 
         let accessors: Vec<crate::AssetHandle<crate::Buffer>> =
             gltf.accessors()
@@ -24,11 +31,53 @@ impl crate::Assets<crate::Mesh> {
                     let buffer_view = accessor.view().expect("Accessor has no buffer view");
                     let buffer = buffer_view.buffer();
 
+                    let format = match accessor.data_type() {
+                        gltf::accessor::DataType::I8 => unimplemented!(),
+                        gltf::accessor::DataType::U8 => match accessor.dimensions() {
+                            gltf::accessor::Dimensions::Scalar => Format::U8,
+                            gltf::accessor::Dimensions::Vec3 => Format::U8x3,
+                            gltf::accessor::Dimensions::Vec4 => Format::U8x4,
+                            _ => unimplemented!(),
+                        },
+                        gltf::accessor::DataType::I16 => unimplemented!(),
+                        gltf::accessor::DataType::U16 => match accessor.dimensions() {
+                            gltf::accessor::Dimensions::Scalar => Format::U16,
+                            _ => unimplemented!(),
+                        },
+                        gltf::accessor::DataType::U32 => match accessor.dimensions() {
+                            gltf::accessor::Dimensions::Scalar => Format::U32,
+                            _ => unimplemented!(),
+                        },
+                        gltf::accessor::DataType::F32 => match accessor.dimensions() {
+                            gltf::accessor::Dimensions::Scalar => Format::F32,
+                            gltf::accessor::Dimensions::Vec2 => Format::F32x2,
+                            gltf::accessor::Dimensions::Vec3 => Format::F32x3,
+                            gltf::accessor::Dimensions::Vec4 => Format::F32x4,
+                            gltf::accessor::Dimensions::Mat2 => unimplemented!(),
+                            _ => unimplemented!(),
+                        },
+                    };
+
+                    let stride = buffer_view.stride().map(|s| s as usize);
+                    let span = match stride {
+                        Some(stride) => {
+                            accessor.count().saturating_sub(1) * stride + format.size_in_bytes()
+                        }
+                        None => accessor.count() * format.size_in_bytes(),
+                    };
+                    let offset = buffer_view.offset() + accessor.offset();
+
                     let buffer = crate::Buffer {
                         location: match buffer.source() {
-                            gltf::buffer::Source::Bin => DataLocation::Blob(blob.clone().expect(
-                                "No blob data in gltf, but accessor references binary buffer",
-                            )),
+                            gltf::buffer::Source::Bin => {
+                                let bin_chunk_offset = bin_chunk_offset
+                                    .expect("Buffer references BIN chunk, but glTF has none");
+                                DataLocation::File {
+                                    path: path.to_path_buf(),
+                                    offset: bin_chunk_offset + offset,
+                                    length: span,
+                                }
+                            }
                             gltf::buffer::Source::Uri(uri) => {
                                 if !uri.starts_with("data") {
                                     let mut resolved = path
@@ -36,43 +85,25 @@ impl crate::Assets<crate::Mesh> {
                                         .expect("gltf has no parent directory")
                                         .to_path_buf();
                                     resolved.push(uri);
-                                    DataLocation::File(resolved)
+                                    DataLocation::File {
+                                        path: resolved,
+                                        offset,
+                                        length: span,
+                                    }
                                 } else {
                                     unimplemented!("Data URIs are not supported yet")
                                 }
                             }
                         },
-                        format: match accessor.data_type() {
-                            gltf::accessor::DataType::I8 => unimplemented!(),
-                            gltf::accessor::DataType::U8 => match accessor.dimensions() {
-                                gltf::accessor::Dimensions::Scalar => Format::U8,
-                                gltf::accessor::Dimensions::Vec3 => Format::U8x3,
-                                gltf::accessor::Dimensions::Vec4 => Format::U8x4,
-                                _ => unimplemented!(),
-                            },
-                            gltf::accessor::DataType::I16 => unimplemented!(),
-                            gltf::accessor::DataType::U16 => match accessor.dimensions() {
-                                gltf::accessor::Dimensions::Scalar => Format::U16,
-                                _ => unimplemented!(),
-                            },
-                            gltf::accessor::DataType::U32 => match accessor.dimensions() {
-                                gltf::accessor::Dimensions::Scalar => Format::U32,
-                                _ => unimplemented!(),
-                            },
-                            gltf::accessor::DataType::F32 => match accessor.dimensions() {
-                                gltf::accessor::Dimensions::Scalar => Format::F32,
-                                gltf::accessor::Dimensions::Vec2 => Format::F32x2,
-                                gltf::accessor::Dimensions::Vec3 => Format::F32x3,
-                                gltf::accessor::Dimensions::Vec4 => Format::F32x4,
-                                gltf::accessor::Dimensions::Mat2 => unimplemented!(),
-                                _ => unimplemented!(),
-                            },
-                        },
-                        offset: buffer_view.offset() as u64 + accessor.offset() as u64,
-                        stride: buffer_view.stride().map(|s| s as u64),
+                        format,
+                        stride: stride.map(|s| s as u64),
                         count: accessor.count() as u64,
                     };
-                    buffers.insert(buffer)
+                    let name = accessor
+                        .name()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("accessor{}", accessor.index()));
+                    buffers.insert_named(buffer, Some(name))
                 })
                 .collect();
 
@@ -107,6 +138,10 @@ impl crate::Assets<crate::Mesh> {
         let meshes = gltf
             .meshes()
             .flat_map(|mesh| {
+                let mesh_name = mesh
+                    .name()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("mesh{}", mesh.index()));
                 mesh.primitives()
                     .map(|primitive| {
                         let mut uv_buffers: HashMap<u32, crate::AssetHandle<crate::Buffer>> =
@@ -163,13 +198,16 @@ impl crate::Assets<crate::Mesh> {
                         }
 
                         (
-                            self.insert(crate::Mesh {
-                                index_buffer: accessors[primitive.indices().unwrap().index()]
-                                    .clone(),
-                                vertex_buffer: vertex_buffer.unwrap(),
-                                normal_buffer: normal_buffer.unwrap(),
-                                uv_buffers,
-                            }),
+                            self.insert_named(
+                                crate::Mesh {
+                                    index_buffer: accessors[primitive.indices().unwrap().index()]
+                                        .clone(),
+                                    vertex_buffer: vertex_buffer.unwrap(),
+                                    normal_buffer: normal_buffer.unwrap(),
+                                    uv_buffers,
+                                },
+                                Some(format!("{mesh_name}[{}]", primitive.index())),
+                            ),
                             bounding_box.unwrap(),
                         )
                     })
@@ -180,9 +218,56 @@ impl crate::Assets<crate::Mesh> {
         tracing::info!("Loaded {} geometries", accessors.len());
         tracing::info!("Loaded {} meshes", meshes.len());
 
-        for (mesh_idx, transform) in meshes_with_transformations {
-            let (mesh, bounding_box) = meshes[mesh_idx.index()].clone();
-            commands.spawn((mesh, bounding_box, dare_physics::Transform::from(transform)));
+        // per-mesh start index into the primitive-flattened `meshes`
+        let mesh_primitive_offsets: Vec<usize> = gltf
+            .meshes()
+            .scan(0usize, |offset, mesh| {
+                let start = *offset;
+                *offset += mesh.primitives().count();
+                Some(start)
+            })
+            .collect();
+
+        for (mesh, transform) in meshes_with_transformations {
+            let start = mesh_primitive_offsets[mesh.index()];
+            for i in 0..mesh.primitives().count() {
+                let (mesh, bounding_box) = meshes[start + i].clone();
+                commands.spawn((mesh, bounding_box, dare_physics::Transform::from(transform)));
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod glb_offset_tests {
+    #[test]
+    fn bin_chunk_offset_matches_real_glb() {
+        let json = br#"{"asset":{"version":"2.0"}}"#.to_vec();
+        let bin = b"hello world, this is bin data".to_vec();
+
+        let glb = gltf::binary::Glb {
+            header: gltf::binary::Header {
+                magic: *b"glTF",
+                version: 2,
+                length: 0,
+            },
+            json: json.into(),
+            bin: Some(bin.clone().into()),
+        };
+        let bytes = glb.to_vec().unwrap();
+
+        let tmp = std::env::temp_dir().join("dare_glb_offset_test.glb");
+        std::fs::write(&tmp, &bytes).unwrap();
+
+        let json_chunk_length =
+            u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let computed_offset = 20 + json_chunk_length + 8;
+
+        assert_eq!(&bytes[computed_offset..computed_offset + bin.len()], &bin[..]);
+
+        let parsed = gltf::Gltf::open(&tmp).unwrap();
+        assert_eq!(&parsed.blob.unwrap()[..bin.len()], &bin[..]);
+
+        std::fs::remove_file(&tmp).ok();
     }
 }

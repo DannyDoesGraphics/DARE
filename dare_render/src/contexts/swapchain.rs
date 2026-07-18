@@ -107,18 +107,7 @@ impl<A: Allocator> SwapchainContext<A> {
         if extent.width == 0 || extent.height == 0 {
             return Ok(());
         }
-        unsafe {
-            let fences: Vec<vk::Fence> = present_context
-                .frames
-                .iter()
-                .map(|f| *f.render_fence.as_raw())
-                .collect::<Vec<vk::Fence>>();
-            core_context
-                .device
-                .get_handle()
-                .wait_for_fences(&fences, true, u64::MAX)
-                .unwrap();
-        }
+        core_context.queues.present.wait_idle()?;
         self.surface
             .refresh(*core_context.physical_device.get_handle())?;
         let capabilities = self.surface.get_capabilities();
@@ -172,18 +161,7 @@ impl<A: Allocator> SwapchainContext<A> {
         if extent.width == 0 || extent.height == 0 {
             return Ok(());
         }
-        unsafe {
-            let fences: Vec<vk::Fence> = present_context
-                .frames
-                .iter()
-                .map(|f| *f.render_fence.as_raw())
-                .collect();
-            core_context
-                .device
-                .get_handle()
-                .wait_for_fences(&fences, true, u64::MAX)
-                .unwrap();
-        }
+        core_context.queues.present.wait_idle()?;
 
         let new_surface: dagal::wsi::SurfaceQueried = dagal::wsi::Surface::new_with_handles(
             core_context.instance.get_entry(),

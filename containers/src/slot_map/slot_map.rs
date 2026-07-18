@@ -76,7 +76,7 @@ impl<T, S: Slot + SlotWithGeneration> SlotMap<T, S> {
         }
     }
 
-    pub fn get(&self, slot: S) -> Option<&T> {
+    pub fn get(&self, slot: &S) -> Option<&T> {
         self.slots.get(slot.id() as usize).and_then(|proxy_slot| {
             if proxy_slot.generation() == slot.generation() {
                 self.data.get(proxy_slot.id() as usize).map(|data| &data.0)
@@ -115,7 +115,7 @@ mod tests {
     fn test_insert_and_get() {
         let mut slot_map = SlotMap::default();
         let slot: DefaultSlot<i32> = slot_map.insert(42);
-        assert_eq!(slot_map.get(slot), Some(&42));
+        assert_eq!(slot_map.get(&slot), Some(&42));
     }
 
     #[test]
@@ -125,9 +125,9 @@ mod tests {
         let slot2 = slot_map.insert(43);
         let slot3 = slot_map.insert(44);
 
-        assert_eq!(slot_map.get(slot1), Some(&42));
-        assert_eq!(slot_map.get(slot2), Some(&43));
-        assert_eq!(slot_map.get(slot3), Some(&44));
+        assert_eq!(slot_map.get(&slot1), Some(&42));
+        assert_eq!(slot_map.get(&slot2), Some(&43));
+        assert_eq!(slot_map.get(&slot3), Some(&44));
     }
 
     #[test]
@@ -136,7 +136,7 @@ mod tests {
         let slot: DefaultSlot<i32> = slot_map.insert(42);
         let removed = slot_map.remove(slot.clone()).unwrap();
         assert_eq!(removed, 42);
-        assert_eq!(slot_map.get(slot), None);
+        assert_eq!(slot_map.get(&slot), None);
     }
 
     #[test]
@@ -150,8 +150,8 @@ mod tests {
         // Since slot1 was removed, slot3 may reuse that slot
         assert_eq!(slot3.id, slot1.id);
         assert_eq!(slot3.generation, slot1.generation + 1);
-        assert_eq!(slot_map.get(slot2), Some(&43));
-        assert_eq!(slot_map.get(slot3), Some(&44));
+        assert_eq!(slot_map.get(&slot2), Some(&43));
+        assert_eq!(slot_map.get(&slot3), Some(&44));
     }
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
         // Remove the slot
         let _ = slot_map.remove(slot.clone()).unwrap();
         // Try to get or remove using the same slot (should fail due to generation mismatch)
-        assert_eq!(slot_map.get(slot.clone()), None);
+        assert_eq!(slot_map.get(&slot), None);
         match slot_map.remove(slot.clone()) {
             Err(ContainerErrors::GenerationMismatch) => {}
             _ => panic!("Expected GenerationMismatch error"),
@@ -185,7 +185,7 @@ mod tests {
         if let Some(value) = slot_map.get_mut(&slot) {
             *value = 100;
         }
-        assert_eq!(slot_map.get(slot), Some(&100));
+        assert_eq!(slot_map.get(&slot), Some(&100));
     }
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..num_elements {
-            assert_eq!(slot_map.get(slots[i].clone()), Some(&i));
+            assert_eq!(slot_map.get(&slots[i]), Some(&i));
         }
 
         // Remove half of the elements
@@ -237,12 +237,12 @@ mod tests {
 
         // Ensure removed elements are gone
         for i in (0..num_elements).step_by(2) {
-            assert_eq!(slot_map.get(slots[i].clone()), None);
+            assert_eq!(slot_map.get(&slots[i]), None);
         }
 
         // Ensure remaining elements are still accessible
         for i in (1..num_elements).step_by(2) {
-            assert_eq!(slot_map.get(slots[i].clone()), Some(&i));
+            assert_eq!(slot_map.get(&slots[i]), Some(&i));
         }
     }
 
@@ -264,9 +264,9 @@ mod tests {
         assert_eq!(slot4.generation, slot2.generation + 1);
 
         // Verify contents
-        assert_eq!(slot_map.get(slot1), Some(&1));
-        assert_eq!(slot_map.get(slot3), Some(&3));
-        assert_eq!(slot_map.get(slot4), Some(&4));
+        assert_eq!(slot_map.get(&slot1), Some(&1));
+        assert_eq!(slot_map.get(&slot3), Some(&3));
+        assert_eq!(slot_map.get(&slot4), Some(&4));
     }
 
     #[test]
@@ -307,7 +307,7 @@ mod tests {
         let mut slot_map = SlotMap::default();
         let slot: DefaultSlot<i32> = slot_map.insert(42);
         let _ = slot_map.remove(slot.clone()).unwrap();
-        assert_eq!(slot_map.get(slot), None);
+        assert_eq!(slot_map.get(&slot), None);
     }
 
     #[test]
@@ -321,8 +321,8 @@ mod tests {
         assert_eq!(slot2.id, slot1.id);
         assert_eq!(slot2.generation, slot1.generation + 1);
 
-        assert_eq!(slot_map.get(slot2), Some(&43));
-        assert_eq!(slot_map.get(slot1), None);
+        assert_eq!(slot_map.get(&slot2), Some(&43));
+        assert_eq!(slot_map.get(&slot1), None);
     }
 
     #[test]
@@ -345,15 +345,15 @@ mod tests {
         assert_eq!(slot3.generation, slot2.generation + 1);
         assert_eq!(slot4.generation, slot1.generation + 1);
 
-        assert_eq!(slot_map.get(slot3), Some(&3));
-        assert_eq!(slot_map.get(slot4), Some(&4));
+        assert_eq!(slot_map.get(&slot3), Some(&3));
+        assert_eq!(slot_map.get(&slot4), Some(&4));
     }
 
     #[test]
     fn test_insert_and_get_strings() {
         let mut slot_map = SlotMap::default();
         let slot: DefaultSlot<i32> = slot_map.insert(String::from("Hello"));
-        assert_eq!(slot_map.get(slot), Some(&String::from("Hello")));
+        assert_eq!(slot_map.get(&slot), Some(&String::from("Hello")));
     }
 
     #[test]
@@ -366,7 +366,7 @@ mod tests {
 
         let mut slot_map = SlotMap::default();
         let slot: DefaultSlot<i32> = slot_map.insert(Point { x: 1, y: 2 });
-        assert_eq!(slot_map.get(slot), Some(&Point { x: 1, y: 2 }));
+        assert_eq!(slot_map.get(&slot), Some(&Point { x: 1, y: 2 }));
     }
 
     #[test]

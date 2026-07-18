@@ -3,3 +3,4 @@
 */assets/*
 .idea
 */proptest-regressions/*
+.direnv/

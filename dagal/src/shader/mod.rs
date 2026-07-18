@@ -14,6 +14,12 @@ pub mod shaderc_impl;
 #[cfg(feature = "shaderc")]
 pub use shaderc_impl::*;
 
+#[cfg(feature = "shader-slang")]
+pub mod slang_impl;
+
+#[cfg(feature = "shader-slang")]
+pub use slang_impl::*;
+
 #[derive(Copy, Debug, Clone, PartialOrd, PartialEq)]
 pub enum ShaderKind {
     Compute,

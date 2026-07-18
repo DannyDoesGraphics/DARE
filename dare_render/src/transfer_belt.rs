@@ -5,6 +5,7 @@
 use bevy_ecs::prelude::*;
 use dagal::ash::vk;
 use dagal::{allocators::Allocator, ash::vk::Handle, resource::traits::Resource, traits::AsRaw};
+use futures::channel::oneshot;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,66 +15,80 @@ use std::task::Poll;
 #[derive(Debug)]
 struct TransferSync {
     semaphore: dagal::sync::Semaphore,
-}
-
-#[derive(Clone, Debug)]
-struct TransferCompletion {
-    inner: Arc<TransferCompletionInner>,
+    wakers: std::sync::Mutex<Vec<std::task::Waker>>,
 }
 
 #[derive(Debug)]
-struct TransferCompletionInner {
-    sync: Arc<TransferSync>,
-    ticket: AtomicU64,
+pub enum TransferResult<A: Allocator> {
+    Buffer(dagal::resource::Buffer<A>),
+    Image(dagal::resource::Image<A>),
 }
 
-impl TransferCompletion {
-    fn new(sync: Arc<TransferSync>) -> Self {
-        Self {
-            inner: Arc::new(TransferCompletionInner {
-                sync,
-                ticket: AtomicU64::new(0),
-            }),
+impl<A: Allocator> TransferResult<A> {
+    pub fn into_buffer(self) -> Option<dagal::resource::Buffer<A>> {
+        match self {
+            Self::Buffer(buffer) => Some(buffer),
+            Self::Image(_) => None,
         }
     }
 
-    fn set_ticket(&self, ticket: u64) {
-        self.inner.ticket.store(ticket, Ordering::Release);
+    pub fn into_image(self) -> Option<dagal::resource::Image<A>> {
+        match self {
+            Self::Image(image) => Some(image),
+            Self::Buffer(_) => None,
+        }
     }
+}
 
-    fn poll(&self) -> Poll<dagal::Result<()>> {
-        let ticket = self.inner.ticket.load(Ordering::Acquire);
+#[derive(Debug)]
+pub(crate) struct TransferCompletion<A: Allocator> {
+    ticket: Arc<AtomicU64>,
+    result_tx: oneshot::Sender<TransferResult<A>>,
+}
+
+impl<A: Allocator> TransferCompletion<A> {
+    fn resolve(self, ticket: u64, result: TransferResult<A>) {
+        self.ticket.store(ticket, Ordering::Release);
+        let _ = self.result_tx.send(result);
+    }
+}
+
+/// Pollable handle for a transfer submitted through [`TransferPool`].
+#[derive(Debug)]
+pub struct TransferFuture<A: Allocator> {
+    sync: Arc<TransferSync>,
+    ticket: Arc<AtomicU64>,
+    result_rx: oneshot::Receiver<TransferResult<A>>,
+}
+
+impl<A: Allocator> TransferFuture<A> {
+    pub fn poll(&mut self) -> Poll<dagal::Result<TransferResult<A>>> {
+        let ticket = self.ticket.load(Ordering::Acquire);
         if ticket == 0 {
             return Poll::Pending;
         }
-        match self.inner.sync.semaphore.current_value() {
-            Ok(value) if value >= ticket => Poll::Ready(Ok(())),
+        match self.sync.semaphore.current_value() {
+            Ok(value) if value >= ticket => {
+                Poll::Ready(Ok(self.result_rx.try_recv().unwrap().unwrap()))
+            }
             Ok(_) => Poll::Pending,
             Err(e) => Poll::Ready(Err(e)),
         }
     }
 }
 
-/// Pollable handle for a transfer submitted through [`TransferPool`].
-#[derive(Clone, Debug)]
-pub struct TransferFuture {
-    completion: TransferCompletion,
-}
-
-impl TransferFuture {
-    pub fn poll(&self) -> Poll<dagal::Result<()>> {
-        self.completion.poll()
-    }
-}
-
-impl std::future::Future for TransferFuture {
-    type Output = dagal::Result<()>;
+impl<A: Allocator> std::future::Future for TransferFuture<A> {
+    type Output = dagal::Result<TransferResult<A>>;
 
     fn poll(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Self::Output> {
-        self.completion.poll()
+        let result = TransferFuture::poll(&mut self);
+        if result.is_pending() {
+            self.sync.wakers.lock().unwrap().push(cx.waker().clone());
+        }
+        result
     }
 }
 
@@ -86,29 +101,29 @@ struct Chunk<A: Allocator> {
     /// GPU lifetime for this chunk associated with the submission #
     max_ticket: u64,
     /// Destinations to write to
-    destinations: Vec<ChunkDestination>,
+    destinations: Vec<ChunkDestination<A>>,
     /// Number of consecutive flushes where this chunk was not used
     unused_flush_count: u64,
 }
 
 /// Destination for each chunk slice
 #[derive(Debug)]
-enum ChunkDestination {
+enum ChunkDestination<A: Allocator> {
     Buffer {
         src_queue_family: u32,
         /// If None, same as src_queue_family
         dst_queue_family: Option<u32>,
-        buffer: vk::Buffer,
+        buffer: dagal::resource::Buffer<A>,
         dst_offset: u64,
         src_offset: u64,
         src_size: u64,
-        completion: Option<TransferCompletion>,
+        completion: TransferCompletion<A>,
     },
     Image {
         src_queue_family: u32,
         /// If None, same as src_queue_family
         dst_queue_family: Option<u32>,
-        image: vk::Image,
+        image: dagal::resource::Image<A>,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
         dst_offset: vk::Offset3D,
@@ -116,24 +131,23 @@ enum ChunkDestination {
         subresource_layers: vk::ImageSubresourceLayers,
         src_offset: u64,
         src_size: u64,
-        completion: Option<TransferCompletion>,
+        completion: TransferCompletion<A>,
     },
 }
 
 /// Transfer request for buffer or image
 #[derive(Debug)]
-pub enum TransferRequest {
+pub enum TransferRequest<A: Allocator> {
     Buffer {
         dst_queue_family: Option<u32>,
-        buffer: vk::Buffer,
+        buffer: dagal::resource::Buffer<A>,
         dst_offset: u64,
         src_size: u64,
         data: Box<[u8]>,
-        completion: Option<TransferCompletion>,
     },
     Image {
         dst_queue_family: Option<u32>,
-        image: vk::Image,
+        image: dagal::resource::Image<A>,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
         dst_offset: vk::Offset3D,
@@ -141,11 +155,10 @@ pub enum TransferRequest {
         subresource_layers: vk::ImageSubresourceLayers,
         src_size: u64,
         data: Box<[u8]>,
-        completion: Option<TransferCompletion>,
     },
 }
 
-impl TransferRequest {
+impl<A: Allocator> TransferRequest<A> {
     /// Size in bytes to be transferred
     pub fn size(&self) -> u64 {
         match self {
@@ -153,23 +166,9 @@ impl TransferRequest {
             TransferRequest::Image { src_size, .. } => *src_size,
         }
     }
-
-    fn attach_completion(&mut self, completion: TransferCompletion) {
-        match self {
-            Self::Buffer {
-                completion: slot, ..
-            }
-            | Self::Image {
-                completion: slot, ..
-            } => {
-                debug_assert!(slot.is_none());
-                *slot = Some(completion);
-            }
-        }
-    }
 }
 
-impl ChunkDestination {
+impl<A: Allocator> ChunkDestination<A> {
     /// Size in bytes to be transferred
     pub fn size(&self) -> u64 {
         match self {
@@ -210,8 +209,8 @@ pub struct TransferManager<A: Allocator> {
     max_belt_size: u64,
 
     /// Queue for transfer requests
-    send: std::sync::mpsc::Sender<TransferRequest>,
-    recv: std::sync::mpsc::Receiver<TransferRequest>,
+    send: std::sync::mpsc::Sender<(TransferRequest<A>, TransferCompletion<A>)>,
+    recv: std::sync::mpsc::Receiver<(TransferRequest<A>, TransferCompletion<A>)>,
 
     /// LRU cache size
     lru_cache: u64,
@@ -233,13 +232,15 @@ impl<A: Allocator> TransferManager<A> {
             })?;
 
         // Queue for transfers
-        let (send, recv) = std::sync::mpsc::channel::<TransferRequest>();
+        let (send, recv) =
+            std::sync::mpsc::channel::<(TransferRequest<A>, TransferCompletion<A>)>();
         let sync = Arc::new(TransferSync {
             semaphore: dagal::sync::Semaphore::new(
                 vk::SemaphoreCreateFlags::empty(),
                 device.clone(),
                 0,
             )?,
+            wakers: std::sync::Mutex::new(Vec::new()),
         });
         Ok(Self {
             chunks_active: Vec::new(),
@@ -326,6 +327,10 @@ impl<A: Allocator> TransferManager<A> {
             chunk.unused_flush_count <= self.lru_cache
         });
 
+        for waker in self.sync.wakers.lock().unwrap().drain(..) {
+            waker.wake();
+        }
+
         Ok(())
     }
 
@@ -364,7 +369,6 @@ impl<A: Allocator> TransferManager<A> {
 
         let ticket = self.next_ticket;
         chunk.max_ticket = ticket;
-        let mut completions: Vec<TransferCompletion> = Vec::new();
 
         let command_buffer: dagal::command::CommandBuffer =
             self.command_pool.allocate(1)?.pop().unwrap();
@@ -390,8 +394,9 @@ impl<A: Allocator> TransferManager<A> {
                     src_size,
                     completion,
                 } => {
+                    let raw_buffer: vk::Buffer = unsafe { *buffer.as_raw() };
                     buffer_copy_maps
-                        .entry(buffer.as_raw())
+                        .entry(raw_buffer.as_raw())
                         .or_default()
                         .push(vk::BufferCopy2 {
                             s_type: vk::StructureType::BUFFER_COPY_2,
@@ -413,7 +418,7 @@ impl<A: Allocator> TransferManager<A> {
                             dst_stage_mask: vk::PipelineStageFlags2::TRANSFER,
                             src_queue_family_index: src_queue_family,
                             dst_queue_family_index: transfer_family,
-                            buffer,
+                            buffer: raw_buffer,
                             offset: dst_offset,
                             size: src_size,
                             _marker: std::marker::PhantomData,
@@ -429,15 +434,13 @@ impl<A: Allocator> TransferManager<A> {
                             dst_stage_mask: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
                             src_queue_family_index: transfer_family,
                             dst_queue_family_index: dst_family,
-                            buffer,
+                            buffer: raw_buffer,
                             offset: dst_offset,
                             size: src_size,
                             _marker: std::marker::PhantomData,
                         });
                     }
-                    if let Some(completion) = completion {
-                        completions.push(completion);
-                    }
+                    completion.resolve(ticket, TransferResult::Buffer(buffer));
                 }
                 ChunkDestination::Image {
                     src_queue_family,
@@ -452,6 +455,7 @@ impl<A: Allocator> TransferManager<A> {
                     src_size: _,
                     completion,
                 } => {
+                    let raw_image: vk::Image = unsafe { *image.as_raw() };
                     let dst_queue_family: u32 = dst_queue_family.unwrap_or(src_queue_family);
                     let subresource_range = vk::ImageSubresourceRange {
                         aspect_mask: subresource_layers.aspect_mask,
@@ -471,7 +475,7 @@ impl<A: Allocator> TransferManager<A> {
                         new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                         src_queue_family_index: src_queue_family,
                         dst_queue_family_index: self.queue.get_family_index(),
-                        image,
+                        image: raw_image,
                         subresource_range,
                         _marker: std::marker::PhantomData,
                     });
@@ -486,14 +490,12 @@ impl<A: Allocator> TransferManager<A> {
                         new_layout,
                         src_queue_family_index: self.queue.get_family_index(),
                         dst_queue_family_index: dst_queue_family,
-                        image,
+                        image: raw_image,
                         subresource_range,
                         _marker: std::marker::PhantomData,
                     });
-                    image_copy_maps
-                        .entry(image.as_raw())
-                        .or_default()
-                        .push(vk::BufferImageCopy2 {
+                    image_copy_maps.entry(raw_image.as_raw()).or_default().push(
+                        vk::BufferImageCopy2 {
                             s_type: vk::StructureType::BUFFER_IMAGE_COPY_2,
                             p_next: std::ptr::null(),
                             buffer_offset: src_offset,
@@ -503,10 +505,9 @@ impl<A: Allocator> TransferManager<A> {
                             image_offset: dst_offset,
                             image_extent: dst_extent,
                             _marker: std::marker::PhantomData,
-                        });
-                    if let Some(completion) = completion {
-                        completions.push(completion);
-                    }
+                        },
+                    );
+                    completion.resolve(ticket, TransferResult::Image(image));
                 }
             }
         }
@@ -644,10 +645,6 @@ impl<A: Allocator> TransferManager<A> {
                 .unwrap();
         }
 
-        for completion in completions {
-            completion.set_ticket(ticket);
-        }
-
         self.chunks_closed.push(chunk);
         self.next_ticket += 1;
         Ok(())
@@ -656,8 +653,9 @@ impl<A: Allocator> TransferManager<A> {
     /// Flush any pending transfers from host to device
     pub fn flush(&mut self) -> dagal::Result<()> {
         // flush queue
-        let requests: Vec<TransferRequest> = self.recv.try_iter().collect();
-        for request in requests {
+        let requests: Vec<(TransferRequest<A>, TransferCompletion<A>)> =
+            self.recv.try_iter().collect();
+        for (request, completion) in requests {
             // Allocate a slice for this request
             let size: u64 = request.size();
             let chunk_ix: usize = self.allocate_slice(size)?;
@@ -670,7 +668,6 @@ impl<A: Allocator> TransferManager<A> {
                     src_size,
                     dst_offset,
                     dst_queue_family,
-                    completion,
                 } => {
                     chunk.buffer.write(write_offset, &data)?;
                     chunk.destinations.push(ChunkDestination::Buffer {
@@ -693,7 +690,6 @@ impl<A: Allocator> TransferManager<A> {
                     subresource_layers,
                     src_size,
                     data,
-                    completion,
                 } => {
                     chunk.buffer.write(write_offset, &data)?;
                     chunk.destinations.push(ChunkDestination::Image {
@@ -734,7 +730,7 @@ impl<A: Allocator> TransferManager<A> {
     }
 
     /// Get a handle to the transfer pool for sending transfer requests
-    pub fn get_transfer_pool(&self) -> TransferPool {
+    pub fn get_transfer_pool(&self) -> TransferPool<A> {
         TransferPool {
             send: self.send.clone(),
             sync: Arc::clone(&self.sync),
@@ -744,32 +740,38 @@ impl<A: Allocator> TransferManager<A> {
 
 /// Handle for sending transfer requests from any thread.
 #[derive(Clone, Resource)]
-pub struct TransferPool {
-    send: std::sync::mpsc::Sender<TransferRequest>,
+pub struct TransferPool<A: Allocator> {
+    send: std::sync::mpsc::Sender<(TransferRequest<A>, TransferCompletion<A>)>,
     sync: Arc<TransferSync>,
 }
 
-impl std::fmt::Debug for TransferPool {
+impl<A: Allocator> std::fmt::Debug for TransferPool<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TransferPool").finish_non_exhaustive()
     }
 }
 
-impl TransferPool {
+impl<A: Allocator> TransferPool<A> {
     /// Enqueue a transfer and return a future to poll for completion.
-    pub fn enqueue(&self, mut transfer_request: TransferRequest) -> TransferFuture {
-        let completion = TransferCompletion::new(Arc::clone(&self.sync));
-        let future = TransferFuture {
-            completion: completion.clone(),
+    pub fn enqueue(&self, transfer_request: TransferRequest<A>) -> TransferFuture<A> {
+        let ticket = Arc::new(AtomicU64::new(0));
+        let (result_tx, result_rx) = oneshot::channel();
+        let completion = TransferCompletion {
+            ticket: Arc::clone(&ticket),
+            result_tx,
         };
-        transfer_request.attach_completion(completion);
-        self.send.send(transfer_request).unwrap();
+        let future = TransferFuture {
+            sync: Arc::clone(&self.sync),
+            ticket,
+            result_rx,
+        };
+        self.send.send((transfer_request, completion)).unwrap();
         future
     }
 
     /// Enqueue and spin until the transfer completes.
-    pub fn send(&self, transfer_request: TransferRequest) -> dagal::Result<()> {
-        let future = self.enqueue(transfer_request);
+    pub fn send(&self, transfer_request: TransferRequest<A>) -> dagal::Result<TransferResult<A>> {
+        let mut future = self.enqueue(transfer_request);
         loop {
             match future.poll() {
                 Poll::Ready(result) => return result,
@@ -844,22 +846,26 @@ mod tests {
 
     fn upload(
         belt: &mut TransferManager<GPUAllocatorImpl>,
-        dst: &Buffer<GPUAllocatorImpl>,
+        dst: Buffer<GPUAllocatorImpl>,
         dst_offset: u64,
         data: Box<[u8]>,
-    ) {
-        let future = belt.get_transfer_pool().enqueue(TransferRequest::Buffer {
+    ) -> Buffer<GPUAllocatorImpl> {
+        let mut future = belt.get_transfer_pool().enqueue(TransferRequest::Buffer {
             dst_queue_family: None,
-            buffer: unsafe { *dst.as_raw() },
+            buffer: dst,
             dst_offset,
             src_size: data.len() as u64,
             data,
-            completion: None,
         });
         belt.flush().unwrap();
         loop {
             match future.poll() {
-                Poll::Ready(result) => return result.unwrap(),
+                Poll::Ready(result) => {
+                    return result
+                        .unwrap()
+                        .into_buffer()
+                        .expect("buffer transfer resolved to an image");
+                }
                 Poll::Pending => std::thread::yield_now(),
             }
         }
@@ -898,9 +904,9 @@ mod tests {
     fn assert_roundtrip(fixture: &mut Fixture, payload: &[u8]) {
         let size = payload.len() as u64;
         let dst = fixture.device_buffer(size);
-        upload(
+        let dst = upload(
             &mut fixture.belt,
-            &dst,
+            dst,
             0,
             payload.to_vec().into_boxed_slice(),
         );
@@ -951,17 +957,12 @@ mod tests {
         let mut fixture = Fixture::new();
         let dst = fixture.device_buffer(256);
 
-        upload(
-            &mut fixture.belt,
-            &dst,
-            0,
-            vec![0u8; 256].into_boxed_slice(),
-        );
+        let dst = upload(&mut fixture.belt, dst, 0, vec![0u8; 256].into_boxed_slice());
 
         let payload: Vec<u8> = (0..64u8).collect();
-        upload(
+        let dst = upload(
             &mut fixture.belt,
-            &dst,
+            dst,
             128,
             payload.clone().into_boxed_slice(),
         );
@@ -985,17 +986,16 @@ mod tests {
             .collect();
 
         let pool = fixture.belt.get_transfer_pool();
-        let futures: Vec<TransferFuture> = payloads
+        let futures: Vec<TransferFuture<GPUAllocatorImpl>> = payloads
             .iter()
-            .zip(&destinations)
+            .zip(destinations)
             .map(|(payload, dst)| {
                 pool.enqueue(TransferRequest::Buffer {
                     dst_queue_family: None,
-                    buffer: unsafe { *dst.as_raw() },
+                    buffer: dst,
                     dst_offset: 0,
                     src_size: payload.len() as u64,
                     data: payload.clone().into_boxed_slice(),
-                    completion: None,
                 })
             })
             .collect();
@@ -1007,14 +1007,22 @@ mod tests {
             "requests should share one chunk"
         );
 
-        for future in &futures {
-            loop {
-                match future.poll() {
-                    Poll::Ready(result) => break result.unwrap(),
-                    Poll::Pending => std::thread::yield_now(),
+        let destinations: Vec<Buffer<GPUAllocatorImpl>> = futures
+            .into_iter()
+            .map(|mut future| {
+                loop {
+                    match future.poll() {
+                        Poll::Ready(result) => {
+                            break result
+                                .unwrap()
+                                .into_buffer()
+                                .expect("buffer transfer resolved to an image");
+                        }
+                        Poll::Pending => std::thread::yield_now(),
+                    }
                 }
-            }
-        }
+            })
+            .collect();
 
         for (payload, dst) in payloads.iter().zip(&destinations) {
             assert_eq!(&readback(&mut fixture, dst, payload.len() as u64), payload);
@@ -1060,7 +1068,7 @@ mod tests {
             let payload = seeded_payload(seed, len);
 
             let dst = fixture.device_buffer(len as u64);
-            upload(&mut fixture.belt, &dst, 0, payload.clone());
+            let dst = upload(&mut fixture.belt, dst, 0, payload.clone());
             let read = readback(fixture, &dst, len as u64);
 
             prop_assert_eq!(read.len(), payload.len());
@@ -1068,7 +1076,7 @@ mod tests {
         }
 
         #[test]
-        fn fuzz_batched_writes_do_not_overlap(
+        fn fuzz_sequential_writes_do_not_overlap(
             lens in prop::collection::vec(1usize..=(256 << 10), 1..=6),
             seed: u64,
         ) {
@@ -1076,38 +1084,19 @@ mod tests {
             let fixture = &mut *guard;
 
             let total: usize = lens.iter().sum();
-            let dst = fixture.device_buffer(total as u64);
+            let mut dst = fixture.device_buffer(total as u64);
 
             let mut expected: Vec<u8> = Vec::with_capacity(total);
             let mut offset = 0u64;
-            let pool = fixture.belt.get_transfer_pool();
-            let mut futures = Vec::new();
             for (i, len) in lens.iter().enumerate() {
                 let payload = seeded_payload(seed.wrapping_add(i as u64), *len);
                 expected.extend_from_slice(&payload);
-                futures.push(pool.enqueue(TransferRequest::Buffer {
-                    dst_queue_family: None,
-                    buffer: unsafe { *dst.as_raw() },
-                    dst_offset: offset,
-                    src_size: *len as u64,
-                    data: payload,
-                    completion: None,
-                }));
+                dst = upload(&mut fixture.belt, dst, offset, payload);
                 offset += *len as u64;
             }
 
-            fixture.belt.flush().unwrap();
-            for future in &futures {
-                loop {
-                    match future.poll() {
-                        Poll::Ready(result) => break result.unwrap(),
-                        Poll::Pending => std::thread::yield_now(),
-                    }
-                }
-            }
-
             let read = readback(fixture, &dst, total as u64);
-            prop_assert!(read == expected, "batched writes clobbered each other");
+            prop_assert!(read == expected, "sequential writes clobbered each other");
         }
     }
 
@@ -1116,7 +1105,7 @@ mod tests {
         let mut fixture = Fixture::new();
         let dst = fixture.device_buffer(64);
 
-        upload(&mut fixture.belt, &dst, 0, vec![7u8; 64].into_boxed_slice());
+        let _dst = upload(&mut fixture.belt, dst, 0, vec![7u8; 64].into_boxed_slice());
         assert_eq!(fixture.belt.chunks_closed.len(), 1);
         assert!(fixture.belt.chunks_free.is_empty());
 

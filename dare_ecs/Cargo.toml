@@ -8,3 +8,4 @@ bevy_ecs = { workspace = true }
 smol = { workspace = true }
 crossbeam-channel = { workspace = true }
 dare_util = { path = "../dare_util" }
+tracing = { workspace = true }

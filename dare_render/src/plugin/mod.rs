@@ -90,9 +90,11 @@ impl Plugin for RenderPlugin {
             .unwrap()
             .world_mut()
             .init_resource::<Window>();
+        app.add_plugin(crate::render_resources::GpuAssetLifecyclePlugin::<
+            RenderSubAppLabel,
+            dare_assets::Buffer,
+        >::new());
 
-        // The belt itself is built in `bootstrap_gpu`, once a window yields a device.
-        // These systems no-op until then, since the sub-app only ticks once the GPU is up.
         app.get_sub_app_mut::<RenderSubAppLabel>()
             .unwrap()
             .schedule_scope(|schedule| {
@@ -100,17 +102,17 @@ impl Plugin for RenderPlugin {
                 schedule.add_systems((
                     crate::systems::transfer_belt_poll_system::<dagal::allocators::GPUAllocatorImpl>
                         .in_set(AppStage::PreUpdate),
+                    crate::render_resources::render_assets
+                        .in_set(AppStage::Update)
+                        .before(crate::systems::render_system::<dagal::allocators::GPUAllocatorImpl>),
                     crate::systems::render_system::<dagal::allocators::GPUAllocatorImpl>.in_set(AppStage::Update),
                     crate::systems::transfer_belt_flush_system::<dagal::allocators::GPUAllocatorImpl>
                         .in_set(AppStage::PostUpdate),
                 ));
             });
 
-        // Render-mode state + `Tab` toggle + main->render extraction.
         app.add_plugin(RenderModePlugin);
-        // Camera state + main->render extraction, driven by the fly-cam input loop.
         app.add_plugin(FlyControllerPlugin);
-        // Per-frame visible mesh list, culled in the main world.
         app.add_plugin(CullPlugin);
 
         window_sync::register(app);

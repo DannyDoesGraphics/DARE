@@ -85,14 +85,14 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
     /// Create a new image that has allocated memory
     NewAllocated {
         device: crate::device::LogicalDevice,
-        allocator: &'a mut A,
+        allocator: &'a A,
         location: crate::allocators::MemoryLocation,
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
     FromOwnedCreateInfo {
         device: crate::device::LogicalDevice,
-        allocator: &'a mut A,
+        allocator: &'a A,
         create_info: OwnedImageCreateInfo,
         name: Option<&'a str>,
     },

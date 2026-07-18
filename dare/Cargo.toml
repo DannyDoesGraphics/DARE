@@ -5,11 +5,14 @@ edition = "2024"
 authors = ["Danny Le <git@dannydoes.graphics>"]
 
 [dependencies]
+dagal = { path = "../dagal", features = ["shader-slang"] }
+anyhow = { workspace = true }
 dare_assets = { path = "../dare_assets" }
+dare_ecs = { path = "../dare_ecs" }
 dare_engine = { path = "../dare_engine" }
 dare_render = { path = "../dare_render" }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.23" }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracy-client = { workspace = true }
 
 [features]

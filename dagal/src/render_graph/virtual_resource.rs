@@ -1,52 +1,73 @@
-use std::hash::Hash;
+use std::{
+    any::{Any, TypeId},
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+    marker::PhantomData,
+};
 
-/// A virtual resource handle is a virtual opaque handle to a resource
-/// Which may or may not be instantiated
-#[derive(Debug, Clone, Eq)]
-pub struct VirtualResource {
-    /// Upper 48 bits are virtual resource id, bottom 16 bits are resource version
-    pub(crate) data: u64,
-    pub(crate) kind: std::any::TypeId,
+use crate::resource::traits::Resource;
+
+/// Opaque pointer to an underlying resource managed by the render graph
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct VirtualResource<A: Resource> {
+    id: u64,
+    ty: TypeId,
 }
-impl Hash for VirtualResource {
+impl<A: Resource> Hash for VirtualResource<A> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.data.hash(state);
-    }
-}
-impl PartialEq for VirtualResource {
-    fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
+        self.id.hash(state);
+        self.ty.hash(state);
     }
 }
 
-impl VirtualResource {
-    pub fn new<T: 'static>(id: u64, version: u16) -> Self {
-        assert!(id < (1 << 48), "Virtual resource id must be less than 2^48");
-
+impl<A: Resource> VirtualResource<A> {
+    pub(crate) fn new(id: u64) -> Self {
         Self {
-            data: (id << 16) | (version as u64),
-            kind: std::any::TypeId::of::<T>(),
+            id,
+            ty: TypeId::of::<A>(),
         }
     }
-
     pub fn id(&self) -> u64 {
-        self.data >> 16
+        self.id
+    }
+}
+
+/// Contains the virtual resource mappings to their original underlying representation
+pub struct VirtualResourceContainer {
+    ids: std::collections::HashMap<TypeId, u64>,
+    map: std::collections::HashMap<u64, Box<dyn Any>>,
+}
+
+impl VirtualResourceContainer {
+    fn compute_hash<A: Resource>(handle: &VirtualResource<A>) -> u64 {
+        let mut hasher = DefaultHasher::default();
+        handle.hash(&mut hasher);
+        hasher.finish()
+    }
+    pub fn get<A: Resource>(&self, handle: &VirtualResource<A>) -> Option<&A> {
+        self.map
+            .get(&Self::compute_hash(handle))
+            .and_then(|boxed| boxed.downcast_ref::<A>())
     }
 
-    pub fn version(&self) -> u16 {
-        (self.data & 0xFFFF) as u16
+    pub fn get_mut(&mut self, handle: &VirtualResource<A>) -> Option<&mut A> {
+        self.map
+            .get_mut(&Self::compute_hash(handle))
+            .and_then(|boxed| boxed.downcast_mut::<A>())
     }
 
-    pub fn kind(&self) -> std::any::TypeId {
-        self.kind
+    pub(crate) fn insert<A: Resource>(&mut self, resource: A) -> VirtualResource<A> {
+        let mut id = self.ids.entry(TypeId::of::<A>()).or_default();
+        let virtual_resource = VirtualResource::new::<A>(*id);
+        id += 1;
+        self.map
+            .insert(Self::compute_hash(&virtual_resource), Box::new(resource));
+        virtual_resource
     }
 
-    pub(crate) fn set_version(&mut self, version: u16) {
-        self.data = (self.data & !0xFFFF) | (version as u64);
-    }
-
-    pub fn set_id(&mut self, id: u64) {
-        assert!(id < (1 << 48), "Virtual resource id must be less than 2^48");
-        self.data = (id << 16) | (self.data & 0xFFFF);
+    pub(crate) fn remove<A: Resource>(&mut self, handle: VirtualResource<A>) -> Option<A> {
+        self.map
+            .remove(&Self::compute_hash(&handle))
+            .and_then(|boxed| boxed.downcast::<A>().ok())
     }
 }

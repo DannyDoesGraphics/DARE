@@ -61,7 +61,7 @@ fn benchmark_slot_map_get(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("SlotMap", size), size, |b, _| {
             b.iter(|| {
                 for slot in &slots {
-                    black_box(slot_map.get(black_box(slot.clone())));
+                    black_box(slot_map.get(black_box(slot)));
                 }
             });
         });

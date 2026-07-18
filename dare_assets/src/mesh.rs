@@ -22,4 +22,6 @@ impl std::hash::Hash for Mesh {
         }
     }
 }
-impl crate::Asset for Mesh {}
+impl crate::Asset for Mesh {
+    type GpuResource = ();
+}

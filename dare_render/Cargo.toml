@@ -19,7 +19,9 @@ dare_ecs = { path = "../dare_ecs" }
 tracy-client = { workspace = true }
 dare_util = { path = "../dare_util" }
 crossbeam-channel = { workspace = true }
-futures = { version = "0.3.32" }
+futures = { workspace = true }
+ureq = { workspace = true }
+smol = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.11.0"

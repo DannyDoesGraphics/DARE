@@ -9,7 +9,6 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 dashmap = { version = "6.1.0" }
 derivative = { workspace = true }
-tokio = { workspace = true }
 crossbeam-channel = { workspace = true }
 
 [dev-dependencies]
