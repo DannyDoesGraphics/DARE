@@ -1,5 +1,5 @@
-use crate::device::physical_device::PhysicalDevice;
 use crate::device::QueueInfo;
+use crate::device::physical_device::PhysicalDevice;
 use crate::traits::Destructible;
 use anyhow::Result;
 use ash;
@@ -44,7 +44,7 @@ impl LogicalDeviceInner {}
 impl Destructible for LogicalDeviceInner {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkDevice {:p}", self.handle.handle());
+        log::trace!("Destroying VkDevice {:p}", self.handle.handle());
 
         unsafe {
             self.handle.destroy_device(None);
@@ -52,14 +52,13 @@ impl Destructible for LogicalDeviceInner {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for LogicalDeviceInner {
     fn drop(&mut self) {
         self.destroy();
     }
 }
 
-/// Effectively the same as [`ash::Device`], but will automatically clean itself up if raii is enabled
+/// Effectively the same as [`ash::Device`], but will automatically clean itself up
 ///
 /// LogicalDevice encloses [`LogicalDeviceInner`] as it reference counts it using [`Arc`]. This
 /// makes lifetime management easier. However, those who opt into deletion stack, may still be
@@ -108,7 +107,7 @@ impl LogicalDevice {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkDevice {:p}", device.handle());
+        log::trace!("Creating VkDevice {:p}", device.handle());
 
         let mut debug_utils: Option<ash::ext::debug_utils::Device> = None;
         if device_ci.debug_utils {

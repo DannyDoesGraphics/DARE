@@ -1,176 +1,368 @@
-use std::ffi::{c_char, CString};
+use std::marker::PhantomData;
+use std::ptr;
+use std::time::Duration;
 
-use crate::util::{convert_raw_c_ptrs_to_cstring, wrap_c_str};
-use crate::wsi::DagalWindow;
+use crate::bootstrap::app_info::{AppSettings, Expected, GPURequirements, QueueRequest};
+use crate::bootstrap::init::{Context, ContextInit};
 use ash;
 use ash::vk;
-use raw_window_handle::RawDisplayHandle;
-use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use crate::prelude as dagal;
-
-/// Quick utility stuff for tests
-#[derive(Default, Clone)]
-pub struct TestSettings {
-    /// required instance layers
-    pub instance_layers: Vec<CString>,
-    /// required instance extensions
-    pub instance_extensions: Vec<CString>,
-    /// required physical device extensions
-    pub physical_device_extensions: Vec<CString>,
-    /// required device extensions
-    pub logical_device_extensions: Vec<CString>,
+pub struct TestHarness {
+    immediate: std::sync::Mutex<crate::command::ImmediateSubmit>,
+    queue_info: crate::device::QueueInfo,
+    allocator: crate::allocators::GPUAllocatorImpl,
+    surface: Option<crate::wsi::SurfaceQueried>,
+    device: crate::device::LogicalDevice,
+    physical_device: crate::device::PhysicalDevice,
+    instance: crate::core::Instance,
+    window: Option<winit::window::Window>,
+    event_loop: Option<winit::event_loop::EventLoop<()>>,
 }
 
-pub struct TestVulkan {
-    pub device: Option<crate::device::LogicalDevice>,
-    pub debug_messenger: Option<crate::device::DebugMessenger>,
-    pub physical_device: Option<crate::device::PhysicalDevice>,
-    pub queue_registry: Option<crate::device::QueueRegistry>,
-    pub instance: crate::core::Instance,
-}
+unsafe impl Send for TestHarness {}
+unsafe impl Sync for TestHarness {}
 
-impl TestSettings {
-    pub fn from_rdh(rdh: RawDisplayHandle) -> Self {
-        Self {
-            instance_extensions: convert_raw_c_ptrs_to_cstring(
-                ash_window::enumerate_required_extensions(rdh).unwrap(),
-            ),
-            ..Default::default()
-        }
-    }
-
-    pub fn add_instance_layer(mut self, layer: *const c_char) -> Self {
-        self.instance_layers.push(wrap_c_str(layer));
-        self
-    }
-
-    pub fn add_physical_device_extension(mut self, ext: *const c_char) -> Self {
-        self.physical_device_extensions.push(wrap_c_str(ext));
-        self
-    }
-}
-
-/// Quickly make [`ash::Entry`] and [`ash::Instance`]
-///
-/// This is used for testing only hence, validation will always be on
-pub fn create_vulkan(settings: TestSettings) -> TestVulkan {
-    let mut instance = crate::bootstrap::InstanceBuilder::new().set_validation(true);
-    for ext in settings.instance_extensions.iter() {
-        instance = instance.add_extension(ext.as_ptr());
-    }
-    for ext in settings.instance_layers.iter() {
-        instance = instance.add_layer(ext.as_ptr())
-    }
-    instance = instance.set_validation(true); // force validation
-
-    let instance = instance.build().unwrap();
-
-    // debug messenger
-    let debug_messenger =
-        crate::device::DebugMessenger::new(instance.get_entry(), instance.get_instance()).unwrap();
-    TestVulkan {
-        device: None,
-        debug_messenger: Some(debug_messenger),
-        physical_device: None,
-        queue_registry: None,
-        instance,
-    }
-}
-
-pub fn create_vulkan_and_device(settings: TestSettings) -> TestVulkan {
-    let test_vulkan = create_vulkan(settings.clone());
-    let compute_queue = crate::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true);
-    let mut physical_device_bootstrap = crate::bootstrap::PhysicalDeviceSelector::default()
-        .add_required_queue(compute_queue.clone());
-    for ext in settings.physical_device_extensions.iter() {
-        physical_device_bootstrap = physical_device_bootstrap.add_required_extension(ext.as_ptr());
-    }
-    let physical_device_bootstrap = physical_device_bootstrap
-        .select(test_vulkan.instance.get_instance())
-        .unwrap();
-    let physical_device = physical_device_bootstrap.handle.clone();
-    let mut logical_device =
-        crate::bootstrap::LogicalDeviceBuilder::from(physical_device_bootstrap).debug_utils(true);
-    for ext in settings.logical_device_extensions.iter() {
-        logical_device = logical_device.add_extension(ext.as_ptr());
-    }
-    let (logical_device, queues) = logical_device
-        .build(test_vulkan.instance.get_instance())
-        .unwrap();
-
-    let queue_registry = crate::device::QueueRegistry::from_queues(queues).unwrap();
-    TestVulkan {
-        device: Some(logical_device),
-        debug_messenger: test_vulkan.debug_messenger,
-        physical_device: Some(physical_device),
-        queue_registry: Some(queue_registry),
-        instance: test_vulkan.instance,
-    }
-}
-
-/// Basic test app for unit testing only
-#[allow(clippy::type_complexity)]
-#[derive(Default)]
-pub struct TestApp<T: DagalWindow> {
-    window: Option<T>,
-    test_function: Option<Box<dyn Fn(&T)>>,
-}
-
-impl<T: DagalWindow> TestApp<T> {
-    pub fn new() -> Self {
-        Self {
-            window: None,
-            test_function: None,
+impl Drop for TestHarness {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = self.device.get_handle().device_wait_idle();
         }
     }
 }
 
-impl TestApp<winit::window::Window> {
-    pub fn attach_function<A: Fn(&winit::window::Window) + 'static>(mut self, func: A) -> Self {
-        self.test_function = Some(Box::new(func));
-        self
+impl TestHarness {
+    pub fn headless() -> TestHarnessBuilder {
+        TestHarnessBuilder::new(false)
     }
 
-    pub fn run(mut self) {
-        let event_loop = winit::event_loop::EventLoop::new().unwrap();
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-
-        event_loop.run_app(&mut self).unwrap()
+    pub fn windowed() -> TestHarnessBuilder {
+        TestHarnessBuilder::new(true)
     }
-}
 
-#[cfg(feature = "winit")]
-impl winit::application::ApplicationHandler for TestApp<winit::window::Window> {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window: winit::window::Window = event_loop
-            .create_window(
-                winit::window::WindowAttributes::default().with_title("Unit test window"),
+    fn from_parts(
+        settings: AppSettings,
+        window: Option<winit::window::Window>,
+        event_loop: Option<winit::event_loop::EventLoop<()>>,
+    ) -> anyhow::Result<Self> {
+        let (instance, physical_device, surface, device, allocator) = Context::init(settings)?;
+        let surface = match surface {
+            Some(surface) => Some(surface.query_details(physical_device.handle())?),
+            None => None,
+        };
+        let queue_info = *physical_device.get_active_queues().last().unwrap();
+        let queue = unsafe {
+            device.get_queue(
+                &vk::DeviceQueueInfo2 {
+                    s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                    p_next: ptr::null(),
+                    flags: vk::DeviceQueueCreateFlags::empty(),
+                    queue_family_index: queue_info.family_index,
+                    queue_index: queue_info.index,
+                    _marker: PhantomData,
+                },
+                queue_info.queue_flags,
+                queue_info.strict,
+                queue_info.can_present,
             )
-            .unwrap();
-        self.window = Some(window);
+        };
+        let immediate = crate::command::ImmediateSubmit::new(device.clone(), queue)?;
+        Ok(Self {
+            immediate: std::sync::Mutex::new(immediate),
+            queue_info,
+            allocator,
+            surface,
+            device,
+            physical_device,
+            instance,
+            window,
+            event_loop,
+        })
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: winit::window::WindowId,
-        event: WindowEvent,
-    ) {
-        let window: &winit::window::Window = match self.window.as_ref() {
-            None => {
-                return;
+    pub fn instance(&self) -> &crate::core::Instance {
+        &self.instance
+    }
+
+    pub fn physical_device(&self) -> &crate::device::PhysicalDevice {
+        &self.physical_device
+    }
+
+    pub fn device(&self) -> crate::device::LogicalDevice {
+        self.device.clone()
+    }
+
+    pub fn allocator(&self) -> crate::allocators::GPUAllocatorImpl {
+        self.allocator.clone()
+    }
+
+    pub fn queue(&self, index: usize) -> crate::device::Queue {
+        let queue_info = self.physical_device.get_active_queues()[index];
+        unsafe {
+            self.device.get_queue(
+                &vk::DeviceQueueInfo2 {
+                    s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
+                    p_next: ptr::null(),
+                    flags: vk::DeviceQueueCreateFlags::empty(),
+                    queue_family_index: queue_info.family_index,
+                    queue_index: queue_info.index,
+                    _marker: PhantomData,
+                },
+                queue_info.queue_flags,
+                queue_info.strict,
+                queue_info.can_present,
+            )
+        }
+    }
+
+    pub fn queue_info(&self) -> crate::device::QueueInfo {
+        self.queue_info
+    }
+
+    pub fn window(&self) -> &winit::window::Window {
+        self.window
+            .as_ref()
+            .expect("window() called on a headless TestHarness; use TestHarness::windowed()")
+    }
+
+    pub fn surface(&self) -> &crate::wsi::SurfaceQueried {
+        self.surface
+            .as_ref()
+            .expect("surface() called on a headless TestHarness; use TestHarness::windowed()")
+    }
+
+    pub fn immediate_submit<F, R>(&self, f: F) -> crate::Result<R>
+    where
+        F: FnOnce(&Self, &crate::command::CommandBufferRecording) -> R,
+    {
+        let mut immediate = self.immediate.lock()?;
+        immediate.submit(|recording| f(self, recording))
+    }
+}
+
+pub struct TestHarnessBuilder {
+    windowed: bool,
+    api_version: (u32, u32, u32),
+    extensions: Vec<String>,
+    queues: Vec<QueueRequest>,
+    event_hook: Option<Box<dyn FnMut(&winit::event::WindowEvent)>>,
+}
+
+impl TestHarnessBuilder {
+    fn new(windowed: bool) -> Self {
+        Self {
+            windowed,
+            api_version: (1, 3, 0),
+            extensions: Vec::new(),
+            queues: vec![QueueRequest {
+                strict: false,
+                queue_type: vec![Expected::Required(
+                    vk::QueueFlags::GRAPHICS | vk::QueueFlags::TRANSFER | vk::QueueFlags::COMPUTE,
+                )]
+                .into(),
+                count: Expected::Required(2),
+            }],
+            event_hook: None,
+        }
+    }
+
+    pub fn expect_extension(mut self, extensions: &[&str]) -> Self {
+        self.extensions
+            .extend(extensions.iter().map(|name| name.to_string()));
+        self
+    }
+
+    pub fn expect_vk_version(mut self, major: u32, minor: u32, patch: u32) -> Self {
+        self.api_version = (major, minor, patch);
+        self
+    }
+
+    pub fn expect_queues(mut self, queues: &[QueueRequest]) -> Self {
+        self.queues = queues.to_vec();
+        self
+    }
+
+    pub fn event_loop<F>(mut self, hook: F) -> Self
+    where
+        F: FnMut(&winit::event::WindowEvent) + 'static,
+    {
+        self.event_hook = Some(Box::new(hook));
+        self
+    }
+
+    pub fn build(mut self) -> anyhow::Result<TestHarness> {
+        let (major, minor, patch) = self.api_version;
+        let (window, event_loop) = if self.windowed {
+            let (window, event_loop) = create_window(self.event_hook.take())?;
+            (Some(window), Some(event_loop))
+        } else {
+            (None, None)
+        };
+        let settings = self.settings(window.as_ref());
+        let harness = TestHarness::from_parts(settings, window, event_loop)?;
+
+        let supported = harness.physical_device.get_properties().api_version;
+        let (have_major, have_minor) = (
+            vk::api_version_major(supported),
+            vk::api_version_minor(supported),
+        );
+        if have_major < major || (have_major == major && have_minor < minor) {
+            anyhow::bail!(
+                "selected device supports Vulkan {have_major}.{have_minor} but {major}.{minor}.{patch} was required"
+            );
+        }
+        Ok(harness)
+    }
+
+    fn settings(&self, window: Option<&winit::window::Window>) -> AppSettings {
+        let mut device_extensions: Vec<Expected<String>> = self
+            .extensions
+            .iter()
+            .map(|name| Expected::Required(name.clone()))
+            .collect();
+        let mut raw_display_handle = None;
+        let mut raw_window_handle = None;
+        let mut present_mode = None;
+        if let Some(window) = window {
+            raw_display_handle = Some(window.display_handle().unwrap().as_raw());
+            raw_window_handle = Some(window.window_handle().unwrap().as_raw());
+            present_mode = Some(Expected::Preferred(vk::PresentModeKHR::FIFO));
+            let swapchain = ash::khr::swapchain::NAME.to_string_lossy().to_string();
+            if !self.extensions.iter().any(|name| *name == swapchain) {
+                device_extensions.push(Expected::Required(swapchain));
             }
-            Some(window) => window,
-        };
+        }
+        AppSettings {
+            name: "dagal-tests".to_string(),
+            version: 0,
+            engine_name: "dagal-tests".to_string(),
+            engine_version: 0,
+            api_version: (
+                0,
+                self.api_version.0,
+                self.api_version.1,
+                self.api_version.2,
+            ),
+            enable_validation: true,
+            debug_utils: true,
+            raw_display_handle,
+            raw_window_handle,
+            surface_format: None,
+            present_mode,
+            gpu_requirements: GPURequirements {
+                dedicated: Expected::Preferred(true),
+                features: vk::PhysicalDeviceFeatures {
+                    shader_int64: vk::TRUE,
+                    ..Default::default()
+                },
+                features_1: vk::PhysicalDeviceVulkan11Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                    variable_pointers: vk::TRUE,
+                    variable_pointers_storage_buffer: vk::TRUE,
+                    shader_draw_parameters: vk::TRUE,
+                    ..Default::default()
+                },
+                features_2: vk::PhysicalDeviceVulkan12Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                    buffer_device_address: vk::TRUE,
+                    descriptor_indexing: vk::TRUE,
+                    descriptor_binding_partially_bound: vk::TRUE,
+                    runtime_descriptor_array: vk::TRUE,
+                    scalar_block_layout: vk::TRUE,
+                    timeline_semaphore: vk::TRUE,
+                    ..Default::default()
+                },
+                features_3: vk::PhysicalDeviceVulkan13Features {
+                    s_type: vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                    dynamic_rendering: vk::TRUE,
+                    synchronization2: vk::TRUE,
+                    ..Default::default()
+                },
+                device_extensions,
+                queues: self.queues.clone(),
+            },
+        }
+    }
+}
 
-        if event == WindowEvent::CloseRequested {
-            event_loop.exit();
-        };
+fn create_window(
+    hook: Option<Box<dyn FnMut(&winit::event::WindowEvent)>>,
+) -> anyhow::Result<(winit::window::Window, winit::event_loop::EventLoop<()>)> {
+    use winit::platform::pump_events::EventLoopExtPumpEvents;
 
-        self.test_function.as_ref().unwrap()(window);
+    let mut builder = winit::event_loop::EventLoop::builder();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use winit::platform::wayland::EventLoopBuilderExtWayland;
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        EventLoopBuilderExtWayland::with_any_thread(&mut builder, true);
+        EventLoopBuilderExtX11::with_any_thread(&mut builder, true);
+    }
+    let mut event_loop = builder.build()?;
 
-        event_loop.exit();
+    struct Creator {
+        window: Option<winit::window::Window>,
+        hook: Option<Box<dyn FnMut(&winit::event::WindowEvent)>>,
+    }
+    impl winit::application::ApplicationHandler for Creator {
+        fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+            if self.window.is_none() {
+                self.window = Some(
+                    event_loop
+                        .create_window(
+                            winit::window::WindowAttributes::default()
+                                .with_title("dagal test window"),
+                        )
+                        .unwrap(),
+                );
+            }
+        }
+
+        fn window_event(
+            &mut self,
+            _event_loop: &winit::event_loop::ActiveEventLoop,
+            _window_id: winit::window::WindowId,
+            event: winit::event::WindowEvent,
+        ) {
+            if let Some(hook) = self.hook.as_mut() {
+                hook(&event);
+            }
+        }
+    }
+
+    let mut creator = Creator { window: None, hook };
+    let mut spins = 0;
+    while creator.window.is_none() && spins < 2048 {
+        event_loop.pump_app_events(Some(Duration::from_millis(1)), &mut creator);
+        spins += 1;
+    }
+    let window = creator
+        .window
+        .ok_or_else(|| anyhow::anyhow!("failed to create a test window"))?;
+    Ok((window, event_loop))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn headless_builds() {
+        let ctx = TestHarness::headless().build().unwrap();
+        drop(ctx);
+    }
+
+    #[test]
+    fn missing_extension_fails() {
+        let result = TestHarness::headless()
+            .expect_extension(&["VK_EXT_this_extension_does_not_exist"])
+            .build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn unsupported_version_fails() {
+        let result = TestHarness::headless().expect_vk_version(9, 9, 0).build();
+        assert!(result.is_err());
     }
 }

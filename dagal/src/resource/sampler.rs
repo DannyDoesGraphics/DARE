@@ -4,7 +4,6 @@ use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
 use std::hash::{Hash, Hasher};
-use std::ptr;
 
 #[derive(Debug)]
 pub struct Sampler {
@@ -22,14 +21,13 @@ impl Eq for Sampler {}
 impl Destructible for Sampler {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkSampler {:p}", self.handle);
+        log::trace!("Destroying VkSampler {:p}", self.handle);
         unsafe {
             self.device.get_handle().destroy_sampler(self.handle, None);
         }
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for Sampler {
     fn drop(&mut self) {
         self.destroy();
@@ -45,11 +43,10 @@ pub enum SamplerCreateInfo<'a> {
     /// use std::ptr;
     /// use ash::vk;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let sampler = dagal::resource::Sampler::new(
     ///     dagal::resource::SamplerCreateInfo::FromVk {
-    ///         device: test_vulkan.device.as_ref().unwrap().clone(),
+    ///         device: ctx.device(),
     /// 		create_info: vk::SamplerCreateInfo {
     ///             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
     /// 			p_next: ptr::null(),
@@ -187,7 +184,7 @@ impl Resource for Sampler {
             } => {
                 let handle = unsafe { device.get_handle().create_sampler(&create_info, None) }?;
                 #[cfg(feature = "log-lifetimes")]
-                tracing::trace!("Creating VkSampler {:p}", handle);
+                log::trace!("Creating VkSampler {:p}", handle);
 
                 let mut handle = Self { handle, device };
                 crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
@@ -216,32 +213,28 @@ impl Resource for Sampler {
             } => {
                 let handle = unsafe {
                     device.get_handle().create_sampler(
-                        &vk::SamplerCreateInfo {
-                            s_type: vk::StructureType::SAMPLER_CREATE_INFO,
-                            p_next: ptr::null(),
-                            flags,
-                            mag_filter,
-                            min_filter,
-                            mipmap_mode,
-                            address_mode_u,
-                            address_mode_v,
-                            address_mode_w,
-                            mip_lod_bias,
-                            anisotropy_enable,
-                            max_anisotropy,
-                            compare_enable,
-                            compare_op,
-                            min_lod,
-                            max_lod,
-                            border_color,
-                            unnormalized_coordinates,
-                            _marker: Default::default(),
-                        },
+                        &vk::SamplerCreateInfo::default()
+                            .flags(flags)
+                            .mag_filter(mag_filter)
+                            .min_filter(min_filter)
+                            .mipmap_mode(mipmap_mode)
+                            .address_mode_u(address_mode_u)
+                            .address_mode_v(address_mode_v)
+                            .address_mode_w(address_mode_w)
+                            .mip_lod_bias(mip_lod_bias)
+                            .anisotropy_enable(anisotropy_enable != 0)
+                            .max_anisotropy(max_anisotropy)
+                            .compare_enable(compare_enable != 0)
+                            .compare_op(compare_op)
+                            .min_lod(min_lod)
+                            .max_lod(max_lod)
+                            .border_color(border_color)
+                            .unnormalized_coordinates(unnormalized_coordinates != 0),
                         None,
                     )
                 }?;
                 #[cfg(feature = "log-lifetimes")]
-                tracing::trace!("Creating VkSampler {:p}", handle);
+                log::trace!("Creating VkSampler {:p}", handle);
 
                 let mut handle = Self { handle, device };
                 crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;

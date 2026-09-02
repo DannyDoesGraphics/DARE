@@ -82,7 +82,7 @@ impl Nameable for DescriptorSetLayout {
 impl Destructible for DescriptorSetLayout {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkDescriptorLayout {:p}", self.handle);
+        log::trace!("Destroying VkDescriptorLayout {:p}", self.handle);
         unsafe {
             self.device
                 .get_handle()
@@ -91,7 +91,6 @@ impl Destructible for DescriptorSetLayout {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for DescriptorSetLayout {
     fn drop(&mut self) {
         self.destroy();

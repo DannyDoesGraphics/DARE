@@ -22,6 +22,7 @@ pub struct Buffer<A: Allocator> {
     allocator: Option<A>,
     address: vk::DeviceAddress,
     size: vk::DeviceSize,
+    usage: vk::BufferUsageFlags,
     name: Option<String>,
 }
 unsafe impl<A: Allocator> Send for Buffer<A> {}
@@ -39,16 +40,11 @@ impl<A: Allocator> std::hash::Hash for Buffer<A> {
     }
 }
 
-/// Similar to [`vk::BufferCreateInfo`], but supports hashing + cloning, but restrictive in regards to extensions
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct OwnedBufferCreateInfo {
-    pub name: Option<String>,
-    pub location: crate::allocators::MemoryLocation,
-    pub flags: vk::BufferCreateFlags,
+pub struct BufferDesc {
     pub size: vk::DeviceSize,
     pub usage: vk::BufferUsageFlags,
-    pub sharing_mode: vk::SharingMode,
-    pub queue_family_indices: Vec<u32>,
+    pub location: crate::allocators::MemoryLocation,
 }
 
 pub enum BufferCreateInfo<'a, A: Allocator> {
@@ -62,10 +58,11 @@ pub enum BufferCreateInfo<'a, A: Allocator> {
         memory_type: crate::allocators::MemoryLocation,
         usage_flags: vk::BufferUsageFlags,
     },
-    FromOwnedCreateInfo {
-        create_info: OwnedBufferCreateInfo,
+    /// Create a buffer without any allocation bound
+    NewUnallocated {
         device: crate::device::LogicalDevice,
-        allocator: &'a A,
+        size: vk::DeviceSize,
+        usage_flags: vk::BufferUsageFlags,
     },
 }
 
@@ -73,7 +70,7 @@ impl<A: Allocator> Destructible for Buffer<A> {
     fn destroy(&mut self) {
         unsafe {
             #[cfg(feature = "log-lifetimes")]
-            tracing::trace!("Destroying VkBuffer {:p}", self.handle);
+            log::trace!("Destroying VkBuffer {:p}", self.handle);
 
             self.device.get_handle().destroy_buffer(self.handle, None);
             if let Some(allocation) = self.allocation.take() {
@@ -85,7 +82,6 @@ impl<A: Allocator> Destructible for Buffer<A> {
     }
 }
 
-#[cfg(feature = "raii")]
 impl<A: Allocator> Drop for Buffer<A> {
     fn drop(&mut self) {
         self.destroy();
@@ -97,6 +93,36 @@ impl<A: Allocator> Buffer<A> {
     /// buffer
     pub fn address(&self) -> vk::DeviceAddress {
         self.address
+    }
+
+    pub fn bind_memory(&mut self, allocation: A::Allocation) -> Result<(), crate::DagalError> {
+        assert!(
+            self.allocation.is_none(),
+            "buffer is already bound to memory"
+        );
+        unsafe {
+            self.device.get_handle().bind_buffer_memory(
+                self.handle,
+                allocation.memory(),
+                allocation.offset(),
+            )?;
+        }
+        if self.usage & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+            == vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+        {
+            self.address = unsafe {
+                self.device.get_handle().get_buffer_device_address(
+                    &vk::BufferDeviceAddressInfo::default().buffer(self.handle),
+                )
+            };
+        }
+        self.allocation = Some(allocation);
+        Ok(())
+    }
+
+    #[must_use = "the returned allocation must be freed via its allocator or it will leak"]
+    pub fn into_allocation(mut self) -> Option<A::Allocation> {
+        self.allocation.take()
     }
 
     /// Acquire a mapped pointer to the buffer allocation
@@ -179,6 +205,26 @@ impl<A: Allocator> Buffer<A> {
     }
 }
 
+impl<A: Allocator> crate::resource::traits::Buildable for Buffer<A> {
+    type Desc = BufferDesc;
+    type Alloc = A;
+
+    fn build(
+        desc: &Self::Desc,
+        device: &crate::device::LogicalDevice,
+        allocator: &Self::Alloc,
+    ) -> Result<Self, crate::DagalError> {
+        Self::new(BufferCreateInfo::NewEmptyBuffer {
+            device: device.clone(),
+            name: None,
+            allocator,
+            size: desc.size,
+            memory_type: desc.location,
+            usage_flags: desc.usage,
+        })
+    }
+}
+
 impl<A: Allocator> Resource for Buffer<A> {
     type CreateInfo<'a> = BufferCreateInfo<'a, A>;
     fn new(create_info: Self::CreateInfo<'_>) -> Result<Self, crate::DagalError> {
@@ -191,35 +237,20 @@ impl<A: Allocator> Resource for Buffer<A> {
                 memory_type,
                 usage_flags,
             } => {
-                let handle = unsafe {
-                    device.get_handle().create_buffer(
-                        &vk::BufferCreateInfo {
-                            s_type: vk::StructureType::BUFFER_CREATE_INFO,
-                            p_next: ptr::null(),
-                            flags: vk::BufferCreateFlags::empty(),
-                            size,
-                            usage: usage_flags,
-                            sharing_mode: if device.get_used_queue_families().len() <= 1 {
-                                vk::SharingMode::EXCLUSIVE
-                            } else {
-                                vk::SharingMode::CONCURRENT
-                            },
-                            queue_family_index_count: if device.get_used_queue_families().len() <= 1
-                            {
-                                0
-                            } else {
-                                device.get_used_queue_families().len() as u32
-                            },
-                            p_queue_family_indices: if device.get_used_queue_families().len() <= 1 {
-                                ptr::null()
-                            } else {
-                                device.get_used_queue_families().as_ptr()
-                            },
-                            _marker: Default::default(),
-                        },
-                        None,
-                    )?
-                };
+                let queue_families = device.get_used_queue_families();
+                let concurrent = queue_families.len() > 1;
+                let mut buffer_ci = vk::BufferCreateInfo::default()
+                    .size(size)
+                    .usage(usage_flags)
+                    .sharing_mode(if concurrent {
+                        vk::SharingMode::CONCURRENT
+                    } else {
+                        vk::SharingMode::EXCLUSIVE
+                    });
+                if concurrent {
+                    buffer_ci = buffer_ci.queue_family_indices(queue_families);
+                }
+                let handle = unsafe { device.get_handle().create_buffer(&buffer_ci, None)? };
                 let mem_requirements =
                     unsafe { device.get_handle().get_buffer_memory_requirements(handle) };
                 let allocation = allocator.allocate("buffer", &mem_requirements, memory_type)?;
@@ -236,12 +267,7 @@ impl<A: Allocator> Resource for Buffer<A> {
                 {
                     address = unsafe {
                         device.get_handle().get_buffer_device_address(
-                            &vk::BufferDeviceAddressInfo {
-                                s_type: vk::StructureType::BUFFER_DEVICE_ADDRESS_INFO,
-                                p_next: ptr::null(),
-                                buffer: handle,
-                                _marker: Default::default(),
-                            },
+                            &vk::BufferDeviceAddressInfo::default().buffer(handle),
                         )
                     };
                 }
@@ -252,6 +278,7 @@ impl<A: Allocator> Resource for Buffer<A> {
                     allocator: Some(allocator.clone()),
                     address,
                     size,
+                    usage: usage_flags,
                     name: name.clone(),
                 };
 
@@ -261,69 +288,35 @@ impl<A: Allocator> Resource for Buffer<A> {
 
                 Ok(buffer)
             }
-            BufferCreateInfo::FromOwnedCreateInfo {
-                create_info,
+            BufferCreateInfo::NewUnallocated {
                 device,
-                allocator,
+                size,
+                usage_flags,
             } => {
-                let handle = unsafe {
-                    device.get_handle().create_buffer(
-                        &vk::BufferCreateInfo {
-                            s_type: vk::StructureType::BUFFER_CREATE_INFO,
-                            p_next: ptr::null(),
-                            flags: create_info.flags,
-                            size: create_info.size,
-                            usage: create_info.usage,
-                            sharing_mode: create_info.sharing_mode,
-                            queue_family_index_count: create_info.queue_family_indices.len() as u32,
-                            p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
-                            _marker: Default::default(),
-                        },
-                        None,
-                    )?
-                };
-                let mem_requirements =
-                    unsafe { device.get_handle().get_buffer_memory_requirements(handle) };
-                let allocation =
-                    allocator.allocate("buffer", &mem_requirements, create_info.location)?;
-                unsafe {
-                    device.get_handle().bind_buffer_memory(
-                        handle,
-                        allocation.memory(),
-                        allocation.offset(),
-                    )?
+                let queue_families = device.get_used_queue_families();
+                let concurrent = queue_families.len() > 1;
+                let mut buffer_ci = vk::BufferCreateInfo::default()
+                    .size(size)
+                    .usage(usage_flags)
+                    .sharing_mode(if concurrent {
+                        vk::SharingMode::CONCURRENT
+                    } else {
+                        vk::SharingMode::EXCLUSIVE
+                    });
+                if concurrent {
+                    buffer_ci = buffer_ci.queue_family_indices(queue_families);
                 }
-                let mut address = vk::DeviceAddress::default();
-                if create_info.usage & vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                    == vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-                {
-                    address = unsafe {
-                        device.get_handle().get_buffer_device_address(
-                            &vk::BufferDeviceAddressInfo {
-                                s_type: vk::StructureType::BUFFER_DEVICE_ADDRESS_INFO,
-                                p_next: ptr::null(),
-                                buffer: handle,
-                                _marker: Default::default(),
-                            },
-                        )
-                    };
-                }
-                let mut buffer = Self {
+                let handle = unsafe { device.get_handle().create_buffer(&buffer_ci, None)? };
+                Ok(Self {
                     handle,
-                    device: device.clone(),
-                    allocation: Some(allocation),
-                    allocator: Some(allocator.clone()),
-                    address,
-                    size: create_info.size,
+                    device,
+                    allocation: None,
+                    allocator: None,
+                    address: vk::DeviceAddress::default(),
+                    size,
+                    usage: usage_flags,
                     name: None,
-                };
-                if let (Some(debug_utils), Some(name)) =
-                    (device.get_debug_utils(), &create_info.name)
-                {
-                    buffer.set_name(debug_utils, name)?;
-                }
-
-                Ok(buffer)
+                })
             }
         }
     }

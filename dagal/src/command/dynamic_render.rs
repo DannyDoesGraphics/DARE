@@ -1,5 +1,3 @@
-use std::ptr;
-
 use ash::vk;
 
 use crate::command::command_buffer::CmdBuffer;
@@ -30,42 +28,32 @@ impl<'a> DynamicRenderContext<'a> {
         image_view: &crate::resource::ImageView,
         clear_value: Option<vk::ClearValue>,
     ) -> Self {
-        self.color_attachments.push(vk::RenderingAttachmentInfo {
-            s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
-            p_next: ptr::null(),
-            image_view: unsafe { *image_view.as_raw() },
-            image_layout,
-            load_op: match clear_value {
-                None => vk::AttachmentLoadOp::LOAD,
-                Some(_) => vk::AttachmentLoadOp::CLEAR,
-            },
-            store_op: vk::AttachmentStoreOp::STORE,
-            clear_value: clear_value.unwrap_or_default(),
-            ..Default::default()
-        });
+        self.color_attachments.push(
+            vk::RenderingAttachmentInfo::default()
+                .image_view(unsafe { *image_view.as_raw() })
+                .image_layout(image_layout)
+                .load_op(match clear_value {
+                    None => vk::AttachmentLoadOp::LOAD,
+                    Some(_) => vk::AttachmentLoadOp::CLEAR,
+                })
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .clear_value(clear_value.unwrap_or_default()),
+        );
         self
     }
 
     /// Begins rendering
     pub fn begin_rendering(self, extent: vk::Extent2D) -> Self {
-        let render_info = vk::RenderingInfo {
-            s_type: vk::StructureType::RENDERING_INFO,
-            p_next: ptr::null(),
-            flags: vk::RenderingFlags::empty(),
-            render_area: vk::Rect2D {
+        let render_info = vk::RenderingInfo::default()
+            .render_area(vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent,
-            },
-            layer_count: 1,
-            view_mask: 0,
-            color_attachment_count: self.color_attachments.len() as u32,
-            p_color_attachments: self.color_attachments.as_ptr(),
-            p_depth_attachment: match self.depth_attachment.as_ref() {
-                None => ptr::null(),
-                Some(attachment) => attachment,
-            },
-            p_stencil_attachment: ptr::null(),
-            _marker: Default::default(),
+            })
+            .layer_count(1)
+            .color_attachments(&self.color_attachments);
+        let render_info = match self.depth_attachment.as_ref() {
+            None => render_info,
+            Some(attachment) => render_info.depth_attachment(attachment),
         };
         unsafe {
             self.handle
@@ -81,24 +69,17 @@ impl<'a> DynamicRenderContext<'a> {
         image_view: vk::ImageView,
         image_layout: vk::ImageLayout,
     ) -> Self {
-        let depth_attachment = vk::RenderingAttachmentInfo {
-            s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
-            p_next: ptr::null(),
-            image_view,
-            image_layout,
-            resolve_mode: vk::ResolveModeFlags::empty(),
-            resolve_image_view: vk::ImageView::null(),
-            resolve_image_layout: Default::default(),
-            load_op: vk::AttachmentLoadOp::CLEAR,
-            store_op: vk::AttachmentStoreOp::STORE,
-            clear_value: vk::ClearValue {
+        let depth_attachment = vk::RenderingAttachmentInfo::default()
+            .image_view(image_view)
+            .image_layout(image_layout)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .clear_value(vk::ClearValue {
                 depth_stencil: vk::ClearDepthStencilValue {
                     depth: 0.0,
                     stencil: 0,
                 },
-            },
-            _marker: Default::default(),
-        };
+            });
         self.depth_attachment = Some(depth_attachment);
         self
     }

@@ -1,5 +1,3 @@
-use std::ptr;
-
 use anyhow::Result;
 use ash::vk;
 
@@ -46,16 +44,10 @@ impl PipelineLayoutBuilder {
         device: crate::device::LogicalDevice,
         flags: vk::PipelineLayoutCreateFlags,
     ) -> Result<crate::pipelines::PipelineLayout, crate::DagalError> {
-        let pipeline_ci = vk::PipelineLayoutCreateInfo {
-            s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-            p_next: ptr::null(),
-            flags,
-            set_layout_count: self.descriptor_sets.len() as u32,
-            p_set_layouts: self.descriptor_sets.as_ptr(),
-            push_constant_range_count: self.push_constant_ranges.len() as u32,
-            p_push_constant_ranges: self.push_constant_ranges.as_ptr(),
-            _marker: Default::default(),
-        };
+        let pipeline_ci = vk::PipelineLayoutCreateInfo::default()
+            .flags(flags)
+            .set_layouts(&self.descriptor_sets)
+            .push_constant_ranges(&self.push_constant_ranges);
         crate::pipelines::PipelineLayout::new(
             crate::pipelines::PipelineLayoutCreateInfo::CreateInfo {
                 create_info: pipeline_ci,

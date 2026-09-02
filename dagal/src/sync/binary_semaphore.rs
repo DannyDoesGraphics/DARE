@@ -1,5 +1,3 @@
-use std::ptr;
-
 use ash::vk;
 
 use crate::traits::{AsRaw, Destructible};
@@ -16,19 +14,13 @@ impl BinarySemaphore {
         flags: vk::SemaphoreCreateFlags,
     ) -> crate::Result<Self> {
         let handle = unsafe {
-            device.get_handle().create_semaphore(
-                &vk::SemaphoreCreateInfo {
-                    s_type: vk::StructureType::SEMAPHORE_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags,
-                    _marker: Default::default(),
-                },
-                None,
-            )?
+            device
+                .get_handle()
+                .create_semaphore(&vk::SemaphoreCreateInfo::default().flags(flags), None)?
         };
 
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating binary VkSemaphore {:p}", handle);
+        log::trace!("Creating binary VkSemaphore {:p}", handle);
 
         Ok(Self { handle, device })
     }
@@ -50,22 +42,18 @@ impl BinarySemaphore {
         &self,
         stage_mask: vk::PipelineStageFlags2,
     ) -> vk::SemaphoreSubmitInfo<'static> {
-        vk::SemaphoreSubmitInfo {
-            s_type: vk::StructureType::SEMAPHORE_SUBMIT_INFO,
-            p_next: ptr::null(),
-            semaphore: self.handle,
-            value: 0,
-            stage_mask,
-            device_index: 0,
-            _marker: Default::default(),
-        }
+        vk::SemaphoreSubmitInfo::default()
+            .semaphore(self.handle)
+            .value(0)
+            .stage_mask(stage_mask)
+            .device_index(0)
     }
 }
 
 impl Destructible for BinarySemaphore {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying binary VkSemaphore {:p}", self.handle);
+        log::trace!("Destroying binary VkSemaphore {:p}", self.handle);
 
         unsafe {
             self.device
@@ -91,7 +79,6 @@ impl AsRaw for BinarySemaphore {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for BinarySemaphore {
     fn drop(&mut self) {
         self.destroy();

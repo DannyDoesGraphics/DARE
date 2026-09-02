@@ -14,6 +14,8 @@ pub struct Instance {
     entry: ash::Entry,
     #[derivative(Debug = "ignore")]
     instance: ash::Instance,
+    #[derivative(Debug = "ignore")]
+    debug_messenger: Option<crate::device::DebugMessenger>,
 }
 
 impl Instance {
@@ -22,9 +24,26 @@ impl Instance {
         let instance = unsafe { entry.create_instance(&instance_ci, None)? };
 
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkInstance {:p}", instance.handle());
+        log::trace!("Creating VkInstance {:p}", instance.handle());
 
-        Ok(Self { entry, instance })
+        Ok(Self {
+            entry,
+            instance,
+            debug_messenger: None,
+        })
+    }
+
+    pub fn attach_debug_messenger(&mut self) -> Result<()> {
+        self.debug_messenger = None;
+        self.debug_messenger = Some(crate::device::DebugMessenger::new(
+            &self.entry,
+            &self.instance,
+        )?);
+        Ok(())
+    }
+
+    pub fn has_debug_messenger(&self) -> bool {
+        self.debug_messenger.is_some()
     }
 
     /// Get the [`ash::Entry`]
@@ -41,8 +60,8 @@ impl Instance {
 impl Destructible for Instance {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkInstance {:p}", self.instance.handle());
-
+        log::trace!("Destroying VkInstance {:p}", self.instance.handle());
+        self.debug_messenger = None;
         unsafe {
             self.instance.destroy_instance(None);
         }
@@ -57,7 +76,6 @@ impl Deref for Instance {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for Instance {
     fn drop(&mut self) {
         self.destroy();

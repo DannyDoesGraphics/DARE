@@ -4,7 +4,6 @@
 /// **Safety:** We do not make guarantees for Invalid command buffers. It is your responsibility to
 /// deal with such.
 use std::ops::Deref;
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -94,13 +93,7 @@ impl CommandBuffer {
         let cmd_begin = unsafe {
             self.device.get_handle().begin_command_buffer(
                 self.handle,
-                &vk::CommandBufferBeginInfo {
-                    s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-                    p_next: ptr::null(),
-                    flags,
-                    p_inheritance_info: ptr::null(),
-                    _marker: Default::default(),
-                },
+                &vk::CommandBufferBeginInfo::default().flags(flags),
             )
         };
         if cmd_begin.is_ok() {
@@ -178,33 +171,19 @@ impl CommandBufferExecutable {
     /// Quickly acquire a [`VkCommandBufferSubmitInfo`](vk::CommandBufferSubmitInfo) for
     /// a single [`VkCommandBuffer`](vk::CommandBuffer).
     pub fn submit_info(&self) -> vk::CommandBufferSubmitInfo<'static> {
-        vk::CommandBufferSubmitInfo {
-            s_type: vk::StructureType::COMMAND_BUFFER_SUBMIT_INFO,
-            p_next: ptr::null(),
-            command_buffer: self.handle,
-            device_mask: 0,
-            _marker: Default::default(),
-        }
+        vk::CommandBufferSubmitInfo::default().command_buffer(self.handle)
     }
 
     /// Submit with synchronization primitives
     pub fn submit_info_sync<'a>(
-        cmd_submit_info: &[vk::CommandBufferSubmitInfo<'a>],
-        wait_semaphores: &[vk::SemaphoreSubmitInfo<'a>],
-        signal_semaphore: &[vk::SemaphoreSubmitInfo<'a>],
+        cmd_submit_info: &'a [vk::CommandBufferSubmitInfo<'a>],
+        wait_semaphores: &'a [vk::SemaphoreSubmitInfo<'a>],
+        signal_semaphore: &'a [vk::SemaphoreSubmitInfo<'a>],
     ) -> vk::SubmitInfo2<'a> {
-        vk::SubmitInfo2 {
-            s_type: vk::StructureType::SUBMIT_INFO_2,
-            p_next: ptr::null(),
-            flags: vk::SubmitFlags::empty(),
-            wait_semaphore_info_count: wait_semaphores.len() as u32,
-            p_wait_semaphore_infos: wait_semaphores.as_ptr(),
-            command_buffer_info_count: cmd_submit_info.len() as u32,
-            p_command_buffer_infos: cmd_submit_info.as_ptr(),
-            signal_semaphore_info_count: signal_semaphore.len() as u32,
-            p_signal_semaphore_infos: signal_semaphore.as_ptr(),
-            _marker: Default::default(),
-        }
+        vk::SubmitInfo2::default()
+            .wait_semaphore_infos(wait_semaphores)
+            .command_buffer_infos(cmd_submit_info)
+            .signal_semaphore_infos(signal_semaphore)
     }
 
     /// Submits the current command buffer to the queue
@@ -472,18 +451,18 @@ impl CommandBufferState {
             CommandBufferState::Recording(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Ready, got Recording"
-                ))
+                ));
             }
             CommandBufferState::Executable(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Ready, got Executable"
-                ))
+                ));
             }
             CommandBufferState::Invalid(invalid) => {
                 return Err(anyhow::anyhow!(
                     "Command buffer is in invalid state: {}",
                     invalid.error()
-                ))
+                ));
             }
             CommandBufferState::Ready(cmd) => {
                 let handle = unsafe { *cmd.as_raw() };
@@ -518,18 +497,18 @@ impl CommandBufferState {
             CommandBufferState::Executable(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Recording, got Executable"
-                ))
+                ));
             }
             CommandBufferState::Ready(_) => {
                 return Err(anyhow::anyhow!(
                     "Expected command buffer state to be in Recording, got Ready"
-                ))
+                ));
             }
             CommandBufferState::Invalid(invalid) => {
                 return Err(anyhow::anyhow!(
                     "Command buffer is in invalid state: {}",
                     invalid.error()
-                ))
+                ));
             }
         };
         *self = next;

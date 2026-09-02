@@ -1,5 +1,3 @@
-use std::ptr;
-
 use anyhow::Result;
 use ash::vk;
 use derivative::Derivative;
@@ -23,19 +21,13 @@ impl Fence {
         flags: vk::FenceCreateFlags,
     ) -> Result<Self, crate::DagalError> {
         let handle = unsafe {
-            device.get_handle().create_fence(
-                &vk::FenceCreateInfo {
-                    s_type: vk::StructureType::FENCE_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags,
-                    _marker: Default::default(),
-                },
-                None,
-            )?
+            device
+                .get_handle()
+                .create_fence(&vk::FenceCreateInfo::default().flags(flags), None)?
         };
 
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkFence {:p}", handle);
+        log::trace!("Creating VkFence {:p}", handle);
 
         Ok(Self { handle, device })
     }
@@ -49,10 +41,9 @@ impl Fence {
     /// ```
     /// use std::time::{Instant, Duration};
     /// use ash::vk;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// // purposely make a fence that waits for a whole second
-    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(test_vulkan.device.as_ref().unwrap().clone(), vk::FenceCreateFlags::SIGNALED).unwrap();
+    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(ctx.device(), vk::FenceCreateFlags::SIGNALED).unwrap();
     /// unsafe {
     ///     fence.wait(1_000_000_000).unwrap_unchecked(); // wait 1 second (in ns)
     /// }
@@ -72,10 +63,9 @@ impl Fence {
     /// ```
     /// use std::time::{Instant, Duration};
     /// use ash::vk;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// // purposely make a fence that waits for a whole second
-    /// let fence: dagal::sync::Fence = dagal::sync::Fence::new(test_vulkan.device.as_ref().unwrap().clone(), vk::FenceCreateFlags::SIGNALED).unwrap();
+    /// let mut fence: dagal::sync::Fence = dagal::sync::Fence::new(ctx.device(), vk::FenceCreateFlags::SIGNALED).unwrap();
     /// unsafe {
     ///     fence.wait(1_000_000_000).unwrap_unchecked(); // wait 1 second (in ns)
     /// }
@@ -111,7 +101,7 @@ impl std::future::Future for Fence {
 impl Destructible for Fence {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkFence {:p}", self.handle);
+        log::trace!("Destroying VkFence {:p}", self.handle);
 
         unsafe {
             self.device.get_handle().destroy_fence(self.handle, None);
@@ -135,7 +125,6 @@ impl AsRaw for Fence {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for Fence {
     fn drop(&mut self) {
         self.destroy();

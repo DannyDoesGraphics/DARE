@@ -1,6 +1,4 @@
-use std::ffi::c_char;
 use std::hash::Hash;
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -17,7 +15,7 @@ pub struct ComputePipeline {
 impl Destructible for ComputePipeline {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkPipeline {:p}", self.handle);
+        log::trace!("Destroying VkPipeline {:p}", self.handle);
 
         unsafe {
             self.device.get_handle().destroy_pipeline(self.handle, None);
@@ -76,18 +74,10 @@ impl PipelineBuilder for ComputePipelineBuilder<'_> {
     fn build(mut self, device: crate::device::LogicalDevice) -> Result<ComputePipeline> {
         assert!(self.compute_shader.is_some());
         assert!(self.layout.is_some());
-        self.handle.s_type = vk::StructureType::COMPUTE_PIPELINE_CREATE_INFO;
-        self.handle.p_next = ptr::null();
-        self.handle.stage = vk::PipelineShaderStageCreateInfo {
-            s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: vk::PipelineShaderStageCreateFlags::empty(),
-            stage: vk::ShaderStageFlags::COMPUTE,
-            module: self.compute_shader.as_ref().unwrap().handle(),
-            p_name: "main\0".as_ptr() as *const c_char,
-            p_specialization_info: ptr::null(),
-            _marker: Default::default(),
-        };
+        self.handle.stage = vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(self.compute_shader.as_ref().unwrap().handle())
+            .name(c"main");
         self.handle.layout = self.layout.unwrap();
 
         let pipeline = unsafe {
@@ -105,7 +95,6 @@ impl PipelineBuilder for ComputePipelineBuilder<'_> {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for ComputePipeline {
     fn drop(&mut self) {
         self.destroy();

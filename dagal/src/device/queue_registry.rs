@@ -1,7 +1,7 @@
 use ash::vk;
 
-use crate::device::{LogicalDevice, PhysicalDevice, Queue};
 use crate::DagalError;
+use crate::device::{LogicalDevice, PhysicalDevice, Queue};
 
 /// Named device queues assigned at init.
 #[derive(Debug)]

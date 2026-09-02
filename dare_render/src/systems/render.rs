@@ -110,12 +110,13 @@ pub fn render_system<A: Allocator + 'static>(
     drop(_prepare_span);
     let _submit_span = tracy_client::span!("Submit Frame");
 
-    let submit_info = executable.submit_info();
+    let submit_info = [executable.submit_info()];
     let wait_info = [frame
         .swapchain_semaphore
         .submit_info(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)];
+    let present_signals = [present_signal];
     let submit_batch =
-        CommandBufferExecutable::submit_info_sync(&[submit_info], &wait_info, &[present_signal]);
+        CommandBufferExecutable::submit_info_sync(&submit_info, &wait_info, &present_signals);
 
     let queue_handle = unsafe { *gpu.core.queues.present.as_raw() };
     let _command_buffer = executable

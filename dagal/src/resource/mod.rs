@@ -1,6 +1,6 @@
 pub use acceleration_structure::*;
-pub use buffer::{Buffer, BufferCreateInfo, OwnedBufferCreateInfo};
-pub use image::{Image, ImageCreateInfo, OwnedImageCreateInfo};
+pub use buffer::{Buffer, BufferCreateInfo, BufferDesc};
+pub use image::{Image, ImageCreateInfo, ImageDesc};
 pub use image_view::{ImageView, ImageViewCreateInfo};
 pub use sampler::{Sampler, SamplerCreateInfo};
 

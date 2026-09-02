@@ -3,7 +3,6 @@ pub use compute::{ComputePipeline, ComputePipelineBuilder};
 pub use graphics::{GraphicsPipeline, GraphicsPipelineBuilder};
 pub use pipeline_layout::{PipelineLayout, PipelineLayoutCreateInfo};
 pub use pipeline_layout_builder::PipelineLayoutBuilder;
-use std::ptr;
 pub use traits::*;
 
 pub mod compute;
@@ -23,13 +22,9 @@ pub struct PipelineInputAssemblyStateCreateInfo {
 
 impl From<PipelineInputAssemblyStateCreateInfo> for vk::PipelineInputAssemblyStateCreateInfo<'_> {
     fn from(val: PipelineInputAssemblyStateCreateInfo) -> Self {
-        vk::PipelineInputAssemblyStateCreateInfo {
-            s_type: vk::StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            p_next: ptr::null(),
-            flags: val.flags,
-            topology: val.topology,
-            primitive_restart_enable: val.primitive_restart_enable as u32,
-            _marker: Default::default(),
-        }
+        vk::PipelineInputAssemblyStateCreateInfo::default()
+            .flags(val.flags)
+            .topology(val.topology)
+            .primitive_restart_enable(val.primitive_restart_enable)
     }
 }

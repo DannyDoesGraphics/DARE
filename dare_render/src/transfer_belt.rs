@@ -789,6 +789,7 @@ mod tests {
     use dagal::command::command_buffer::CmdBuffer;
     use dagal::resource::{Buffer, BufferCreateInfo};
     use proptest::prelude::*;
+    use serial_test::serial;
     use std::sync::{LazyLock, Mutex};
 
     const BELT_SIZE: u64 = 4096;
@@ -914,12 +915,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn upload_unaligned_bytes() {
         let mut fixture = Fixture::new();
         assert_roundtrip(&mut fixture, &[0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]);
     }
 
     #[test]
+    #[serial]
     fn upload_u32_pattern() {
         let mut fixture = Fixture::new();
         let words: Vec<u32> = (0..64u32).map(|i| i.wrapping_mul(0x9E3779B9)).collect();
@@ -927,6 +930,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn upload_f32_payload() {
         let mut fixture = Fixture::new();
         let floats: Vec<f32> = (0..48).map(|i| i as f32 * -0.5).collect();
@@ -934,6 +938,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn upload_struct_payload() {
         #[repr(C)]
         #[derive(Clone, Copy)]
@@ -953,6 +958,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn upload_honors_dst_offset() {
         let mut fixture = Fixture::new();
         let dst = fixture.device_buffer(256);
@@ -974,6 +980,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn multiple_requests_share_one_flush() {
         let mut fixture = Fixture::new();
 
@@ -1030,6 +1037,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn upload_larger_than_belt_size() {
         let mut fixture = Fixture::new();
         let payload: Vec<u8> = (0..(BELT_SIZE as usize * 4)).map(|i| i as u8).collect();
@@ -1062,6 +1070,7 @@ mod tests {
         #![proptest_config(ProptestConfig { cases: 24, max_shrink_iters: 64, ..ProptestConfig::default() })]
 
         #[test]
+        #[serial]
         fn fuzz_upload_roundtrip(len in payload_len(), seed: u64) {
             let mut guard = FUZZ_FIXTURE.lock().unwrap_or_else(|e| e.into_inner());
             let fixture = &mut *guard;
@@ -1076,6 +1085,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn fuzz_sequential_writes_do_not_overlap(
             lens in prop::collection::vec(1usize..=(256 << 10), 1..=6),
             seed: u64,
@@ -1101,6 +1111,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn poll_reclaims_and_evicts_chunks() {
         let mut fixture = Fixture::new();
         let dst = fixture.device_buffer(64);

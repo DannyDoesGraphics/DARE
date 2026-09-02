@@ -51,7 +51,7 @@ impl Resource for AccelerationStructure {
                     }?;
 
                     #[cfg(feature = "log-lifetimes")]
-                    tracing::trace!("Created VkAccelerationStructure {:p}", handle);
+                    log::trace!("Created VkAccelerationStructure {:p}", handle);
 
                     Ok(Self {
                         device,
@@ -109,7 +109,7 @@ impl Destructible for AccelerationStructure {
     fn destroy(&mut self) {
         unsafe {
             #[cfg(feature = "log-lifetimes")]
-            tracing::trace!("Destroying VkAccelerationStructure {:p}", self.handle);
+            log::trace!("Destroying VkAccelerationStructure {:p}", self.handle);
             self.device
                 .get_acceleration_structure()
                 .unwrap()
@@ -118,7 +118,6 @@ impl Destructible for AccelerationStructure {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for AccelerationStructure {
     fn drop(&mut self) {
         self.destroy();

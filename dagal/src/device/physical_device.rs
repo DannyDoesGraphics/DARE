@@ -121,13 +121,8 @@ impl PhysicalDevice {
                     properties_1_1.s_type =
                         vk::StructureType::PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
                     properties_1_1.p_next = &mut properties_1_2 as *mut _ as *mut c_void;
-                    let mut properties: vk::PhysicalDeviceProperties2 =
-                        vk::PhysicalDeviceProperties2 {
-                            s_type: vk::StructureType::PHYSICAL_DEVICE_PROPERTIES_2,
-                            p_next: &mut properties_1_1 as *mut _ as *mut c_void,
-                            properties: Default::default(),
-                            _marker: Default::default(),
-                        };
+                    let mut properties = vk::PhysicalDeviceProperties2::default();
+                    properties.p_next = &mut properties_1_1 as *mut _ as *mut c_void;
                     instance.get_physical_device_properties2(physical_device, &mut properties);
                     let mut queue_family_properties: Vec<vk::QueueFamilyProperties2> = vec![
                             Default::default();

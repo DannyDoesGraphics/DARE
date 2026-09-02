@@ -20,7 +20,10 @@ impl SlangCompiler {
         let session_options = shader_slang::CompilerOptions::default()
             .glsl_force_scalar_layout(true)
             .emit_spirv_directly(true)
-            .capability(self.global_session.find_capability("GL_EXT_buffer_reference"));
+            .capability(
+                self.global_session
+                    .find_capability("GL_EXT_buffer_reference"),
+            );
 
         let target_desc = shader_slang::TargetDesc::default()
             .format(shader_slang::CompileTarget::Spirv)
@@ -91,7 +94,9 @@ impl super::traits::ShaderCompiler for SlangCompiler {
             return Ok(());
         }
 
-        let search_dir = in_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let search_dir = in_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
         let module_name = in_path
             .file_stem()
             .and_then(|s| s.to_str())

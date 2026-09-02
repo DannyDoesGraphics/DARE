@@ -1,5 +1,4 @@
 use std::hash::{Hash, Hasher};
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -49,8 +48,7 @@ pub enum DescriptorPoolCreateInfo<'a> {
     /// use std::ptr;
     /// use ash::vk;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let pool = dagal::descriptor::DescriptorPool::new(
     ///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizes {
     /// 		sizes: vec![
@@ -60,7 +58,7 @@ pub enum DescriptorPoolCreateInfo<'a> {
     ///         ],
     /// 		flags: Default::default(),
     /// 		max_sets: 1,
-    /// 		device: test_vulkan.device.as_ref().unwrap().clone(),
+    /// 		device: ctx.device(),
     /// 		name: None,
     /// 	}).unwrap();
     /// drop(pool);
@@ -81,8 +79,7 @@ pub enum DescriptorPoolCreateInfo<'a> {
     /// use std::ptr;
     /// use ash::vk;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let pool = dagal::descriptor::DescriptorPool::new(
     ///     dagal::descriptor::DescriptorPoolCreateInfo::FromPoolSizeRatios {
     /// 		ratios: vec![
@@ -98,7 +95,7 @@ pub enum DescriptorPoolCreateInfo<'a> {
     /// 		count: 10,
     /// 		flags: Default::default(),
     /// 		max_sets: 1,
-    /// 		device: test_vulkan.device.as_ref().unwrap().clone(),
+    /// 		device: ctx.device(),
     /// 		name: None,
     /// 	}).unwrap();
     /// drop(pool);
@@ -144,19 +141,14 @@ impl Resource for DescriptorPool {
                 device,
                 name,
             } => {
-                let pool_ci = vk::DescriptorPoolCreateInfo {
-                    s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags,
-                    max_sets,
-                    pool_size_count: sizes.len() as u32,
-                    p_pool_sizes: sizes.as_ptr(),
-                    _marker: Default::default(),
-                };
+                let pool_ci = vk::DescriptorPoolCreateInfo::default()
+                    .flags(flags)
+                    .max_sets(max_sets)
+                    .pool_sizes(&sizes);
 
                 let handle = unsafe { device.get_handle().create_descriptor_pool(&pool_ci, None)? };
                 #[cfg(feature = "log-lifetimes")]
-                tracing::trace!("Creating VkDescriptorPool {:p}", handle);
+                log::trace!("Creating VkDescriptorPool {:p}", handle);
                 let mut handle = Self { handle, device };
                 crate::resource::traits::update_name(&mut handle, name);
                 Ok(handle)
@@ -235,7 +227,7 @@ impl DescriptorPool {
 impl Destructible for DescriptorPool {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroyed VkDescriptorPool {:p}", self.handle);
+        log::trace!("Destroyed VkDescriptorPool {:p}", self.handle);
 
         unsafe {
             self.device
@@ -245,7 +237,6 @@ impl Destructible for DescriptorPool {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for DescriptorPool {
     fn drop(&mut self) {
         self.destroy();

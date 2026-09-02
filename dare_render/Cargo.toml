@@ -25,4 +25,5 @@ smol = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.11.0"
+serial_test = "3.5.0"
 

@@ -59,7 +59,7 @@ impl GPUAllocatorImpl {
             .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?;
         if let Some(handle) = allocation.handle.take() {
             #[cfg(feature = "log-lifetimes")]
-            tracing::trace!("Destroying VkMemory {:p}", unsafe { handle.memory() });
+            log::trace!("Destroying VkMemory {:p}", unsafe { handle.memory() });
             guard.as_mut().unwrap().free(handle)?;
         }
         Ok(())
@@ -97,7 +97,7 @@ impl Allocator for GPUAllocatorImpl {
             .allocate(&allocate_ci)
             .map_err(|_| crate::DagalError::AllocationError)?;
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
+        log::trace!("Creating VkMemory {:p}", unsafe { handle.memory() });
 
         Ok(GPUAllocatorAllocation {
             handle: Some(handle),

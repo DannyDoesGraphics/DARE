@@ -1,5 +1,3 @@
-use std::{marker::PhantomData, ptr};
-
 use crate::traits::*;
 use ash::vk;
 
@@ -22,13 +20,9 @@ impl<'a> SubmitBatch<'a> {
         &mut self,
         command: &'a crate::command::CommandBufferExecutable,
     ) -> SubmitBatchCommandHandle {
-        self.command_infos.push(vk::CommandBufferSubmitInfo {
-            s_type: vk::StructureType::SEMAPHORE_SUBMIT_INFO,
-            p_next: ptr::null(),
-            command_buffer: unsafe { *command.as_raw() },
-            device_mask: 0,
-            _marker: PhantomData,
-        });
+        self.command_infos.push(
+            vk::CommandBufferSubmitInfo::default().command_buffer(unsafe { *command.as_raw() }),
+        );
         self.idx += 1;
         SubmitBatchCommandHandle(self.idx)
     }
@@ -44,15 +38,11 @@ impl<'a> SubmitBatch<'a> {
             vk::SemaphoreCreateFlags::empty(),
         )?);
 
-        self.semaphore_infos.push(vk::SemaphoreSubmitInfo {
-            s_type: vk::StructureType::SEMAPHORE_SUBMIT_INFO,
-            p_next: ptr::null(),
-            device_index: 0,
-            stage_mask: stage,
-            value: 0,
-            semaphore: unsafe { *self.semaphores.last().unwrap().as_raw() },
-            _marker: PhantomData,
-        });
+        self.semaphore_infos.push(
+            vk::SemaphoreSubmitInfo::default()
+                .stage_mask(stage)
+                .semaphore(unsafe { *self.semaphores.last().unwrap().as_raw() }),
+        );
         self.idx += 1;
         Ok(SubmitBatchCommandHandle(self.idx))
     }

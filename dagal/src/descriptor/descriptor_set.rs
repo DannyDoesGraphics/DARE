@@ -1,5 +1,3 @@
-use std::ptr;
-
 use anyhow::Result;
 use ash::vk;
 use ash::vk::Handle;
@@ -124,14 +122,10 @@ impl DescriptorSet {
                 Ok(handle)
             }
             DescriptorSetCreateInfo::NewSet { pool, layout, name } => {
-                let alloc_info = vk::DescriptorSetAllocateInfo {
-                    s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
-                    p_next: ptr::null(),
-                    descriptor_pool: unsafe { *pool.as_raw() },
-                    descriptor_set_count: 1,
-                    p_set_layouts: unsafe { layout.as_raw() },
-                    _marker: Default::default(),
-                };
+                let set_layouts = [unsafe { *layout.as_raw() }];
+                let alloc_info = vk::DescriptorSetAllocateInfo::default()
+                    .descriptor_pool(unsafe { *pool.as_raw() })
+                    .set_layouts(&set_layouts);
                 let mut handle = unsafe {
                     pool.get_device()
                         .get_handle()
@@ -155,19 +149,11 @@ impl DescriptorSet {
             Vec::with_capacity(writes.len());
 
         for write in writes.iter() {
-            let descriptor_write = vk::WriteDescriptorSet {
-                s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-                p_next: ptr::null(),
-                dst_set: self.handle,
-                dst_binding: write.binding,
-                dst_array_element: write.slot,
-                descriptor_count: 0,
-                descriptor_type: write.ty.to_vk(),
-                p_image_info: ptr::null(),
-                p_buffer_info: ptr::null(),
-                p_texel_buffer_view: ptr::null(),
-                _marker: Default::default(),
-            };
+            let descriptor_write = vk::WriteDescriptorSet::default()
+                .dst_set(self.handle)
+                .dst_binding(write.binding)
+                .dst_array_element(write.slot)
+                .descriptor_type(write.ty.to_vk());
             match write.ty {
                 DescriptorType::Sampler
                 | DescriptorType::CombinedImageSampler

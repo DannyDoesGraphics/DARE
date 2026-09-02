@@ -77,27 +77,16 @@ impl Surface {
     /// See [`Surface::get_capabilities`] to determine such.
     /// # Examples
     /// ```
-    /// use crate::dagal;
     /// use dagal::ash::vk;
-    /// use raw_window_handle::HasDisplayHandle;
-    /// use dagal::util::tests::TestSettings;
-    /// use dagal::traits::*;
-    /// // The TestApp is purely use for us to properly acquire and clean a test window. However,
-    /// // this can apply for any window which has the HasDisplayHandle + HasWindowHandle traits
-    /// // which in this case is window, but could be any other window manager.
-    /// let test_app = dagal::util::tests::TestApp::<winit::window::Window>::new();
-    /// test_app.attach_function(|window: &winit::window::Window | {
-    ///     let test_vulkan = dagal::util::tests::create_vulkan_and_device(
-    ///         TestSettings::from_rdh(window.display_handle().unwrap().as_raw())
-    ///     );
-    ///     // Construct a surface
-    ///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
-    ///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
-    ///     assert!(surface.get_capabilities().min_image_count > 0);
-    ///     assert!(surface.get_formats().len() > 0);
-    ///     assert!(surface.get_present_modes().len() > 0);
-    ///     drop(surface);
-    /// }).run();
+    /// use dagal::util::tests::TestHarness;
+    /// let ctx = TestHarness::windowed().build().unwrap();
+    /// // Construct a surface
+    /// let surface: dagal::wsi::Surface = dagal::wsi::Surface::new(ctx.instance().get_entry(), ctx.instance().get_instance(), ctx.window()).unwrap();
+    /// let surface = surface.query_details(ctx.physical_device().handle()).unwrap();
+    /// assert!(surface.get_capabilities().min_image_count > 0);
+    /// assert!(surface.get_formats().len() > 0);
+    /// assert!(surface.get_present_modes().len() > 0);
+    /// drop(surface);
     /// ```
     pub fn new<T>(entry: &ash::Entry, instance: &ash::Instance, window: &T) -> crate::Result<Self>
     where
@@ -130,7 +119,7 @@ impl Surface {
         };
 
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Creating VkSurface {:p}", handle);
+        log::trace!("Creating VkSurface {:p}", handle);
 
         Ok(Self { handle, ext })
     }
@@ -195,7 +184,7 @@ impl AsRaw for Surface {
 impl Destructible for Surface {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkSurface {:p}", self.handle);
+        log::trace!("Destroying VkSurface {:p}", self.handle);
 
         unsafe {
             self.ext.destroy_surface(self.handle, None);
@@ -203,7 +192,6 @@ impl Destructible for Surface {
     }
 }
 
-#[cfg(feature = "raii")]
 impl Drop for Surface {
     fn drop(&mut self) {
         self.destroy();

@@ -1,5 +1,4 @@
 use std::ffi::c_void;
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -74,11 +73,10 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
     /// use std::ptr;
     /// use ash::vk;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let descriptor_set_layout = dagal::descriptor::DescriptorSetLayoutBuilder::default()
     /// .add_binding(0, vk::DescriptorType::SAMPLER)
-    /// .build(test_vulkan.device.as_ref().unwrap().clone(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None).unwrap();
+    /// .build(ctx.device(), ptr::null(), vk::DescriptorSetLayoutCreateFlags::empty(), None).unwrap();
     /// drop(descriptor_set_layout);
     /// ```
     pub fn build(
@@ -96,26 +94,16 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
             .iter()
             .any(|flag| *flag != vk::DescriptorBindingFlags::default());
 
-        let binding_flags = vk::DescriptorSetLayoutBindingFlagsCreateInfo {
-            s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-            p_next,
-            binding_count: flags.len() as u32,
-            p_binding_flags: flags.as_ptr(),
-            _marker: Default::default(),
-        };
+        let mut binding_flags =
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo::default().binding_flags(&flags);
+        binding_flags.p_next = p_next;
 
-        let descriptor_set_layout_ci = vk::DescriptorSetLayoutCreateInfo {
-            s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            p_next: if !flags_enabled {
-                ptr::null()
-            } else {
-                &binding_flags as *const _ as *const c_void
-            },
-            flags: create_flags,
-            binding_count: raw_bindings.len() as u32,
-            p_bindings: raw_bindings.as_ptr(),
-            _marker: Default::default(),
-        };
+        let mut descriptor_set_layout_ci = vk::DescriptorSetLayoutCreateInfo::default()
+            .flags(create_flags)
+            .bindings(&raw_bindings);
+        if flags_enabled {
+            descriptor_set_layout_ci.p_next = &binding_flags as *const _ as *const c_void;
+        }
         let handle = unsafe {
             device
                 .get_handle()

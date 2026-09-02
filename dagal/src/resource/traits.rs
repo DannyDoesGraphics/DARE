@@ -1,6 +1,5 @@
 use std::ffi::CString;
 use std::hash::Hash;
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -17,6 +16,18 @@ pub trait Resource: Hash + Sized + AsRaw {
         Self: Sized;
     /// Get underlying reference to the device the object belongs to
     fn get_device(&self) -> &crate::device::LogicalDevice;
+}
+
+/// Allows for descriptors to build a new resource without relying on lifetimes.
+pub trait Buildable: Resource {
+    type Desc: 'static + Clone + Eq + Hash + std::fmt::Debug;
+    type Alloc: crate::allocators::Allocator;
+
+    fn build(
+        desc: &Self::Desc,
+        device: &crate::device::LogicalDevice,
+        allocator: &Self::Alloc,
+    ) -> Result<Self, crate::DagalError>;
 }
 
 /// A struct which can have a name applied onto it
@@ -60,14 +71,10 @@ pub(crate) fn name_resource(
 ) -> Result<(), crate::DagalError> {
     let name = CString::new(name).map_err(|_| crate::DagalError::StringContainsNull)?;
     unsafe {
-        debug_utils.set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
-            s_type: vk::StructureType::DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            p_next: ptr::null(),
-            object_type,
-            object_handle: raw_handle,
-            p_object_name: name.as_ptr(),
-            _marker: Default::default(),
-        })
+        let mut name_info = vk::DebugUtilsObjectNameInfoEXT::default().object_name(name.as_c_str());
+        name_info.object_type = object_type;
+        name_info.object_handle = raw_handle;
+        debug_utils.set_debug_utils_object_name(&name_info)
     }?;
     Ok(())
 }

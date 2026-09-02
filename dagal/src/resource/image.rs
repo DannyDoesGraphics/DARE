@@ -1,5 +1,4 @@
 use std::hash::Hasher;
-use std::ptr;
 
 use crate::allocators::{Allocation, Allocator, GPUAllocatorImpl};
 use crate::command::command_buffer::CmdBuffer;
@@ -44,9 +43,8 @@ impl<A: Allocator> std::hash::Hash for Image<A> {
     }
 }
 
-/// Similar to [`vk::ImageCreateInfo`], but supports hashing
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct OwnedImageCreateInfo {
+pub struct ImageDesc {
     pub flags: vk::ImageCreateFlags,
     pub image_type: vk::ImageType,
     pub format: vk::Format,
@@ -90,12 +88,6 @@ pub enum ImageCreateInfo<'a, A: Allocator = GPUAllocatorImpl> {
         image_ci: vk::ImageCreateInfo<'a>,
         name: Option<&'a str>,
     },
-    FromOwnedCreateInfo {
-        device: crate::device::LogicalDevice,
-        allocator: &'a A,
-        create_info: OwnedImageCreateInfo,
-        name: Option<&'a str>,
-    },
 }
 
 impl<A: Allocator> Image<A> {
@@ -137,19 +129,17 @@ impl<A: Allocator> Image<A> {
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
-        let image_barrier = vk::ImageMemoryBarrier2 {
-            s_type: vk::StructureType::IMAGE_MEMORY_BARRIER_2,
-            p_next: ptr::null(),
-            src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-            src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-            dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-            dst_access_mask: vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ,
-            old_layout: current_layout,
-            new_layout,
-            src_queue_family_index: queue.get_family_index(),
-            dst_queue_family_index: queue.get_family_index(),
-            image,
-            subresource_range: vk::ImageSubresourceRange {
+        let image_barrier = vk::ImageMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
+            .old_layout(current_layout)
+            .new_layout(new_layout)
+            .src_queue_family_index(queue.get_family_index())
+            .dst_queue_family_index(queue.get_family_index())
+            .image(image)
+            .subresource_range(vk::ImageSubresourceRange {
                 aspect_mask: if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
                     vk::ImageAspectFlags::DEPTH
                 } else {
@@ -159,21 +149,9 @@ impl<A: Allocator> Image<A> {
                 level_count: vk::REMAINING_MIP_LEVELS,
                 base_array_layer: 0,
                 layer_count: vk::REMAINING_ARRAY_LAYERS,
-            },
-            _marker: Default::default(),
-        };
-        let dependency_info = vk::DependencyInfo {
-            s_type: vk::StructureType::DEPENDENCY_INFO,
-            p_next: ptr::null(),
-            dependency_flags: vk::DependencyFlags::empty(),
-            memory_barrier_count: 0,
-            p_memory_barriers: ptr::null(),
-            buffer_memory_barrier_count: 0,
-            p_buffer_memory_barriers: ptr::null(),
-            image_memory_barrier_count: 1,
-            p_image_memory_barriers: &image_barrier,
-            _marker: Default::default(),
-        };
+            });
+        let image_barriers = [image_barrier];
+        let dependency_info = vk::DependencyInfo::default().image_memory_barriers(&image_barriers);
         unsafe {
             cmd.get_device()
                 .get_handle()
@@ -184,51 +162,43 @@ impl<A: Allocator> Image<A> {
     /// Copies the passed image into the current image
     pub fn copy_from(&self, cmd: &crate::command::CommandBufferRecording, image: &Image<A>) {
         let from_extent: vk::Extent3D = image.extent;
-        let blit_region = vk::ImageBlit2 {
-            s_type: vk::StructureType::IMAGE_BLIT_2,
-            p_next: ptr::null(),
-            src_subresource: vk::ImageSubresourceLayers {
+        let blit_region = vk::ImageBlit2::default()
+            .src_subresource(vk::ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 mip_level: 0,
                 base_array_layer: 0,
                 layer_count: 1,
-            },
-            src_offsets: [
+            })
+            .src_offsets([
                 vk::Offset3D { x: 0, y: 0, z: 0 },
                 vk::Offset3D {
                     x: from_extent.width as i32,
                     y: from_extent.height as i32,
                     z: from_extent.depth as i32,
                 },
-            ],
-            dst_subresource: vk::ImageSubresourceLayers {
+            ])
+            .dst_subresource(vk::ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 mip_level: 0,
                 base_array_layer: 0,
                 layer_count: 1,
-            },
-            dst_offsets: [
+            })
+            .dst_offsets([
                 vk::Offset3D { x: 0, y: 0, z: 0 },
                 vk::Offset3D {
                     x: self.extent.width as i32,
                     y: self.extent.height as i32,
                     z: self.extent.depth as i32,
                 },
-            ],
-            _marker: Default::default(),
-        };
-        let blint_info = vk::BlitImageInfo2 {
-            s_type: vk::StructureType::BLIT_IMAGE_INFO_2,
-            p_next: ptr::null(),
-            src_image: unsafe { *image.as_raw() },
-            src_image_layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            dst_image: self.handle,
-            dst_image_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            region_count: 1,
-            p_regions: &blit_region,
-            filter: Default::default(),
-            _marker: Default::default(),
-        };
+            ]);
+        let blit_regions = [blit_region];
+        let blint_info = vk::BlitImageInfo2::default()
+            .src_image(unsafe { *image.as_raw() })
+            .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .dst_image(self.handle)
+            .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .regions(&blit_regions)
+            .filter(vk::Filter::default());
         unsafe {
             self.device
                 .get_handle()
@@ -250,12 +220,9 @@ impl<A: Allocator> Image<A> {
         crate::resource::ImageView::new(crate::resource::ImageViewCreateInfo::FromCreateInfo {
             device: self.device.clone(),
             create_info: unsafe {
-                vk::ImageViewCreateInfo {
-                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                    p_next: ptr::null(),
-                    flags: vk::ImageViewCreateFlags::empty(),
-                    image: *self.as_raw(),
-                    view_type: if self.image_type == vk::ImageType::TYPE_1D {
+                vk::ImageViewCreateInfo::default()
+                    .image(*self.as_raw())
+                    .view_type(if self.image_type == vk::ImageType::TYPE_1D {
                         vk::ImageViewType::TYPE_1D
                     } else if self.image_type == vk::ImageType::TYPE_2D {
                         vk::ImageViewType::TYPE_2D
@@ -263,12 +230,9 @@ impl<A: Allocator> Image<A> {
                         vk::ImageViewType::TYPE_3D
                     } else {
                         unimplemented!()
-                    },
-                    format: self.format,
-                    components: Default::default(),
-                    subresource_range: Image::<A>::image_subresource_range(aspect_flag),
-                    _marker: Default::default(),
-                }
+                    })
+                    .format(self.format)
+                    .subresource_range(Image::<A>::image_subresource_range(aspect_flag))
             },
             name: Some(String::from("Full Image CI")),
         })
@@ -285,6 +249,59 @@ impl<A: Allocator> Image<A> {
             layer_count: vk::REMAINING_ARRAY_LAYERS,
         }
     }
+
+    pub fn bind_memory(&mut self, allocation: A::Allocation) -> Result<(), crate::DagalError> {
+        assert!(
+            self.allocation.is_none(),
+            "image is already bound to memory"
+        );
+        unsafe {
+            self.device.get_handle().bind_image_memory(
+                self.handle,
+                allocation.memory(),
+                allocation.offset(),
+            )?;
+        }
+        self.allocation = Some(allocation);
+        Ok(())
+    }
+
+    #[must_use = "the returned allocation must be freed via its allocator or it will leak"]
+    pub fn into_allocation(mut self) -> Option<A::Allocation> {
+        self.allocation.take()
+    }
+}
+
+impl<A: Allocator + 'static> crate::resource::traits::Buildable for Image<A> {
+    type Desc = ImageDesc;
+    type Alloc = A;
+
+    fn build(
+        desc: &Self::Desc,
+        device: &crate::device::LogicalDevice,
+        allocator: &Self::Alloc,
+    ) -> Result<Self, crate::DagalError> {
+        let image_ci = vk::ImageCreateInfo::default()
+            .flags(desc.flags)
+            .image_type(desc.image_type)
+            .format(desc.format)
+            .extent(desc.extent)
+            .mip_levels(desc.mip_levels)
+            .array_layers(desc.array_layers)
+            .samples(desc.samples)
+            .tiling(desc.tiling)
+            .usage(desc.usage)
+            .sharing_mode(desc.sharing_mode)
+            .queue_family_indices(&desc.queue_family_indices)
+            .initial_layout(desc.initial_layout);
+        Self::new(ImageCreateInfo::NewAllocated {
+            device: device.clone(),
+            allocator,
+            location: desc.location,
+            image_ci,
+            name: None,
+        })
+    }
 }
 
 impl<A: Allocator + 'static> Resource for Image<A> {
@@ -297,10 +314,9 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// use std::ptr;
     /// use ash::vk;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewUnallocated {
-    ///     device: test_vulkan.device.as_ref().unwrap().clone(),
+    ///     device: ctx.device(),
     ///     image_ci:vk::ImageCreateInfo {
     ///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
     ///         p_next: ptr::null(),
@@ -331,21 +347,11 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     /// ```
     /// use std::ptr;
     /// use ash::vk;
-    /// use dagal::allocators::GPUAllocatorImpl;
     /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// use dagal::gpu_allocator;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let mut allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-    ///     instance: test_vulkan.instance.get_instance().clone(),
-    ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
-    ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
-    ///     debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
-    ///     buffer_device_address: false,
-    ///     allocation_sizes: Default::default(),
-    ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
+    /// let mut allocator = ctx.allocator();
     /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::NewAllocated {
-    ///     device: test_vulkan.device.as_ref().unwrap().clone(),
+    ///     device: ctx.device(),
     ///     image_ci: vk::ImageCreateInfo {
     ///         s_type: vk::StructureType::IMAGE_CREATE_INFO,
     ///         p_next: ptr::null(),
@@ -370,49 +376,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
     ///     },
     ///     allocator: &mut allocator,
     ///     location: dagal::allocators::MemoryLocation::GpuOnly,
-    ///     name: None,
-    /// }).unwrap();
-    /// drop(image);
-    /// ```
-    /// Test using owned create info
-    /// ```
-    /// use std::ptr;
-    /// use ash::vk;
-    /// use dagal::allocators::GPUAllocatorImpl;
-    /// use dagal::resource::traits::Resource;
-    /// use dagal::util::tests::TestSettings;
-    /// use dagal::gpu_allocator;
-    /// let test_vulkan = dagal::util::tests::create_vulkan_and_device(TestSettings::default());
-    /// let mut allocator = GPUAllocatorImpl::new(gpu_allocator::vulkan::AllocatorCreateDesc {
-    ///     instance: test_vulkan.instance.get_instance().clone(),
-    ///     device: test_vulkan.device.as_ref().unwrap().get_handle().clone(),
-    ///     physical_device: test_vulkan.physical_device.as_ref().unwrap().handle().clone(),
-    ///     debug_settings: gpu_allocator::AllocatorDebugSettings::default(),
-    ///     buffer_device_address: false,
-    ///     allocation_sizes: Default::default(),
-    ///  }, test_vulkan.device.as_ref().unwrap().clone()).unwrap();
-    /// let image: dagal::resource::Image<dagal::allocators::GPUAllocatorImpl> = dagal::resource::Image::new(dagal::resource::ImageCreateInfo::FromOwnedCreateInfo {
-    ///     device: test_vulkan.device.as_ref().unwrap().clone(),
-    ///     create_info: dagal::resource::OwnedImageCreateInfo {
-    ///         flags: vk::ImageCreateFlags::empty(),
-    ///         image_type: vk::ImageType::TYPE_2D,
-    ///         format: vk::Format::R8G8B8A8_SRGB,
-    ///         extent: vk::Extent3D {
-    ///             width: 10,
-    ///             height: 10,
-    ///             depth: 1,
-    ///         },
-    ///         mip_levels: 1,
-    ///         array_layers: 1,
-    ///         samples: vk::SampleCountFlags::TYPE_1,
-    ///         tiling: vk::ImageTiling::LINEAR,
-    ///         usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
-    ///         sharing_mode: vk::SharingMode::EXCLUSIVE,
-    ///         queue_family_indices: vec![],
-    ///         initial_layout: vk::ImageLayout::UNDEFINED,
-    ///         location: dagal::allocators::MemoryLocation::GpuOnly,
-    ///     },
-    ///     allocator: &mut allocator,
     ///     name: None,
     /// }).unwrap();
     /// drop(image);
@@ -456,7 +419,7 @@ impl<A: Allocator + 'static> Resource for Image<A> {
             } => {
                 let handle = unsafe { device.get_handle().create_image(&image_ci, None)? };
                 #[cfg(feature = "log-lifetimes")]
-                tracing::trace!("Created VkImage {:p}", handle);
+                log::trace!("Created VkImage {:p}", handle);
 
                 let mut handle = Self {
                     handle,
@@ -524,75 +487,6 @@ impl<A: Allocator + 'static> Resource for Image<A> {
                 image.allocator = Some(allocator.clone());
                 Ok(image)
             }
-            ImageCreateInfo::FromOwnedCreateInfo {
-                device,
-                allocator,
-                create_info,
-                name,
-            } => {
-                let handle = unsafe {
-                    device.get_handle().create_image(
-                        &vk::ImageCreateInfo {
-                            s_type: vk::StructureType::IMAGE_CREATE_INFO,
-                            p_next: ptr::null(),
-                            flags: create_info.flags,
-                            image_type: create_info.image_type,
-                            format: create_info.format,
-                            extent: create_info.extent,
-                            mip_levels: create_info.mip_levels,
-                            array_layers: create_info.array_layers,
-                            samples: create_info.samples,
-                            tiling: create_info.tiling,
-                            usage: create_info.usage,
-                            sharing_mode: create_info.sharing_mode,
-                            queue_family_index_count: create_info.queue_family_indices.len() as u32,
-                            p_queue_family_indices: create_info.queue_family_indices.as_ptr(),
-                            initial_layout: create_info.initial_layout,
-                            _marker: std::marker::PhantomData,
-                        },
-                        None,
-                    )?
-                };
-                #[cfg(feature = "log-lifetimes")]
-                tracing::trace!("Created VkImage {:p}", handle);
-
-                let allocation = unsafe {
-                    let allocation = allocator.allocate(
-                        name.unwrap_or("IMAGE_ALLOCATION"),
-                        &device.get_handle().get_image_memory_requirements(handle),
-                        create_info.location,
-                    )?;
-                    device.get_handle().bind_image_memory(
-                        handle,
-                        allocation.memory(),
-                        allocation.offset(),
-                    )?;
-                    allocation
-                };
-
-                let mut handle = Self {
-                    handle,
-                    format: create_info.format,
-                    extent: create_info.extent,
-                    mip_levels: create_info.mip_levels,
-                    usage_flags: create_info.usage,
-                    image_type: create_info.image_type,
-                    device,
-                    allocation: Some(allocation),
-                    allocator: Some(allocator.clone()),
-                    image_managed: true,
-                    concurrent_queue_families: if create_info.sharing_mode
-                        == vk::SharingMode::CONCURRENT
-                    {
-                        Some(create_info.queue_family_indices.clone().into_boxed_slice())
-                    } else {
-                        None
-                    },
-                };
-                crate::resource::traits::update_name(&mut handle, name).unwrap_or(Ok(()))?;
-
-                Ok(handle)
-            }
         }
     }
 
@@ -632,7 +526,7 @@ impl<A: Allocator> Nameable for Image<A> {
 impl<A: Allocator> Destructible for Image<A> {
     fn destroy(&mut self) {
         #[cfg(feature = "log-lifetimes")]
-        tracing::trace!("Destroying VkImage {:p}", self.handle);
+        log::trace!("Destroying VkImage {:p}", self.handle);
 
         if let Some(allocation) = self.allocation.take() {
             if let Some(allocator) = self.allocator.as_mut() {
@@ -647,7 +541,6 @@ impl<A: Allocator> Destructible for Image<A> {
     }
 }
 
-#[cfg(feature = "raii")]
 impl<A: Allocator> Drop for Image<A> {
     fn drop(&mut self) {
         self.destroy();

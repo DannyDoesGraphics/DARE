@@ -1,5 +1,3 @@
-use std::ptr;
-
 use ash::vk;
 
 use crate::traits::AsRaw;
@@ -12,11 +10,7 @@ pub struct AccelerationStructureBuildGeometryInfo<'a> {
 impl Default for AccelerationStructureBuildGeometryInfo<'_> {
     fn default() -> Self {
         Self {
-            handle: vk::AccelerationStructureBuildGeometryInfoKHR {
-                s_type: vk::StructureType::ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                p_next: ptr::null(),
-                ..Default::default()
-            },
+            handle: vk::AccelerationStructureBuildGeometryInfoKHR::default(),
         }
     }
 }

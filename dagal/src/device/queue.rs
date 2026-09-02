@@ -1,8 +1,8 @@
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-use crate::traits::AsRaw;
 use crate::DagalError;
+use crate::traits::AsRaw;
 use anyhow::Result;
 use ash::vk::{self};
 
@@ -23,14 +23,9 @@ pub struct QueueInfo {
 
 impl From<QueueInfo> for vk::DeviceQueueInfo2<'_> {
     fn from(val: QueueInfo) -> Self {
-        vk::DeviceQueueInfo2 {
-            s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-            p_next: std::ptr::null(),
-            flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: val.family_index,
-            queue_index: val.index,
-            _marker: Default::default(),
-        }
+        vk::DeviceQueueInfo2::default()
+            .queue_family_index(val.family_index)
+            .queue_index(val.index)
     }
 }
 
