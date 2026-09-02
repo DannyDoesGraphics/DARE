@@ -9,6 +9,15 @@ DARE
 Danny's Awesome Rendering Engine.
 </p>
 
+DARE is a PBR path tracer targeted at rendering static Vulkan scenes with work being done to support dynamic scenes via GPU-accelerated physics.
+
+## Usage
+Within project root, run `cargo run`. 
+- WASD to move camera around (Forward, Left, Back, Right)
+- M1 to rotate camera 
+- QE to move camera up/down
+- CTRL + O to open a glTF scene file
+
 ## Organization
 
 This project is divided into **DAGAL** (Danny's Awesome Graphics Abstraction Layer) and DARE itself.
