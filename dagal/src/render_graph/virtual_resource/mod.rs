@@ -1,73 +1,112 @@
-use std::{
-    any::{Any, TypeId},
-    fmt::Debug,
-    hash::{DefaultHasher, Hash, Hasher},
-    marker::PhantomData,
-};
+use std::{any::TypeId, fmt::Debug, hash::Hash, marker::PhantomData};
 
 use crate::resource::traits::Resource;
 
-/// Opaque pointer to an underlying resource managed by the render graph
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct VirtualResource<A: Resource> {
-    id: u64,
-    ty: TypeId,
-}
-impl<A: Resource> Hash for VirtualResource<A> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.ty.hash(state);
-    }
-}
+mod collection;
 
-impl<A: Resource> VirtualResource<A> {
-    pub(crate) fn new(id: u64) -> Self {
+pub use collection::VirtualResourceCollection;
+
+/// Similar to [`UntypedVirtualResource`], however, does not maintain a generation counter.
+/// Useful for detecting if we're reusing the same resource handle twice erroneously
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub(crate) struct UntypedNoGenerationVirtualResource {
+    id: u32,
+    marker: TypeId,
+}
+impl From<UntypedVirtualResource> for UntypedNoGenerationVirtualResource {
+    fn from(value: UntypedVirtualResource) -> Self {
         Self {
-            id,
-            ty: TypeId::of::<A>(),
+            id: value.id,
+            marker: value.marker,
         }
     }
-    pub fn id(&self) -> u64 {
+}
+impl<A: Resource + 'static> From<VirtualResource<A>> for UntypedNoGenerationVirtualResource {
+    fn from(value: VirtualResource<A>) -> Self {
+        Self {
+            id: value.id,
+            marker: TypeId::of::<A>(),
+        }
+    }
+}
+
+/// [`VirtualResource`] but does not contain a viral generic type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct UntypedVirtualResource {
+    id: u32,
+    generation: u32,
+    marker: TypeId,
+}
+impl<A: Resource + 'static> From<VirtualResource<A>> for UntypedVirtualResource {
+    fn from(value: VirtualResource<A>) -> Self {
+        Self {
+            id: value.id,
+            generation: value.generation,
+            marker: TypeId::of::<A>(),
+        }
+    }
+}
+impl UntypedVirtualResource {
+    pub(crate) fn into_typed<A: Resource + 'static>(self) -> Option<VirtualResource<A>> {
+        if self.marker == TypeId::of::<A>() {
+            Some(VirtualResource {
+                id: self.id,
+                generation: self.generation,
+                _marker: PhantomData::default(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+pub struct VirtualResource<A: Resource + 'static> {
+    id: u32,
+    generation: u32,
+    _marker: PhantomData<A>,
+}
+
+impl<A: Resource + 'static> Debug for VirtualResource<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtualResource")
+            .field("id", &self.id)
+            .field("generation", &self.generation)
+            .finish()
+    }
+}
+impl<A: Resource + 'static> Clone for VirtualResource<A> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<A: Resource + 'static> Copy for VirtualResource<A> {}
+impl<A: Resource + 'static> PartialEq for VirtualResource<A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.generation == other.generation
+    }
+}
+impl<A: Resource + 'static> Eq for VirtualResource<A> {}
+impl<A: Resource + 'static> Hash for VirtualResource<A> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.generation.hash(state);
+    }
+}
+
+impl<A: Resource + 'static> VirtualResource<A> {
+    pub(crate) fn new(id: u32, generation: u32) -> Self {
+        Self {
+            id,
+            generation,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn id(&self) -> u32 {
         self.id
     }
-}
 
-/// Contains the virtual resource mappings to their original underlying representation
-pub struct VirtualResourceContainer {
-    ids: std::collections::HashMap<TypeId, u64>,
-    map: std::collections::HashMap<u64, Box<dyn Any>>,
-}
-
-impl VirtualResourceContainer {
-    fn compute_hash<A: Resource>(handle: &VirtualResource<A>) -> u64 {
-        let mut hasher = DefaultHasher::default();
-        handle.hash(&mut hasher);
-        hasher.finish()
-    }
-    pub fn get<A: Resource>(&self, handle: &VirtualResource<A>) -> Option<&A> {
-        self.map
-            .get(&Self::compute_hash(handle))
-            .and_then(|boxed| boxed.downcast_ref::<A>())
-    }
-
-    pub fn get_mut(&mut self, handle: &VirtualResource<A>) -> Option<&mut A> {
-        self.map
-            .get_mut(&Self::compute_hash(handle))
-            .and_then(|boxed| boxed.downcast_mut::<A>())
-    }
-
-    pub(crate) fn insert<A: Resource>(&mut self, resource: A) -> VirtualResource<A> {
-        let mut id = self.ids.entry(TypeId::of::<A>()).or_default();
-        let virtual_resource = VirtualResource::new::<A>(*id);
-        id += 1;
-        self.map
-            .insert(Self::compute_hash(&virtual_resource), Box::new(resource));
-        virtual_resource
-    }
-
-    pub(crate) fn remove<A: Resource>(&mut self, handle: VirtualResource<A>) -> Option<A> {
-        self.map
-            .remove(&Self::compute_hash(&handle))
-            .and_then(|boxed| boxed.downcast::<A>().ok())
+    pub fn generation(&self) -> u32 {
+        self.generation
     }
 }
