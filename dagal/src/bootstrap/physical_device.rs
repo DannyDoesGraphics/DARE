@@ -1,7 +1,6 @@
 use std::collections::{HashSet, VecDeque};
-use std::ffi::{c_char, CString};
+use std::ffi::{CString, c_char};
 use std::ops::Deref;
-use std::ptr;
 
 use anyhow::Result;
 use ash::vk;
@@ -64,7 +63,7 @@ impl Deref for PhysicalDevice {
 /// use ash::vk;
 /// use anyhow::Result;
 ///
-/// let test_vulkan = dagal::util::tests::create_vulkan(Default::default());
+/// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
 /// let mut queue_request = vec![
 ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true),
 ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::GRAPHICS, 1, true)
@@ -74,7 +73,7 @@ impl Deref for PhysicalDevice {
 /// .add_required_queue(queue_request[0].clone())
 /// .add_required_queue(queue_request[1].clone())
 /// .set_dedicated(true)
-/// .select(test_vulkan.instance.get_instance());
+/// .select(ctx.instance().get_instance());
 ///
 /// assert!(physical_device.is_ok());
 /// ```
@@ -132,10 +131,10 @@ impl PhysicalDeviceSelector {
     /// ```
     /// use anyhow::Result;
     ///
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices: Result<Vec<dagal::bootstrap::PhysicalDevice>> = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .set_minimum_vulkan_version((1, 0, 0))
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(!devices.unwrap().is_empty());
     /// ```
@@ -143,10 +142,10 @@ impl PhysicalDeviceSelector {
     ///
     /// Test for a non-existent version of Vulkan
     /// ```
-    /// let (test_device) = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .set_minimum_vulkan_version((u16::MAX, 0, 0))
-    /// .select_all(&test_device.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(devices.unwrap().is_empty()); // At least one Vulkan supported device
     /// ```
@@ -160,10 +159,10 @@ impl PhysicalDeviceSelector {
     /// # Examples
     /// Get physical devices that are dedicated GPUs
     /// ```
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .set_dedicated(true)
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// println!("There are {} devices that are dedicated.", devices.unwrap().len());
     /// ```
@@ -178,11 +177,11 @@ impl PhysicalDeviceSelector {
     /// Indicate we wish for dedicated devices, but then state we do not care for them.
     /// In other words, we're looking for any Vulkan device
     /// ```
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .set_dedicated(true)
     /// .dont_care_dedicated()
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(!devices.unwrap().is_empty());
     /// ```
@@ -197,10 +196,10 @@ impl PhysicalDeviceSelector {
     /// Select devices which support `VK_KHR_buffer_device_address` at a minimum
     /// ```
     /// use dagal::util::wrap_c_str;
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_extension(ash::khr::buffer_device_address::NAME.as_ptr())
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// let devices = devices.unwrap();
     /// assert!(!devices.is_empty());
@@ -219,10 +218,10 @@ impl PhysicalDeviceSelector {
     /// ```
     /// use std::ffi::CStr;
     /// use dagal::util::wrap_c_str;
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_preferred_extension(ash::khr::ray_tracing_pipeline::NAME.as_ptr())
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(!devices.as_ref().unwrap().is_empty());
     /// assert!(devices.unwrap()[0].extensions_enabled.contains( &wrap_c_str(ash::khr::ray_tracing_pipeline::NAME.as_ptr()) ));
@@ -243,12 +242,12 @@ impl PhysicalDeviceSelector {
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::GRAPHICS, 1, true),
     /// 	dagal::bootstrap::QueueRequest::new(vk::QueueFlags::TRANSFER, 1, true),
     /// ];
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices: Result<Vec<dagal::bootstrap::PhysicalDevice>> = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
     /// .add_required_queue(queues[1].clone())
     /// .add_required_queue(queues[2].clone())
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(!devices.unwrap().is_empty());
     /// ```
@@ -260,10 +259,10 @@ impl PhysicalDeviceSelector {
     /// let queues = vec![
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, u32::MAX, true)
     /// ];
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices: Result<Vec<dagal::bootstrap::PhysicalDevice>> = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// assert!(devices.unwrap().is_empty());
     /// ```
@@ -282,11 +281,11 @@ impl PhysicalDeviceSelector {
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true),
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::TRANSFER, 2, true),
     /// ];
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default()); // Quickly make vulkan
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let devices: Result<Vec<dagal::bootstrap::PhysicalDevice>> = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
     /// .add_preferred_queue(queues[1].clone())
-    /// .select_all(&test_vulkan.instance);
+    /// .select_all(ctx.instance());
     /// assert!(devices.is_ok());
     /// let devices  = devices.unwrap();
     /// assert!(devices.len() >= 1);
@@ -310,12 +309,7 @@ impl PhysicalDeviceSelector {
         for physical_device in physical_devices.into_iter() {
             let queue_families =
                 unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
-            let mut properties_2 = vk::PhysicalDeviceProperties2 {
-                s_type: vk::StructureType::PHYSICAL_DEVICE_PROPERTIES_2,
-                p_next: ptr::null_mut(),
-                properties: Default::default(),
-                _marker: Default::default(),
-            };
+            let mut properties_2 = vk::PhysicalDeviceProperties2::default();
             unsafe {
                 instance.get_physical_device_properties2(physical_device, &mut properties_2);
             };

@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{CString, c_char, c_void};
 use std::ptr;
 
 use anyhow::Result;
@@ -27,19 +27,18 @@ impl<'a> LogicalDeviceBuilder<'a> {
     /// ```
     /// use ash::vk;
     /// use dagal::traits::*;
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let queues = vec![
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true)
     /// ];
     /// let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
-    /// .select(&test_vulkan.instance).unwrap();
+    /// .select(ctx.instance()).unwrap();
     /// let logical_device = dagal::bootstrap::LogicalDeviceBuilder::new(physical_device.handle)
     /// .add_queue_allocation(queues[0].clone())
-    /// .build(&test_vulkan.instance)
+    /// .build(ctx.instance())
     /// .unwrap();
     /// drop(logical_device);
-    /// drop(test_vulkan);
     /// ```
     pub fn new(physical_device: crate::device::PhysicalDevice) -> Self {
         Self {
@@ -85,17 +84,17 @@ impl<'a> LogicalDeviceBuilder<'a> {
     /// Add buffer device address extension
     /// ```
     /// use ash::vk;
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let queues = vec![
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true)
     /// ];
     /// let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
-    /// .select(&test_vulkan.instance).unwrap();
+    /// .select(ctx.instance()).unwrap();
     /// let logical_device = dagal::bootstrap::LogicalDeviceBuilder::new(physical_device.handle)
     /// .add_queue_allocation(queues[0].clone())
     /// .add_extension(ash::khr::buffer_device_address::NAME.as_ptr())
-    /// .build(&test_vulkan.instance)
+    /// .build(ctx.instance())
     /// .unwrap();
     /// drop(logical_device);
     /// ```
@@ -133,27 +132,19 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 .or_insert(queue_slot.count);
         }
 
-        let queue_cis: Vec<vk::DeviceQueueCreateInfo> = queue_family_counts
-            .iter()
-            .filter_map(|(queue_family_index, queue_count)| {
-                if *queue_count as usize > queue_priorities.len() {
-                    queue_priorities.resize(*queue_count as usize, 1.0)
-                }
-                if *queue_count == 0 {
-                    None
-                } else {
-                    Some(vk::DeviceQueueCreateInfo {
-                        s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
-                        p_next: ptr::null(),
-                        flags: vk::DeviceQueueCreateFlags::empty(),
-                        queue_family_index: *queue_family_index,
-                        queue_count: *queue_count,
-                        p_queue_priorities: queue_priorities.as_ptr(),
-                        _marker: Default::default(),
-                    })
-                }
-            })
-            .collect();
+        let max_queue_count = queue_family_counts.values().copied().max().unwrap_or(0) as usize;
+        queue_priorities.resize(max_queue_count, 1.0);
+        let mut queue_cis: Vec<vk::DeviceQueueCreateInfo> = Vec::new();
+        for (queue_family_index, queue_count) in queue_family_counts.iter() {
+            if *queue_count == 0 {
+                continue;
+            }
+            queue_cis.push(
+                vk::DeviceQueueCreateInfo::default()
+                    .queue_family_index(*queue_family_index)
+                    .queue_priorities(&queue_priorities[..*queue_count as usize]),
+            );
+        }
         let c_strings: Vec<CString> = self
             .extensions
             .iter()
@@ -171,27 +162,17 @@ impl<'a> LogicalDeviceBuilder<'a> {
         self.features_1_3.p_next = ptr::null_mut();
         self.features_1_2.p_next = &mut self.features_1_3 as *mut _ as *mut c_void;
         self.features_1_1.p_next = &mut self.features_1_2 as *mut _ as *mut c_void;
-        let features_2 = vk::PhysicalDeviceFeatures2 {
-            s_type: vk::StructureType::PHYSICAL_DEVICE_FEATURES_2,
-            p_next: &mut self.features_1_1 as *mut _ as *mut c_void,
-            //p_next: ptr::null_mut(),
-            features: self.features_1_0,
-            _marker: Default::default(),
-        };
+        let mut features_2 = vk::PhysicalDeviceFeatures2::default();
+        features_2.p_next = &mut self.features_1_1 as *mut _ as *mut c_void;
+        features_2.features = self.features_1_0;
 
         #[allow(deprecated)]
-        let device_ci = vk::DeviceCreateInfo {
-            s_type: vk::StructureType::DEVICE_CREATE_INFO,
-            p_next: &features_2 as *const _ as *const c_void,
-            flags: vk::DeviceCreateFlags::empty(),
-            queue_create_info_count: queue_cis.len() as u32,
-            p_queue_create_infos: queue_cis.as_ptr(),
-            enabled_layer_count: 0,
-            pp_enabled_layer_names: ptr::null(),
-            enabled_extension_count: c_ptrs.len() as u32,
-            pp_enabled_extension_names: c_ptrs.as_ptr(),
-            p_enabled_features: ptr::null(),
-            _marker: Default::default(),
+        let device_ci = {
+            let mut device_ci = vk::DeviceCreateInfo::default()
+                .queue_create_infos(&queue_cis)
+                .enabled_extension_names(&c_ptrs);
+            device_ci.p_next = &features_2 as *const _ as *const c_void;
+            device_ci
         };
 
         let device = crate::device::LogicalDevice::new(crate::device::LogicalDeviceCreateInfo {
@@ -210,14 +191,9 @@ impl<'a> LogicalDeviceBuilder<'a> {
                 let dedicated: bool = queue_request.dedicated;
                 queues.push(unsafe {
                     device.get_queue(
-                        &vk::DeviceQueueInfo2 {
-                            s_type: vk::StructureType::DEVICE_QUEUE_INFO_2,
-                            p_next: ptr::null(),
-                            flags: vk::DeviceQueueCreateFlags::empty(),
-                            queue_family_index: allocation.family_index,
-                            queue_index: allocation.index,
-                            _marker: Default::default(),
-                        },
+                        &vk::DeviceQueueInfo2::default()
+                            .queue_family_index(allocation.family_index)
+                            .queue_index(allocation.index),
                         queue_flags,
                         dedicated,
                         true,
@@ -235,19 +211,18 @@ impl From<crate::bootstrap::PhysicalDevice> for LogicalDeviceBuilder<'_> {
     /// # Examples
     /// ```
     /// use ash::vk;
-    /// let test_vulkan = dagal::util::tests::create_vulkan(Default::default());
+    /// let ctx = dagal::util::tests::TestHarness::headless().build().unwrap();
     /// let queues = vec![
     ///     dagal::bootstrap::QueueRequest::new(vk::QueueFlags::COMPUTE, 1, true)
     /// ];
     /// let physical_device = dagal::bootstrap::PhysicalDeviceSelector::default()
     /// .add_required_queue(queues[0].clone())
-    /// .select(&test_vulkan.instance).unwrap();
+    /// .select(ctx.instance()).unwrap();
     /// let logical_device = dagal::bootstrap::LogicalDeviceBuilder::from(physical_device)
-    /// .build(&test_vulkan.instance)
+    /// .build(ctx.instance())
     /// .unwrap();
     /// // Device created successfully with requested queues
     /// drop(logical_device);
-    /// drop(test_vulkan);
     /// ```
     fn from(value: crate::bootstrap::PhysicalDevice) -> Self {
         Self {

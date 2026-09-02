@@ -1,7 +1,7 @@
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 
-use super::{CoreContext, PresentContext, SwapchainContext};
+use super::{CoreContext, PresentContext, SwapchainContext, immediate_submit::ImmediateSubmit};
 use crate::transfer_belt::{TransferManager, TransferPool};
 
 /// Owns all GPU objects for the render sub-app. Device `Arc` clones held by children
@@ -13,6 +13,7 @@ pub struct RenderGpu<A: Allocator> {
     pub swapchain: SwapchainContext<A>,
     pub transfer: TransferManager<A>,
     pub transfer_pool: TransferPool<A>,
+    pub immediate_submit: ImmediateSubmit,
 }
 
 impl<A: Allocator> RenderGpu<A> {
@@ -40,8 +41,10 @@ impl<A: Allocator> RenderGpu<A> {
             swapchain,
             transfer,
             transfer_pool,
+            immediate_submit,
         } = self;
 
+        drop(immediate_submit);
         drop(transfer_pool);
         drop(transfer);
         drop(present);

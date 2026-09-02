@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::ptr;
 
 use ash::vk;
 use derivative::Derivative;
@@ -21,29 +20,17 @@ use derivative::Derivative;
 /// # Examples
 /// ```
 /// use ash::vk;
-/// use ash_window;
-/// use raw_window_handle::HasDisplayHandle;
-/// use dagal::util::tests::TestSettings;
-/// let test_app = dagal::util::tests::TestApp::<winit::window::Window>::new();
-/// test_app.attach_function(|window: &winit::window::Window| {
-///     let test_vulkan = dagal::util::tests::create_vulkan_and_device(
-/// 		TestSettings::from_rdh(window.display_handle().unwrap().as_raw()).add_physical_device_extension(ash::khr::swapchain::NAME.as_ptr())
-///         .add_physical_device_extension(ash::khr::swapchain::NAME.as_ptr())
-/// 	);
-///     let mut surface: dagal::wsi::Surface = dagal::wsi::Surface::new(test_vulkan.instance.get_entry(), test_vulkan.instance.get_instance(), window).unwrap();
-///     let surface = surface.query_details(test_vulkan.physical_device.as_ref().unwrap().handle()).unwrap();
-///     let swapchain = dagal::bootstrap::SwapchainBuilder::new(&surface)
+/// use dagal::util::tests::TestHarness;
+/// let ctx = TestHarness::windowed().build().unwrap();
+/// let swapchain = dagal::bootstrap::SwapchainBuilder::new(ctx.surface())
 /// 	.request_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
 /// 	.request_image_format(vk::Format::R8G8B8A8_SRGB)
 /// 	.request_present_mode(vk::PresentModeKHR::MAILBOX) // Tries to find mailbox first
 ///     .request_present_mode(vk::PresentModeKHR::FIFO) // If not, falls back to FIFO (Hence, FIFO)
 ///     .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-///     .query_extent_from_window(window)
-/// 	.build(test_vulkan.instance.get_instance(), test_vulkan.device.as_ref().unwrap().clone()).unwrap();
-///     drop(swapchain);
-///     drop(surface);
-///     drop(test_vulkan);
-/// }).run();
+///     .query_extent_from_window(ctx.window())
+/// 	.build(ctx.instance().get_instance(), ctx.device()).unwrap();
+/// drop(swapchain);
 /// ```
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -223,51 +210,48 @@ impl<'a> SwapchainBuilder<'a> {
             .map(|format| format.color_space)
             .collect();
 
-        let swapchain_ci = vk::SwapchainCreateInfoKHR {
-            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            p_next: ptr::null(),
-            flags: vk::SwapchainCreateFlagsKHR::empty(),
-            surface: self.surface_queried.handle(),
-            min_image_count: if self.preferred_image_counts == 0 {
+        let mut swapchain_ci = vk::SwapchainCreateInfoKHR::default()
+            .surface(self.surface_queried.handle())
+            .min_image_count(if self.preferred_image_counts == 0 {
                 surface_capabilities.min_image_count
             } else {
                 self.preferred_image_counts
-            },
-            image_format: Self::find_first_occurrence(
-                self.preferred_image_formats.as_slice(),
-                available_formats.as_slice(),
+            })
+            .image_format(
+                Self::find_first_occurrence(
+                    self.preferred_image_formats.as_slice(),
+                    available_formats.as_slice(),
+                )
+                .unwrap(),
             )
-            .unwrap(),
-            image_color_space: Self::find_first_occurrence(
-                self.preferred_color_spaces.as_slice(),
-                available_color_spaces.as_slice(),
+            .image_color_space(
+                Self::find_first_occurrence(
+                    self.preferred_color_spaces.as_slice(),
+                    available_color_spaces.as_slice(),
+                )
+                .unwrap(),
             )
-            .unwrap(),
-            image_extent: self.image_extent,
-            image_array_layers: 1,
-            image_usage: self.image_usage,
-            image_sharing_mode: if self.family_indices.len() > 1 {
+            .image_extent(self.image_extent)
+            .image_array_layers(1)
+            .image_usage(self.image_usage)
+            .image_sharing_mode(if self.family_indices.len() > 1 {
                 vk::SharingMode::CONCURRENT
             } else {
                 vk::SharingMode::EXCLUSIVE
-            },
-            queue_family_index_count: if self.family_indices.len() <= 1 {
-                0
-            } else {
-                self.family_indices.len() as u32
-            },
-            p_queue_family_indices: queue_family_indices.as_ptr(),
-            pre_transform: surface_capabilities.current_transform,
-            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
-            present_mode: Self::find_first_occurrence(
-                self.preferred_present_modes.as_slice(),
-                self.surface_queried.get_present_modes(),
+            })
+            .pre_transform(surface_capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(
+                Self::find_first_occurrence(
+                    self.preferred_present_modes.as_slice(),
+                    self.surface_queried.get_present_modes(),
+                )
+                .unwrap(),
             )
-            .unwrap(),
-            clipped: vk::TRUE,
-            old_swapchain: vk::SwapchainKHR::null(),
-            _marker: Default::default(),
-        };
+            .clipped(true);
+        if self.family_indices.len() > 1 {
+            swapchain_ci = swapchain_ci.queue_family_indices(&queue_family_indices);
+        }
         crate::wsi::Swapchain::new(instance, device, &swapchain_ci)
     }
 }

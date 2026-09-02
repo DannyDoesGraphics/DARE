@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ash::vk;
 use std::collections::HashSet;
-use std::ffi::{c_char, CString};
+use std::ffi::{CString, c_char};
 use std::ptr;
 
 /// Quickly builds an Instance
@@ -108,6 +108,10 @@ impl<'a> InstanceBuilder<'a> {
             ));
         }
 
+        let debug_utils = self.extensions.contains(&crate::util::wrap_c_str(
+            ash::ext::debug_utils::NAME.as_ptr(),
+        ));
+
         instance_ci.enabled_extension_count = self.extensions.len() as u32;
         let ext_cstring: Vec<CString> = self
             .extensions
@@ -126,6 +130,10 @@ impl<'a> InstanceBuilder<'a> {
         let layer_cptrs: Vec<*const c_char> =
             layer_cstring.iter().map(|name| name.as_ptr()).collect();
         instance_ci.pp_enabled_layer_names = layer_cptrs.as_ptr();
-        crate::core::Instance::new(instance_ci)
+        let mut instance = crate::core::Instance::new(instance_ci)?;
+        if debug_utils {
+            instance.attach_debug_messenger()?;
+        }
+        Ok(instance)
     }
 }
