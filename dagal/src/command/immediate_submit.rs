@@ -41,6 +41,7 @@ impl ImmediateSubmit {
         &self.device
     }
 
+    /// Blocks all submit calls
     pub fn submit<F, R>(&mut self, recorder: F) -> crate::Result<R>
     where
         F: FnOnce(&crate::command::CommandBufferRecording) -> R,

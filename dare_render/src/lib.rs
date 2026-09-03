@@ -216,12 +216,21 @@ fn bootstrap_gpu(render: &mut SubApp, gpu_config: RenderGpuConfig, window: &Wind
     )
     .unwrap();
     let transfer_pool = transfer_manager.get_transfer_pool();
+    let immediate_submit = dagal::command::ImmediateSubmit::new(
+        core_context.device.clone(),
+        core_context
+            .queues
+            .take_spare(vk::QueueFlags::COMPUTE | vk::QueueFlags::TRANSFER)
+            .unwrap(),
+    )
+    .unwrap();
     let gpu = contexts::RenderGpu {
         core: core_context,
         present: present_context,
         swapchain: swapchain_context,
         transfer: transfer_manager,
         transfer_pool,
+        immediate_submit,
     };
 
     render.world_mut().insert_non_send(gpu);

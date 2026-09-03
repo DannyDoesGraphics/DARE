@@ -1,8 +1,9 @@
 use dagal::allocators::Allocator;
 use dagal::ash::vk;
 
-use super::{CoreContext, PresentContext, SwapchainContext, immediate_submit::ImmediateSubmit};
+use super::{CoreContext, PresentContext, SwapchainContext};
 use crate::transfer_belt::{TransferManager, TransferPool};
+use dagal::command::ImmediateSubmit;
 
 /// Owns all GPU objects for the render sub-app. Device `Arc` clones held by children
 /// must be released before [`CoreContext`] drops — enforced by [`Self::shutdown`].
