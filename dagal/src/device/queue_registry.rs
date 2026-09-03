@@ -36,7 +36,7 @@ impl QueueRegistry {
 
     pub fn from_queues(mut queues: Vec<Queue>) -> crate::Result<Self> {
         if queues.is_empty() {
-            return Err(DagalError::ImpossibleQueue.into());
+            return Err(DagalError::ImpossibleQueue);
         }
         let present_idx = queues.iter().position(|q| q.can_present()).unwrap_or(0);
         let present = queues.remove(present_idx);
