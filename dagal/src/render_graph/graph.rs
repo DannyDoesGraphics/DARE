@@ -145,9 +145,6 @@ impl<'a> RenderGraph<'a> {
             .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
             .unwrap();
 
-        let timeline =
-            crate::sync::Semaphore::new(vk::SemaphoreCreateFlags::empty(), device.clone(), 0)?;
-
         for pass in &self.passes {
             // match inputs with outputs
             // (In, Option<Out>)
@@ -187,7 +184,10 @@ impl<'a> RenderGraph<'a> {
         }
 
         let executable = recording.end().unwrap();
-        let cmds = [executable.submit_info()];
+        let command_infos = [executable.submit_info()];
+        let submits = [vk::SubmitInfo2::default().command_buffer_infos(&command_infos)];
+        let fence = crate::sync::Fence::new(device.clone(), vk::FenceCreateFlags::empty())?;
+        queue.submit2_and_wait_fence(&submits, &fence)?;
 
         Ok(())
     }
