@@ -173,7 +173,7 @@ impl<T> FreeList<T> {
         &self,
         handle: &Handle<A>,
         f: F,
-    ) -> Result<R> {
+    ) -> Result<R> { unsafe {
         if !self.untyped_is_valid(handle)? {
             return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
         }
@@ -188,7 +188,7 @@ impl<T> FreeList<T> {
                 Err(anyhow::Error::from(crate::DagalError::PoisonError)),
                 |data| Ok(f(data)),
             )
-    }
+    }}
 
     /// Execute with a handle's underlying resource
     ///
@@ -198,7 +198,7 @@ impl<T> FreeList<T> {
         &self,
         handle: &Handle<A>,
         f: F,
-    ) -> Result<R> {
+    ) -> Result<R> { unsafe {
         if !self.untyped_is_valid(handle)? {
             return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
         }
@@ -213,7 +213,7 @@ impl<T> FreeList<T> {
                 Err(anyhow::Error::from(crate::DagalError::PoisonError)),
                 |data| Ok(f(data)),
             )
-    }
+    }}
 
     /// Count number of used slots in the free list
     pub fn count_used(&self) -> Result<usize> {

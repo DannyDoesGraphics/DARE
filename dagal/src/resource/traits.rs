@@ -54,11 +54,10 @@ pub(crate) fn update_name<T: Resource + Nameable>(
     resource: &mut T,
     name: Option<&str>,
 ) -> Option<Result<(), crate::DagalError>> {
-    if let Some(name) = name {
-        if let Some(debug_utils) = resource.get_device().clone().get_debug_utils() {
+    if let Some(name) = name
+        && let Some(debug_utils) = resource.get_device().clone().get_debug_utils() {
             return Some(resource.set_name(debug_utils, name));
         }
-    }
     None
 }
 

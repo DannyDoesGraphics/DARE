@@ -233,7 +233,8 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
+                let stream =
+                    stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U32));
@@ -269,7 +270,8 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
+                let stream =
+                    stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 4, None, Some(Format::U8));
@@ -299,7 +301,8 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
+                let stream =
+                    stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32, 3, None, Some(Format::U8));
@@ -364,7 +367,8 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
+                let stream =
+                    stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8));
@@ -396,7 +400,8 @@ mod tests {
                     input_bytes.extend_from_slice(&val.to_ne_bytes());
                 }
 
-                let stream = stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
+                let stream =
+                    stream::iter(vec![input_bytes].into_iter().map(Ok::<_, anyhow::Error>));
 
                 let mut reshaper =
                     ByteStreamReshaper::new(stream, Format::F32x4, 3, None, Some(Format::U8x3));

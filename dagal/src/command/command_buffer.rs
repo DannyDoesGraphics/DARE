@@ -369,32 +369,32 @@ impl CmdBuffer for CommandBufferState {
 impl AsRaw for CommandBufferState {
     type RawType = vk::CommandBuffer;
 
-    unsafe fn as_raw(&self) -> &Self::RawType {
+    unsafe fn as_raw(&self) -> &Self::RawType { unsafe {
         match self {
             CommandBufferState::Ready(r) => r.as_raw(),
             CommandBufferState::Recording(r) => r.as_raw(),
             CommandBufferState::Executable(r) => r.as_raw(),
             CommandBufferState::Invalid(r) => r.as_raw(),
         }
-    }
+    }}
 
-    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType {
+    unsafe fn as_raw_mut(&mut self) -> &mut Self::RawType { unsafe {
         match self {
             CommandBufferState::Ready(r) => r.as_raw_mut(),
             CommandBufferState::Recording(r) => r.as_raw_mut(),
             CommandBufferState::Executable(r) => r.as_raw_mut(),
             CommandBufferState::Invalid(r) => r.as_raw_mut(),
         }
-    }
+    }}
 
-    unsafe fn raw(self) -> Self::RawType {
+    unsafe fn raw(self) -> Self::RawType { unsafe {
         match self {
             CommandBufferState::Ready(r) => r.raw(),
             CommandBufferState::Recording(r) => r.raw(),
             CommandBufferState::Executable(r) => r.raw(),
             CommandBufferState::Invalid(r) => r.raw(),
         }
-    }
+    }}
 }
 
 impl CommandBufferState {
@@ -489,9 +489,9 @@ impl CommandBufferState {
             CommandBufferState::Recording(r) => {
                 let handle = unsafe { *r.as_raw() };
                 let device = r.get_device().clone();
-                match (CommandBufferRecording { handle, device }).end() {
-                    Ok(executable) => CommandBufferState::Executable(executable),
-                    Err(e) => return Err(e),
+                {
+                    let executable = (CommandBufferRecording { handle, device }).end()?;
+                    CommandBufferState::Executable(executable)
                 }
             }
             CommandBufferState::Executable(_) => {

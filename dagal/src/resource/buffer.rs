@@ -73,11 +73,10 @@ impl<A: Allocator> Destructible for Buffer<A> {
             log::trace!("Destroying VkBuffer {:p}", self.handle);
 
             self.device.get_handle().destroy_buffer(self.handle, None);
-            if let Some(allocation) = self.allocation.take() {
-                if let Some(allocator) = self.allocator.as_mut() {
+            if let Some(allocation) = self.allocation.take()
+                && let Some(allocator) = self.allocator.as_mut() {
                     let _ = allocator.free(allocation);
                 }
-            }
         }
     }
 }

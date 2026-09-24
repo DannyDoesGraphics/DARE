@@ -711,7 +711,7 @@ impl<A: Allocator> TransferManager<A> {
             chunk.head += size;
         }
 
-        let chunks: Vec<Chunk<A>> = self.chunks_active.drain(..).collect();
+        let chunks: Vec<Chunk<A>> = std::mem::take(&mut self.chunks_active);
         for chunk in chunks {
             self.submit_chunk(chunk)?;
         }

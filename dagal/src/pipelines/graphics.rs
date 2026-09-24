@@ -40,6 +40,7 @@ impl super::Pipeline for GraphicsPipeline {
 }
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct GraphicsPipelineBuilder<'a> {
     shaders: HashMap<vk::ShaderStageFlags, crate::shader::Shader>,
 
@@ -75,21 +76,6 @@ impl Clone for GraphicsPipelineBuilder<'_> {
     }
 }
 
-impl Default for GraphicsPipelineBuilder<'_> {
-    fn default() -> Self {
-        Self {
-            shaders: HashMap::new(),
-            input_assembly: vk::PipelineInputAssemblyStateCreateInfo::default(),
-            rasterizer: vk::PipelineRasterizationStateCreateInfo::default(),
-            color_blend_attachment: vk::PipelineColorBlendAttachmentState::default(),
-            multisampling: vk::PipelineMultisampleStateCreateInfo::default(),
-            layout: None,
-            depth_stencil: vk::PipelineDepthStencilStateCreateInfo::default(),
-            render_info: vk::PipelineRenderingCreateInfo::default(),
-            color_attachment_format: Default::default(),
-        }
-    }
-}
 
 impl super::PipelineBuilder for GraphicsPipelineBuilder<'_> {
     type BuildTo = GraphicsPipeline;

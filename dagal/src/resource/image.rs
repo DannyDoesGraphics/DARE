@@ -528,11 +528,10 @@ impl<A: Allocator> Destructible for Image<A> {
         #[cfg(feature = "log-lifetimes")]
         log::trace!("Destroying VkImage {:p}", self.handle);
 
-        if let Some(allocation) = self.allocation.take() {
-            if let Some(allocator) = self.allocator.as_mut() {
+        if let Some(allocation) = self.allocation.take()
+            && let Some(allocator) = self.allocator.as_mut() {
                 let _ = allocator.free(allocation);
             }
-        }
         if self.image_managed {
             unsafe {
                 self.device.get_handle().destroy_image(self.handle, None);

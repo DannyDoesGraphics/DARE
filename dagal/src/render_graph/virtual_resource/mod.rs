@@ -52,7 +52,7 @@ impl UntypedVirtualResource {
             Some(VirtualResource {
                 id: self.id,
                 generation: self.generation,
-                _marker: PhantomData::default(),
+                _marker: PhantomData,
             })
         } else {
             None

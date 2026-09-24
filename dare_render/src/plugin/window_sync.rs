@@ -21,15 +21,14 @@ pub fn sync_render_window(
         return;
     };
 
-    if render.last_sent != *window {
-        if let Some(client) = render.client.as_ref() {
+    if render.last_sent != *window
+        && let Some(client) = render.client.as_ref() {
             if client.send_window(window.clone()).is_err() {
                 render.client.take();
             } else {
                 render.last_sent = window.clone();
             }
         }
-    }
 
     if closing {
         commands.remove_resource::<RenderContext>();

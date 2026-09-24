@@ -129,7 +129,7 @@ impl<'a> RenderGraph<'a> {
     }
 
     /// Execute the graph
-    pub fn execute(mut self, queue: &crate::device::Queue) -> crate::Result<()> {
+    pub fn execute(self, queue: &crate::device::Queue) -> crate::Result<()> {
         let device = queue.device().clone();
 
         let pool =

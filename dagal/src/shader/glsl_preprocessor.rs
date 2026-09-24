@@ -38,7 +38,7 @@ impl IncludeContext {
         if self.include_stack.contains(&include_path) {
             return Err(anyhow::anyhow!(format!(
                 "Invalid #include usage found in {:?}. Trying to include {:?}",
-                &source_path, &include_path
+                source_path, include_path
             )));
         } else if self.included_files.contains(&include_path) {
             // double include
@@ -59,7 +59,7 @@ impl IncludeContext {
         } else {
             Err(anyhow::anyhow!(format!(
                 "Tried to #include for {:?} in {:?}. Does not exist.",
-                &include_path, &source_path
+                include_path, source_path
             )))
         };
         self.include_stack.pop_back();

@@ -184,11 +184,10 @@ where
         let hash = Self::compute_hash(value);
         if let Some(slot) = self.hash_to_slot.get(&hash) {
             // Verify it's actually the same value (handle hash collisions)
-            if let Some(existing_value) = self.get(slot.clone()) {
-                if existing_value == value {
+            if let Some(existing_value) = self.get(slot.clone())
+                && existing_value == value {
                     return Some(slot);
                 }
-            }
         }
         None
     }

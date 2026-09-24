@@ -3,6 +3,7 @@ use ash::vk;
 use ash::vk::Handle;
 use std::hash::{Hash, Hasher};
 
+mod acceleration_structure;
 pub use acceleration_structure_build_geometry_info::AccelerationStructureBuildGeometryInfo as BuildGeometryInfo;
 pub use acceleration_structure_build_geometry_info::*;
 

@@ -1,6 +1,6 @@
+use dashmap::DashMap;
 use dashmap::iter::IterMut;
 use dashmap::mapref::one::{Ref, RefMut};
-use dashmap::DashMap;
 use std::any::{Any, TypeId};
 use std::hash::RandomState;
 

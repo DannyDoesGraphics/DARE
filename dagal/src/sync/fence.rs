@@ -88,7 +88,7 @@ impl std::future::Future for Fence {
 
     fn poll(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
         match self.get_fence_status() {
             Ok(true) => std::task::Poll::Ready(Ok(())),

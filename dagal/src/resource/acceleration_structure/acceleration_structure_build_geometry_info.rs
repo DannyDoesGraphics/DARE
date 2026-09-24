@@ -3,17 +3,11 @@ use ash::vk;
 use crate::traits::AsRaw;
 
 #[derive(Debug, Copy, Clone)]
+#[derive(Default)]
 pub struct AccelerationStructureBuildGeometryInfo<'a> {
     handle: vk::AccelerationStructureBuildGeometryInfoKHR<'a>,
 }
 
-impl Default for AccelerationStructureBuildGeometryInfo<'_> {
-    fn default() -> Self {
-        Self {
-            handle: vk::AccelerationStructureBuildGeometryInfoKHR::default(),
-        }
-    }
-}
 
 impl<'a> AccelerationStructureBuildGeometryInfo<'a> {
     pub fn ty(mut self, ty: vk::AccelerationStructureTypeKHR) -> Self {

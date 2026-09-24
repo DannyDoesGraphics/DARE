@@ -33,8 +33,7 @@ impl UseMap {
     /// Check if a handle has been accessed prior thus is in use
     pub fn been_used<A: dare_assets::Asset>(&self, handle: &dare_assets::AssetHandle<A>) -> bool {
         self.map
-            .get(&erased_hash(handle))
-            .map(|v| *v)
+            .get(&erased_hash(handle)).copied()
             .unwrap_or(false)
     }
 

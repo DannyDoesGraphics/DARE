@@ -228,7 +228,7 @@ impl TestHarnessBuilder {
             raw_window_handle = Some(window.window_handle().unwrap().as_raw());
             present_mode = Some(Expected::Preferred(vk::PresentModeKHR::FIFO));
             let swapchain = ash::khr::swapchain::NAME.to_string_lossy().to_string();
-            if !self.extensions.iter().any(|name| *name == swapchain) {
+            if !self.extensions.contains(&swapchain) {
                 device_extensions.push(Expected::Required(swapchain));
             }
         }

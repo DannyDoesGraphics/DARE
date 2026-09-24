@@ -173,7 +173,7 @@ impl LogicalDevice {
         queue_flags: vk::QueueFlags,
         strict: bool,
         can_present: bool,
-    ) -> crate::device::Queue {
+    ) -> crate::device::Queue { unsafe {
         let queue = unsafe { self.inner.handle.get_device_queue2(queue_info) };
         crate::device::Queue::new(
             self.clone(),
@@ -186,7 +186,7 @@ impl LogicalDevice {
                 can_present,
             },
         )
-    }
+    }}
 
     pub fn get_used_queue_families(&self) -> &[u32] {
         assert!(!self.inner.queue_families.is_empty());

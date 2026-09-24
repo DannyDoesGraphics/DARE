@@ -41,7 +41,10 @@ impl TestContext {
     }
 
     /// Perform immediate submission of GPU commands and wait on their completion
-    pub fn immediate_submit<F: FnOnce(&TestHarness, &dagal::command::CommandBufferRecording) -> R, R>(
+    pub fn immediate_submit<
+        F: FnOnce(&TestHarness, &dagal::command::CommandBufferRecording) -> R,
+        R,
+    >(
         &self,
         f: F,
     ) -> dagal::Result<R> {

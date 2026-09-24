@@ -27,7 +27,9 @@ fn main() {
     }));
 
     let subscriber = FmtSubscriber::builder()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_file(true)
         .with_line_number(true)
         .finish();
