@@ -39,8 +39,7 @@ impl super::Pipeline for GraphicsPipeline {
     }
 }
 
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct GraphicsPipelineBuilder<'a> {
     shaders: HashMap<vk::ShaderStageFlags, crate::shader::Shader>,
 
@@ -75,7 +74,6 @@ impl Clone for GraphicsPipelineBuilder<'_> {
         }
     }
 }
-
 
 impl super::PipelineBuilder for GraphicsPipelineBuilder<'_> {
     type BuildTo = GraphicsPipeline;

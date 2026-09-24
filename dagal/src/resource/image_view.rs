@@ -135,9 +135,10 @@ impl Resource for ImageView {
             },
         };
         if let Some(debug_utils) = view.device.clone().get_debug_utils()
-            && let Some(name) = view.name.clone().as_ref() {
-                view.set_name(debug_utils, name)?;
-            }
+            && let Some(name) = view.name.clone().as_ref()
+        {
+            view.set_name(debug_utils, name)?;
+        }
 
         Ok(view)
     }

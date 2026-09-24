@@ -185,9 +185,10 @@ where
         if let Some(slot) = self.hash_to_slot.get(&hash) {
             // Verify it's actually the same value (handle hash collisions)
             if let Some(existing_value) = self.get(slot.clone())
-                && existing_value == value {
-                    return Some(slot);
-                }
+                && existing_value == value
+            {
+                return Some(slot);
+            }
         }
         None
     }

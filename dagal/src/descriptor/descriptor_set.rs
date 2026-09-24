@@ -114,9 +114,10 @@ impl DescriptorSet {
             } => {
                 let mut handle = Self { handle, device };
                 if let Some(debug_utils) = handle.device.clone().get_debug_utils()
-                    && let Some(name) = name {
-                        handle.set_name(debug_utils, name)?;
-                    }
+                    && let Some(name) = name
+                {
+                    handle.set_name(debug_utils, name)?;
+                }
 
                 Ok(handle)
             }

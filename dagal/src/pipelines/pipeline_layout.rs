@@ -60,9 +60,10 @@ impl Resource for PipelineLayout {
                 .unwrap();
                 let mut handle = Self { handle, device };
                 if let Some(name) = name
-                    && let Some(debug_utils) = handle.device.clone().get_debug_utils() {
-                        handle.set_name(debug_utils, name)?;
-                    }
+                    && let Some(debug_utils) = handle.device.clone().get_debug_utils()
+                {
+                    handle.set_name(debug_utils, name)?;
+                }
                 handle
             }
             PipelineLayoutCreateInfo::FromVk {

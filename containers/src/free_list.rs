@@ -110,9 +110,10 @@ impl<T: 'static> Container<T> for FreeList<T> {
     fn retain<F: Fn(&T) -> bool>(&mut self, predicate: F) {
         for data_slot in self.data.iter_mut() {
             if let Some(data) = data_slot
-                && !predicate(data) {
-                    *data_slot = None;
-                }
+                && !predicate(data)
+            {
+                *data_slot = None;
+            }
         }
     }
 }

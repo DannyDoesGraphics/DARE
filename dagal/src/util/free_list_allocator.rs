@@ -173,22 +173,24 @@ impl<T> FreeList<T> {
         &self,
         handle: &Handle<A>,
         f: F,
-    ) -> Result<R> { unsafe {
-        if !self.untyped_is_valid(handle)? {
-            return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+    ) -> Result<R> {
+        unsafe {
+            if !self.untyped_is_valid(handle)? {
+                return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+            }
+            self.inner
+                .read()
+                .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+                .resources
+                .get(handle.id as usize)
+                .unwrap()
+                .as_ref()
+                .map_or(
+                    Err(anyhow::Error::from(crate::DagalError::PoisonError)),
+                    |data| Ok(f(data)),
+                )
         }
-        self.inner
-            .read()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
-            .resources
-            .get(handle.id as usize)
-            .unwrap()
-            .as_ref()
-            .map_or(
-                Err(anyhow::Error::from(crate::DagalError::PoisonError)),
-                |data| Ok(f(data)),
-            )
-    }}
+    }
 
     /// Execute with a handle's underlying resource
     ///
@@ -198,22 +200,24 @@ impl<T> FreeList<T> {
         &self,
         handle: &Handle<A>,
         f: F,
-    ) -> Result<R> { unsafe {
-        if !self.untyped_is_valid(handle)? {
-            return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+    ) -> Result<R> {
+        unsafe {
+            if !self.untyped_is_valid(handle)? {
+                return Err(anyhow::Error::from(errors::Errors::InvalidHandle));
+            }
+            self.inner
+                .write()
+                .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
+                .resources
+                .get_mut(handle.id as usize)
+                .unwrap()
+                .as_mut()
+                .map_or(
+                    Err(anyhow::Error::from(crate::DagalError::PoisonError)),
+                    |data| Ok(f(data)),
+                )
         }
-        self.inner
-            .write()
-            .map_err(|_| anyhow::Error::from(crate::DagalError::PoisonError))?
-            .resources
-            .get_mut(handle.id as usize)
-            .unwrap()
-            .as_mut()
-            .map_or(
-                Err(anyhow::Error::from(crate::DagalError::PoisonError)),
-                |data| Ok(f(data)),
-            )
-    }}
+    }
 
     /// Count number of used slots in the free list
     pub fn count_used(&self) -> Result<usize> {
