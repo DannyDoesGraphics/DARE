@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
+
+cargo clippy --all-targets --fix --allow-dirty --allow-staged
+cargo fmt --all
+
+if [ -n "$staged" ]; then
+    echo "$staged" | xargs git add --
+fi
