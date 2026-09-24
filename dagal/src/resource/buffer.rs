@@ -95,6 +95,23 @@ impl<A: Allocator> Buffer<A> {
         self.address
     }
 
+    /// Generally *not* a good idea, but allows for rebinding memory
+    pub fn bind_memory_override(&mut self, allocation: A::Allocation) -> Option<A::Allocation> {
+        unsafe {
+            self.device
+                .get_handle()
+                .bind_buffer_memory(self.handle, allocation.memory(), allocation.offset())
+                .ok()?;
+        }
+        self.allocation.replace(allocation)
+    }
+
+    /// Destroy buffer, but take allocation keeping the allocation and not **un-allocating the
+    /// memory backing the buffer**. Used best for aliasing
+    pub fn take_memory(mut self) -> Option<A::Allocation> {
+        self.allocation.take()
+    }
+
     pub fn bind_memory(&mut self, allocation: A::Allocation) -> Result<(), crate::DagalError> {
         assert!(
             self.allocation.is_none(),
